@@ -93,8 +93,15 @@
     if (q) {
       d.query = textOf(q).replace(/^\s*\n/, '').replace(/\s+$/, '');
       var lang = A(q, 'language', 'sql');
-      if (lang.toLowerCase() !== 'mongodbquery') warnings.push('The query was written in "' + lang + '". The designer works with MongoDB reports only, so it is written back as MongoDbQuery; rewrite it for MongoDB.');
+      if (lang.toLowerCase() === 'json') d.language = 'json';
+      else if (lang.toLowerCase() !== 'mongodbquery') warnings.push('The query was written in "' + lang + '". The designer works with MongoDB queries and web services (json), so it is written back as MongoDbQuery; rewrite it for MongoDB.');
     }
+    // Our web service request (language json): a report property, read back into d.ws.
+    var wsProp = d.properties.filter(function (p) { return p[0] === JD.WS_PROP; })[0];
+    d.properties = d.properties.filter(function (p) { return p[0] !== JD.WS_PROP; });
+    if (wsProp) {
+      try { d.ws = JD.sanitizeWs(JSON.parse(wsProp[1])); d.language = 'json'; } catch (e) { warnings.push('The web service request could not be read; set it again in Dataset & Query.'); }
+    } else if (d.language === 'json') warnings.push('The JSON query has no web service request saved with it; set its URL in Dataset & Query.');
     kids(root, 'field').forEach(function (f) {
       d.fields.push({ name: A(f, 'name', ''), cls: A(f, 'class', 'java.lang.Object'), desc: textOf(first(f, 'fieldDescription')).trim(), props: props(f) });
     });
@@ -320,6 +327,17 @@
       }
       if (bands.length > 1) warnings.push(b[1] + ' has ' + bands.length + ' bands; they are joined into one.');
       d.bands[b[0]] = readBand(bands);
+      // The tables' "No Data" rows were added to Column Footer on export (JD.NO_DATA_PROP): give it back its own height.
+      var nd = d.bands[b[0]].props.filter(function (p) { return p[0] === JD.NO_DATA_PROP; })[0];
+      if (nd) {
+        var band = d.bands[b[0]], was = {};
+        try { was = JSON.parse(nd[1]) || {}; } catch (e) { was = {}; }
+        band.props = band.props.filter(function (p) { return p[0] !== JD.NO_DATA_PROP; });
+        band.height = Math.max(0, band.height - (Number(was.added) || 0));
+        band.elements.forEach(function (el) { el.y = Math.max(0, el.y - (Number(was.added) || 0)); });   // they were written below the rows
+        if (was.hidden) band.hidden = true;
+        (Array.isArray(was.attrs) ? was.attrs : []).forEach(function (k) { delete d.attrs[k]; });   // set on export for the rows only
+      }
     });
     function readBand(bands) {
       var height = 0, elements = [];

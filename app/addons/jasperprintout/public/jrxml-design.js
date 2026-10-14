@@ -4,7 +4,9 @@
 //
 //   { name, page: { size, orientation, width, height, margins: { top, right, bottom, left } },
 //     font: { name, size },                       designer default for new text elements
-//     language, query,                            dataset query (e.g. MongoDbQuery)
+//     language, query,                            dataset query: MongoDbQuery, or json (a web service:
+//                                                 query = the path of the records in its JSON answer)
+//     ws: { method, url, params: [{ key, value, on }], headers: [...], body },   the web service request (json)
 //     params: [{ name, cls, def, desc, prompt }], fields: [{ name, cls, desc, props }],
 //     sortFields: [{ name, order }], filterExpression,
 //     attrs: { isIgnorePagination, whenNoDataType, ... },   other <jasperReport> attributes
@@ -55,6 +57,7 @@
   // rows (a form to fill in by hand). See tableXml for how it is written.
   var TABLE_PROP = 'com.centrix.designer.table';            // the settings, on its first row cell
   var TABLE_PART_PROP = 'com.centrix.designer.tablePart';   // the table id, on every cell it writes
+  var NO_DATA_PROP = 'com.centrix.designer.noDataRows';     // Column Footer: what the tables' "No Data" rows added to it (see noDataRowsXml)
   var TABLE_PREFIX = 'CentrixTable_';
   var ROW_SOURCES = ['query', 'fixed'];
   // Checkbox / radio ("check"): drawn with shapes in a <frame> marked by CHECK_PROP, so they print the same
@@ -91,6 +94,10 @@
   var ATTR_RE = /^[A-Za-z_][\w.:-]*$/;
   var COLOR_RE = /^#[0-9a-fA-F]{6}$/;
   var SIDES = ['top', 'left', 'bottom', 'right'];
+  // Dataset query languages the designer edits: a MongoDB query, or a web service that answers JSON.
+  var QUERY_LANGUAGES = ['MongoDbQuery', 'json'];
+  var WS_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
+  var WS_PROP = 'com.centrix.designer.webservice';      // report property: the web service request (JSON), read back on import
 
   function uuid() {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
@@ -142,6 +149,7 @@
       font: { name: 'TH SarabunPSK', size: 14 },
       language: 'MongoDbQuery',
       query: '',
+      ws: emptyWs(),
       params: [],
       fields: [],
       sortFields: [],
@@ -155,6 +163,19 @@
       watermark: defaultWatermark()
     };
   }
+
+  // ─── Web service request (language json) ───────────────────────────────
+  function emptyWs() { return { method: 'GET', url: '', params: [], headers: [], body: '' }; }
+  function sanitizeWs(w) {
+    var src = w && typeof w === 'object' ? w : {};
+    var pairs = function (list) {
+      return (Array.isArray(list) ? list : []).filter(function (x) { return x && typeof x === 'object'; }).slice(0, 100)
+        .map(function (x) { return { key: str(x.key, 500), value: str(x.value, 5000), on: x.on !== false }; });
+    };
+    return { method: pick(String(src.method || '').toUpperCase(), WS_METHODS, 'GET'), url: str(src.url, 4000).trim(), params: pairs(src.params), headers: pairs(src.headers), body: str(src.body, 100000) };
+  }
+  // A design with a query to run: a MongoDB query, or a web service URL (its records path may be empty: the whole answer).
+  function hasQuery(d) { return d.language === 'json' ? !!(d.ws && d.ws.url && d.ws.url.trim()) : !!d.query.trim(); }
 
   // ─── Watermark ─────────────────────────────────────────────────────────
   var WATERMARK_IMAGE = 'watermark.png';                       // the image resource it is published as
@@ -258,6 +279,21 @@
     return { available: available, perPage: page, withTitle: page + h('title'), withSummary: page + h('summary') };
   }
 
+  // JasperServer stops a report at this many pages ("Report … exceeded the limit of 600 maximum pages").
+  var JASPER_MAX_PAGES = 600;
+
+  // About how many pages `records` rows of the query make: { pages, perPage } (records per page). Every
+  // record prints all visible detail bands, one after another, in the room the page header, column
+  // header and footer and page footer leave; the title and summary are not counted.
+  function pageEstimate(d, records) {
+    var h = function (k) { return d.bands[k] && !d.bands[k].hidden ? d.bands[k].height : 0; };
+    var perRecord = detailKeys(d).reduce(function (s, k) { return s + h(k); }, 0);
+    if (d.attrs.isIgnorePagination === 'true' || !perRecord) return { pages: records ? 1 : 0, perPage: records };
+    var room = d.page.height - d.page.margins.top - d.page.margins.bottom - h('pageHeader') - h('columnHeader') - h('columnFooter') - Math.max(h('pageFooter'), h('lastPageFooter'));
+    var perPage = Math.max(1, Math.floor(room / perRecord));
+    return { pages: Math.ceil(records / perPage), perPage: perPage };
+  }
+
   function emptyBox() { return { pad: { top: 0, left: 0, bottom: 0, right: 0 }, pen: null, sides: { top: null, left: null, bottom: null, right: null } }; }
 
   // Default element of a palette type, sized like Jaspersoft Studio's.
@@ -303,6 +339,7 @@
         borderWidth: 0.5, borderColor: '#000000', borderStyle: 'Solid',
         borders: allBorders(true),                               // which lines: outer sides and inner lines (see tableCellSides)
         fontName: '', fontSize: 0, padding: 2,
+        noDataShow: false, noDataText: 'No Data',                // rows from the query: a row with this text when it has no records
         columns: [1, 2, 3].map(function (n) { return newColumn('Column ' + n, 150); })
       });
     }
@@ -420,8 +457,9 @@
     ['top', 'right', 'bottom', 'left'].forEach(function (k) { d.page.margins[k] = num(m[k], 20, 0, 500); });
     var f = src.font || {};
     d.font = { name: str(f.name || 'TH SarabunPSK', 60), size: num(f.size, 14, 4, 96) };
-    d.language = 'MongoDbQuery';      // the designer works with MongoDB reports only
+    d.language = pick(src.language, QUERY_LANGUAGES, 'MongoDbQuery');
     d.query = str(src.query, 100000);
+    d.ws = sanitizeWs(src.ws);
     d.folder = str(src.folder, 300);
     d.dataSource = str(src.dataSource, 300);
     d.filterExpression = str(src.filterExpression, 10000);
@@ -440,7 +478,7 @@
       .slice(0, 50).map(function (s) { return { name: s.name, order: s.order === 'Descending' ? 'Descending' : 'Ascending', type: s.type === 'Variable' ? 'Variable' : 'Field' }; });
     var attrs = src.attrs && typeof src.attrs === 'object' ? src.attrs : {};
     REPORT_ATTRS.forEach(function (k) { if (attrs[k] != null && attrs[k] !== '') d.attrs[k] = str(attrs[k], 300); });
-    d.properties = propList(src.properties).filter(function (p) { return p[0] !== WATERMARK_PROP; });   // written from d.watermark
+    d.properties = propList(src.properties).filter(function (p) { return p[0] !== WATERMARK_PROP && p[0] !== WS_PROP; });   // written from d.watermark / d.ws
     d.watermark = sanitizeWatermark(src.watermark);
     var raw = src.raw || {};
     d.raw = {
@@ -532,6 +570,8 @@
       el.headerBold = e.headerBold !== false; el.headerAlign = pick(e.headerAlign, H_ALIGN, 'Center');
       el.rowBg = color(e.rowBg, '#FFFFFF'); el.rowColor = color(e.rowColor, '#000000');
       el.altRowBg = e.altRowBg ? color(e.altRowBg, '') : '';
+      el.noDataShow = e.noDataShow === true;
+      el.noDataText = e.noDataText == null ? 'No Data' : str(e.noDataText, 500);
       el.borderWidth = dec(e.borderWidth, 0.5, 0, 10); el.borderColor = color(e.borderColor, '#000000');
       el.borderStyle = pick(e.borderStyle, LINE_STYLES, 'Solid');
       var bs = e.borders && typeof e.borders === 'object' ? e.borders : null;
@@ -739,8 +779,9 @@
     var re = '<reportElement' + attrs([
       ['style', c.style], ['mode', c.bg ? 'Opaque' : ''], ['x', c.x], ['y', c.y], ['width', c.w], ['height', c.h], ['uuid', uuid()],
       ['stretchType', c.adjust === 'StretchHeight' ? 'RelativeToTallestObject' : ''],
-      ['forecolor', c.color && c.color !== '#000000' ? c.color : ''], ['backcolor', c.bg]
-    ]) + '>\n' + propsXml(props, I + '\t') + '\n' + I + '</reportElement>';
+      ['forecolor', c.color && c.color !== '#000000' ? c.color : ''], ['backcolor', c.bg], ['isRemoveLineWhenBlank', c.printWhen ? 'true' : '']
+    ]) + '>\n' + propsXml(props, I + '\t') + '\n' +
+      (c.printWhen ? I + '\t<printWhenExpression>' + cdata(c.printWhen) + '</printWhenExpression>\n' : '') + I + '</reportElement>';
     return ind + '<textField' + attrs([['textAdjust', c.adjust !== 'CutText' ? c.adjust : ''], ['isBlankWhenNull', 'true'], ['pattern', c.pattern]]) + '>\n' +
       I + re + '\n' + I + box + '<textElement textAlignment="' + c.align + '" verticalAlignment="Middle"><font' + font + '/></textElement>\n' +
       I + '<textFieldExpression>' + cdata(c.expr || '""') + '</textFieldExpression>\n' + ind + '</textField>';
@@ -776,11 +817,41 @@
       return cell;
     }).join('\n');
   }
+  // Tables with rows from the query that show "No Data" when it has no records (in an active detail band).
+  function noDataTables(d) {
+    return designTables(d).filter(function (t) { return t.el.noDataShow && t.el.rowSource === 'query' && t.band.indexOf('detail') === 0; });
+  }
+  // How the report has to be filled for them: { whenNoDataType, isFloatColumnFooter } the report doesn't set otherwise.
+  // With no records JasperReports then prints every section but the details, and Column Footer (where the
+  // rows are) right below Column Header instead of at the bottom of the page.
+  function noDataAttrs(d) {
+    var out = {};
+    if (!noDataTables(d).length) return out;
+    if (!d.attrs.whenNoDataType || d.attrs.whenNoDataType === 'NoPages') out.whenNoDataType = 'AllSectionsNoDetail';
+    if (d.attrs.isFloatColumnFooter == null) out.isFloatColumnFooter = 'true';
+    return out;
+  }
+  // The "No Data" rows, one a table, in Column Footer from y: the table's width, its row look and outer
+  // lines; printed only when the report has no records (REPORT_COUNT 0 at the end), and then the
+  // line they take is removed, so with records Column Footer keeps its own height.
+  function noDataRowsXml(d, ind, y) {
+    return noDataTables(d).map(function (t) {
+      var el = t.el, b = el.borders || allBorders(true), on = el.borderWidth > 0;
+      var x = tableCell(el, d, ind, {
+        sides: { left: on && b.left, right: on && b.right, bottom: on && (b.bottom || b.innerH), top: on && !el.headerShow && b.top },
+        x: el.x, y: y, w: el.width, h: el.rowHeight, expr: javaString(el.noDataText), align: 'Center',
+        adjust: el.textAdjust, color: el.rowColor, bg: el.rowBg !== '#FFFFFF' ? el.rowBg : '', printWhen: '$V{REPORT_COUNT} == 0'
+      });
+      y += el.rowHeight;
+      return { xml: x, h: el.rowHeight };
+    });
+  }
+
   // What the table property keeps (read back on import).
   function tableSettings(el) {
     var out = {};
     ['rowSource', 'rowCount', 'headerShow', 'headerHeight', 'headerY', 'rowHeight', 'headerBg', 'headerColor', 'headerBold', 'headerAlign', 'headerAdjust',
-      'rowBg', 'altRowBg', 'rowColor', 'textAdjust', 'borderWidth', 'borderColor', 'borderStyle', 'borders', 'fontName', 'fontSize', 'padding', 'columns'].forEach(function (k) { out[k] = el[k]; });
+      'rowBg', 'altRowBg', 'rowColor', 'textAdjust', 'borderWidth', 'borderColor', 'borderStyle', 'borders', 'fontName', 'fontSize', 'padding', 'noDataShow', 'noDataText', 'columns'].forEach(function (k) { out[k] = el[k]; });
     return out;
   }
 
@@ -790,11 +861,14 @@
   var ONE_ROW_QUERY = "{\n\t\t\trunCommand: {\n\t\t\t\taggregate: 'users',\n\t\t\t\tpipeline: [ { $limit: 1 }, { $project: { _id: 1 } } ]\n\t\t\t}\n\t\t}";
   function toJrxml(input, opts) {
     var d = sanitize(input);
-    if (opts && opts.server && !d.query.trim()) {
+    if (opts && opts.server && !hasQuery(d)) {
+      d.language = 'MongoDbQuery';
       d.query = ONE_ROW_QUERY;
       d.properties = d.properties.concat([['com.centrix.designer.oneRowQuery', 'true']]);
     }
     var out = [];
+    var ndAttrs = noDataAttrs(d);
+    Object.keys(ndAttrs).forEach(function (k) { d.attrs[k] = ndAttrs[k]; });
     var top = attrs([
       ['name', d.name], ['language', d.attrs.language], ['pageWidth', d.page.width], ['pageHeight', d.page.height],
       ['orientation', d.page.orientation === 'landscape' ? 'Landscape' : ''],
@@ -810,6 +884,7 @@
     var props = d.properties.slice();
     if (!props.some(function (p) { return p[0] === 'com.jaspersoft.studio.unit.'; })) props.push(['com.jaspersoft.studio.unit.', 'pixel']);
     if (hasWatermark(d)) props.push([WATERMARK_PROP, JSON.stringify(d.watermark)]);     // read back on import
+    if (d.language === 'json') props.push([WS_PROP, JSON.stringify(d.ws)]);
     if (props.length) out.push(propsXml(props, '\t'));
     // Kept head, with each table's row style and dataset where the JRXML schema wants them:
     // import / template / reportFont, then styles, then subDatasets, then scriptlets.
@@ -825,7 +900,7 @@
       var a = ' name="' + attr(p.name) + '" class="' + attr(p.cls) + '"' + (p.prompt ? '' : ' isForPrompting="false"');
       out.push(kids ? '\t<parameter' + a + '>\n' + kids + '\t</parameter>' : '\t<parameter' + a + '/>');
     });
-    if (d.query.trim()) out.push('\t<queryString language="' + attr(d.language) + '">\n\t\t' + cdata(d.query) + '\n\t</queryString>');
+    if (hasQuery(d)) out.push('\t<queryString language="' + attr(d.language) + '">\n\t\t' + cdata(d.query) + '\n\t</queryString>');
     d.fields.forEach(function (f) {
       var kids = (f.props.length ? propsXml(f.props, '\t\t') + '\n' : '') + (f.desc ? '\t\t<fieldDescription>' + cdata(f.desc) + '</fieldDescription>\n' : '');
       var a = ' name="' + attr(f.name) + '" class="' + attr(f.cls) + '"';
@@ -838,13 +913,21 @@
     out.push(backgroundXml(d));
     var bandInner = function (key) {
       var band = d.bands[key];
-      if (!band || band.hidden || (band.height === 0 && !band.elements.length)) return '';
+      var active = band && !band.hidden && !(band.height === 0 && !band.elements.length);
+      // Column Footer: the tables' "No Data" rows go at its top, right under the rows, and what it holds
+      // below them (it is written for them even when off; import moves its elements back up).
+      var nd = key === 'columnFooter' ? noDataRowsXml(d, '\t\t\t', 0) : [];
+      if (!active && !nd.length) return '';
+      if (!active) band = { height: 0, elements: [], props: [], splitType: 'Stretch', printWhen: '', hidden: !!(band && band.hidden) };
+      var added = nd.reduce(function (s, r) { return s + r.h; }, 0);
+      var bprops = nd.length ? band.props.concat([[NO_DATA_PROP, JSON.stringify({ added: added, hidden: !!band.hidden, attrs: Object.keys(ndAttrs) })]]) : band.props;
       var kids = [];
-      if (band.props.length) kids.push(propsXml(band.props, '\t\t\t'));
+      if (bprops.length) kids.push(propsXml(bprops, '\t\t\t'));
       if (band.printWhen) kids.push('\t\t\t<printWhenExpression>' + cdata(band.printWhen) + '</printWhenExpression>');
-      band.elements.forEach(function (el) { var x = elementXml(el, d, '\t\t\t'); if (x) kids.push(x); });
+      band.elements.forEach(function (el) { var x = elementXml(added ? Object.assign({}, el, { y: el.y + added }) : el, d, '\t\t\t'); if (x) kids.push(x); });
       if (key === 'columnHeader') designTables(d).forEach(function (t) { if (t.el.headerShow) kids.push(tableHeaderXml(t.el, d, '\t\t\t')); });
-      return '\t\t<band height="' + band.height + '" splitType="' + band.splitType + '"' + (kids.length ? '>\n' + kids.join('\n') + '\n\t\t</band>' : '/>');
+      nd.forEach(function (r) { kids.push(r.xml); });
+      return '\t\t<band height="' + (band.height + added) + '" splitType="' + band.splitType + '"' + (kids.length ? '>\n' + kids.join('\n') + '\n\t\t</band>' : '/>');
     };
     var bandXml = function (key) {
       // The Detail section holds Detail 1, Detail 2, … one after another.
@@ -938,6 +1021,15 @@
     };
     at = { dataset: 'fields' };
     scan(d.query, 'The query');
+    if (d.language === 'json') {
+      scan([d.ws.url, d.ws.body].concat(d.ws.params.concat(d.ws.headers).filter(function (x) { return x.on; }).map(function (x) { return x.value; })).join(' '), 'The web service request');
+      if (!d.ws.url) warn('The web service has no URL yet. Set it in Dataset & Query.');
+    }
+    // A query with no parameter and no limit reads the whole collection; with a row per record JasperServer
+    // soon reaches its page limit and stops ("exceeded the limit of 600 maximum pages").
+    if (d.language === 'MongoDbQuery' && d.query.trim() && !/\$P!?\{/.test(d.query) && !/\$limit\b|["']?\blimit["']?\s*:/.test(d.query)) {
+      warn('The query has no parameter ($P{…}) and no $limit, so it reads every record of the collection. On JasperServer that can be thousands of pages, and it stops at its page limit ("exceeded the limit of 600 maximum pages"). Filter it by a parameter (e.g. $match on patientvisituid) or add a $limit.');
+    }
     at = { dataset: 'filter' };
     scan(d.filterExpression, 'The filter expression');
     at = { dataset: 'sortFields' };
@@ -985,8 +1077,12 @@
           var ch = d.bands.columnHeader;
           if (el.headerShow && (!ch || ch.hidden || !ch.height)) err(label + ': its header prints in the Column Header section, which is off. Turn Column Header on (Outline) or hide the table header.');
           else if (el.headerShow && el.headerY + el.headerHeight > ch.height) err(label + ': its header (' + el.headerY + ' + ' + el.headerHeight + ' px) sticks out of the ' + ch.height + ' px Column Header band.');
+          if (el.noDataShow && el.rowSource === 'query') {
+            if (d.attrs.whenNoDataType === 'NoDataSection' || d.attrs.whenNoDataType === 'BlankPage') warn(label + ': its "No Data" row is not printed, because "When no data" is ' + d.attrs.whenNoDataType + ' (report properties). Use "All sections, no detail" or the default.');
+            if (d.attrs.isFloatColumnFooter === 'false') warn(label + ': its "No Data" row prints in Column Footer, which is set not to float, so it shows at the bottom of the page. Clear "Float column footer" in the report properties.');
+          }
           if (el.headerShow && paged && el.headerAdjust === 'StretchHeight') warn(label + ': the header can grow (StretchHeight) in Column Header, which is printed on every page. A header that outgrows the page makes JasperServer loop; use CutText or ScaleFont.');
-          if (el.rowSource === 'query' && !d.query.trim()) warn(label + ': its rows come from the report query, which is empty. Set it in Dataset & Query, or use fixed rows.');
+          if (el.rowSource === 'query' && !hasQuery(d)) warn(label + ': its rows come from the report query, which is empty. Set it in Dataset & Query, or use fixed rows.');
           if (el.rowSource === 'query' && b[0].indexOf('detail') !== 0) warn(label + ' is in ' + b[1] + ': its row prints once there. Put it in a Detail band to get a row for each record.');
           if (el.rowSource === 'fixed' && b[0].indexOf('detail') === 0) warn(label + ' has fixed blank rows in ' + b[1] + ', so they print again for every record. Put it in the Title or Summary for one set of rows.');
           if (fixed && el.textAdjust === 'StretchHeight') warn(label + ' can grow (StretchHeight) in ' + b[1] + ', which is printed on every page. Use CutText or ScaleFont here.');
@@ -1039,9 +1135,11 @@
     POSITION: POSITION, STRETCH: STRETCH, MARKUP: MARKUP, ROTATION: ROTATION, LANGUAGES: LANGUAGES, WHEN_NO_DATA: WHEN_NO_DATA,
     REPORT_ATTRS: REPORT_ATTRS, SIDES: SIDES, CONNECTIONS: CONNECTIONS,
     CHECK_KINDS: CHECK_KINDS, CHECK_STATES: CHECK_STATES, CHECK_PROP: CHECK_PROP,
+    JASPER_MAX_PAGES: JASPER_MAX_PAGES, pageEstimate: pageEstimate,
+    QUERY_LANGUAGES: QUERY_LANGUAGES, WS_METHODS: WS_METHODS, WS_PROP: WS_PROP, emptyWs: emptyWs, sanitizeWs: sanitizeWs, hasQuery: hasQuery,
     uuid: uuid, newDesign: newDesign, newElement: newElement, emptyBox: emptyBox, columnWidth: columnWidth, bandUsage: bandUsage,
     sanitize: sanitize, toJrxml: toJrxml, problems: problems, loops: loops, check: check, defaultValue: defaultValue,
-    TABLE_PROP: TABLE_PROP, TABLE_PART_PROP: TABLE_PART_PROP, TABLE_PREFIX: TABLE_PREFIX, ROW_SOURCES: ROW_SOURCES,
+    TABLE_PROP: TABLE_PROP, TABLE_PART_PROP: TABLE_PART_PROP, NO_DATA_PROP: NO_DATA_PROP, noDataTables: noDataTables, noDataAttrs: noDataAttrs, TABLE_PREFIX: TABLE_PREFIX, ROW_SOURCES: ROW_SOURCES,
     newColumn: newColumn, fitTable: fitTable, normalizeTable: normalizeTable, tableRows: tableRows,
     BORDER_KEYS: BORDER_KEYS, applyBorders: applyBorders, tableCellSides: tableCellSides,
     WATERMARK_IMAGE: WATERMARK_IMAGE, WATERMARK_PROP: WATERMARK_PROP, WATERMARK_EL_PROP: WATERMARK_EL_PROP,

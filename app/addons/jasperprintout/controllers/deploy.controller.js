@@ -34,7 +34,7 @@ async function current(designId) {
   // The saved design, not the JRXML: JRXML gets fresh UUIDs where the design has none. A design
   // without a query also counts the one-record query it is published with, so the ones deployed
   // before that query was added show as changed and can go to UAT again.
-  const oneRow = design.query.trim() ? '' : '|one-row-query';
+  const oneRow = JD.hasQuery(design) ? '' : '|one-row-query';
   return { row, design, jrxml, images: resources, missing, hash: deploys.hash(JSON.stringify(row.design) + oneRow, resources) };
 }
 

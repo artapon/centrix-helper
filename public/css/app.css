@@ -365,6 +365,11 @@ hr { border-top-color: var(--border); }
 .conn-chip.is-connected .conn-dot { background: #10b981; box-shadow: 0 0 0 3px rgba(16, 185, 129, .18); }
 .conn-chip.is-disconnected { background: var(--warning-soft); border-color: #f3d9a4; color: #8a5300 !important; }
 .conn-chip.is-disconnected .conn-dot { background: #f59e0b; box-shadow: 0 0 0 3px rgba(245, 158, 11, .2); }
+/* Top bar "Connect DB" / "Reconnect DB" (before the Not connected chip) */
+.conn-connect { margin: 0; display: inline-flex; }
+.conn-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid var(--primary); border-radius: 999px; background: var(--primary); color: #fff; font-size: .78rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.conn-btn:hover { filter: brightness(1.08); box-shadow: var(--shadow-sm); }
+.conn-btn:disabled { opacity: .75; cursor: progress; }
 .conn-switch { font-size: .72rem; color: var(--muted); }
 
 .topbar-user {
@@ -382,6 +387,8 @@ hr { border-top-color: var(--border); }
   .topbar-breadcrumb .crumb-section, .topbar-breadcrumb .crumb-section + .sep { display: none; }
   .topbar-breadcrumb .crumb-page { max-width: 120px; }
   .conn-chip { max-width: 160px; }
+  .conn-btn span { display: none; }
+  .conn-btn { padding: 0 10px; }
 }
 
 /* Page-load progress */

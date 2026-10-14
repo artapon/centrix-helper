@@ -4,7 +4,7 @@
   <div class="jd-top">
     <div class="jd-title">
       <i class="fas fa-drafting-compass"></i>
-      <input class="jd-name" v-model="design.name" @change="renameDesign" spellcheck="false" aria-label="Report name" title="Report name (English letters, numbers and _)">
+      <input class="jd-name" :class="{ 'is-bad': nameWarn }" :value="design.name" @input="nameInput($event, design)" @change="renameDesign" spellcheck="false" aria-label="Report name" title="Report name (English letters, numbers and _)">
       <span v-if="dirty" class="jd-dirty" title="Unsaved changes">●</span>
       <span class="jd-saved" v-if="currentId && !dirty"><i class="fas fa-check"></i> {{ autoSavedAt ? 'Auto-saved ' + clock(autoSavedAt) : 'Saved' }}</span>
       <span class="jd-saved is-pending" v-else-if="autoSave && currentId && dirty && !busy.save" title="Auto save runs 30 seconds after the last change"><i class="far fa-clock"></i> Auto save pending</span>
@@ -46,7 +46,7 @@
       </div>
       <button type="button" class="btn btn-sm btn-light" @click="downloadJrxml" title="Download the JRXML (with images as a .zip)"><i class="fas fa-download"></i> JRXML</button>
       <span class="jd-sep"></span>
-      <button type="button" class="btn btn-sm btn-light" @click="toggleFullscreen" :title="fullscreen ? 'Exit full screen (Esc)' : 'Full screen'" :aria-label="fullscreen ? 'Exit full screen' : 'Full screen'" :aria-pressed="fullscreen ? 'true' : 'false'"><i class="fas" :class="fullscreen ? 'fa-compress' : 'fa-expand'"></i></button>
+      <button type="button" class="btn btn-sm btn-light" @click="toggleFullscreen" :title="fullscreen ? 'Exit full screen (Esc)' : 'Full screen'" :aria-label="fullscreen ? 'Exit full screen' : 'Full screen'" :aria-pressed="fullscreen ? 'true' : 'false'"><i class="fas" :class="fullscreen ? 'fa-compress' : 'fa-expand'"></i> {{ fullscreen ? 'Exit full screen' : 'Full screen' }}</button>
       <button v-if="canPublish" type="button" class="btn btn-sm btn-primary" @click="askPublish" :disabled="!jasper.configured" :title="jasper.configured ? 'Publish to JasperServer' : 'JasperServer is not set up (Reports > Settings)'"><i class="fas fa-paper-plane"></i> Publish</button>
     </div>
   </div>
@@ -95,15 +95,15 @@
 
             <li v-for="sec in outline.sections" :key="sec.key" :aria-expanded="ox('b:' + sec.key) ? 'true' : 'false'">
               <div class="jd-ox-row is-band" :class="{ 'is-off': !sec.active, 'is-sel': sec.editable && selectedBand === sec.key && !selection.length }"
-                   @click="sec.editable && sec.active ? oxSelectBand(sec.key) : null" :title="sec.editable ? sec.label + (sec.active ? ' · ' + sec.height + ' px' : ' · inactive') : sec.label + (sec.active ? ' — kept as written; edit in Source' : ' — not in this report')">
-                <i class="jd-ox-caret fas" :class="sec.count ? (ox('b:' + sec.key) ? 'fa-chevron-down' : 'fa-chevron-right') : ''" @click.stop="sec.count && oxToggle('b:' + sec.key)"></i>
+                   @click="sec.editable ? oxSelectBand(sec.key) : null" @dblclick="sec.editable ? toggleSection(sec.key) : null"
+                   :title="sec.editable ? sec.label + (sec.active ? ' · ' + sec.height + ' px · active' : ' · inactive') + ' — double-click to make it ' + (sec.active ? 'inactive' : 'active') : sec.label + (sec.active ? ' — kept as written; edit in Source' : ' — not in this report')">
+                <i class="jd-ox-caret fas" :class="sec.count ? (ox('b:' + sec.key) ? 'fa-chevron-down' : 'fa-chevron-right') : ''" @click.stop="sec.count && oxToggle('b:' + sec.key)" @dblclick.stop></i>
                 <i class="jd-ox-ic fas fa-window-maximize" style="color: #4f6bd8"></i>
                 <span class="jd-ox-name">{{ sec.label }}</span>
                 <span class="jd-ox-count" v-if="sec.count">{{ sec.count }}</span>
-                <button v-if="sec.editable && sec.key.indexOf('detail') === 0" type="button" class="jd-ox-mini" @click.stop="addDetailBand(sec.key)" :title="'Add a detail band after ' + sec.label" :aria-label="'Add a detail band after ' + sec.label"><i class="fas fa-plus"></i></button>
-                <button v-if="sec.editable && JD.DETAIL_RE.test(sec.key)" type="button" class="jd-ox-mini is-del" @click.stop="removeDetailBand(sec.key)" :title="'Delete ' + sec.label" :aria-label="'Delete ' + sec.label"><i class="fas fa-times"></i></button>
-                <button v-if="sec.editable" type="button" class="jd-ox-switch" :class="{ 'is-on': sec.active }" role="switch" :aria-checked="sec.active ? 'true' : 'false'"
-                        :aria-label="sec.label + (sec.active ? ' active' : ' inactive')" :title="sec.active ? 'Active — click to make inactive' : 'Inactive — click to make active'" @click.stop="toggleSection(sec.key)"><span></span></button>
+                <button v-if="sec.editable && sec.key.indexOf('detail') === 0" type="button" class="jd-ox-mini" @click.stop="addDetailBand(sec.key)" @dblclick.stop :title="'Add a detail band after ' + sec.label" :aria-label="'Add a detail band after ' + sec.label"><i class="fas fa-plus"></i></button>
+                <button v-if="sec.editable && JD.DETAIL_RE.test(sec.key)" type="button" class="jd-ox-mini is-del" @click.stop="removeDetailBand(sec.key)" @dblclick.stop :title="'Delete ' + sec.label" :aria-label="'Delete ' + sec.label"><i class="fas fa-times"></i></button>
+                <span v-if="sec.editable" class="jd-ox-switch" :class="{ 'is-on': sec.active }" :aria-label="sec.active ? 'active' : 'inactive'"><span></span></span>
               </div>
               <ul v-if="sec.editable && sec.count && ox('b:' + sec.key)" role="group">
                 <li v-for="el in design.bands[sec.key].elements" :key="el.id">
@@ -170,12 +170,15 @@
             </label>
             <div class="jd-layout-foot">
               <span class="text-muted small">Margins {{ design.page.margins.top }} / {{ design.page.margins.right }} / {{ design.page.margins.bottom }} / {{ design.page.margins.left }} px</span>
-              <button type="button" class="btn btn-link btn-sm p-0" @click="layoutOpen = false; selection = []; selectedBand = null">More page settings</button>
+              <button type="button" class="btn btn-link btn-sm p-0" @click="layoutOpen = false; selection = []; selectedBand = null; tab = 'design'; openProps(false)">More page settings</button>
             </div>
           </div>
         </div>
         <button type="button" class="jd-layout-btn" @click="openQuery('fields')" title="Dataset and Query: query, fields, parameters, sorting, filter">
           <i class="fas fa-database" style="color: var(--primary)"></i> Dataset &amp; Query
+        </button>
+        <button type="button" class="jd-layout-btn" @click="openJasperSettings" :title="'JasperServer: where Publish puts this report (' + jasperRoute + ')'">
+          <i class="fas fa-server" style="color: var(--primary)"></i> JasperServer
         </button>
         <button type="button" class="jd-layout-btn" :class="{ 'is-on': liveOpen }" @click="toggleLive" :aria-pressed="liveOpen ? 'true' : 'false'" title="Show the report filled with data beside the design">
           <i class="fas fa-eye" style="color: var(--primary)"></i> Live Preview
@@ -191,6 +194,8 @@
           <option v-if="[0.5, 0.75, 1, 1.25, 1.5, 2].indexOf(zoom) < 0" :value="zoom">{{ Math.round(zoom * 100) }}%</option>
         </select>
         <button type="button" class="jd-tb" @click="setZoom(zoom + 0.25)" title="Zoom in"><i class="fas fa-search-plus"></i></button>
+        <span class="jd-tb-sep"></span>
+        <button type="button" class="jd-tb" :class="{ 'is-on': fullscreen }" @click="toggleFullscreen" :title="fullscreen ? 'Exit full screen (Esc)' : 'Full screen'" :aria-label="fullscreen ? 'Exit full screen' : 'Full screen'" :aria-pressed="fullscreen ? 'true' : 'false'"><i class="fas" :class="fullscreen ? 'fa-compress' : 'fa-expand'"></i></button>
       </div>
 
       <div class="jd-body">
@@ -208,7 +213,7 @@
           </div>
 
           <div class="jd-page" ref="page" :style="{ width: (pageW * zoom) + 'px', height: (pageH * zoom) + 'px' }"
-               @pointerdown="onPagePointerDown" @dragover.prevent="onDragOver" @dragleave="dropHint = null" @drop.prevent="onDrop" @pointermove="trackCursor">
+               @pointerdown="onPagePointerDown" @dblclick="onPageDblClick" @dragover.prevent="onDragOver" @dragleave="dropHint = null" @drop.prevent="onDrop" @pointermove="trackCursor">
             <div class="jd-margin-guide" :style="{ left: (design.page.margins.left * zoom) + 'px', right: (design.page.margins.right * zoom) + 'px', top: 0, bottom: 0 }"></div>
             <!-- Watermark (Report properties): printed behind everything on every page -->
             <img v-if="wmSrc && design.watermark && design.watermark.enabled" class="jd-wm" :src="wmSrc" :style="wmStyle" alt="" aria-hidden="true">
@@ -217,9 +222,9 @@
                  :data-band="b.key">
               <span class="jd-band-label" v-if="b.height * zoom >= 14">{{ b.label }}</span>
             </div>
-            <div v-for="b in visibleBands" :key="'h' + b.key" class="jd-band-resize" :title="b.label + ': drag to change its height (' + b.height + ' px)'"
+            <div v-for="b in visibleBands" :key="'h' + b.key" class="jd-band-resize" :title="b.label + ': drag to change its height (' + b.height + ' px), double-click to fit its contents'"
                  :style="{ top: ((b.top + b.height) * zoom - 3) + 'px', left: (design.page.margins.left * zoom) + 'px', width: (colW * zoom) + 'px' }"
-                 @pointerdown.stop="startBandResize($event, b.key)">
+                 @pointerdown.stop="startBandResize($event, b.key)" @dblclick.stop="fitBand(b.key)">
               <span class="jd-band-tag" v-if="!b.height">{{ b.label }} (0)</span>
             </div>
 
@@ -289,7 +294,14 @@
               </template>
             </div>
             <!-- While a column is resized: its new width -->
-            <div v-if="drag && drag.mode === 'col' && drag.label" class="jd-col-label">{{ drag.label }}</div>
+            <div v-if="drag && (drag.mode === 'col' || drag.mode === 'page') && drag.label" class="jd-col-label">{{ drag.label }}</div>
+            <!-- Page size handles: right edge, bottom edge (the paper's height) and corner; Page Layout becomes Custom -->
+            <div class="jd-page-resize is-w" :style="{ left: (pageW * zoom - 4) + 'px', height: (design.page.height * zoom) + 'px' }" @pointerdown.stop="startPageResize($event, 'w')"
+                 :title="'Page width ' + pageW + ' px: drag to change it (Page Layout becomes Custom)'"></div>
+            <div class="jd-page-resize is-h" :style="{ top: (design.page.height * zoom - 4) + 'px', width: (pageW * zoom) + 'px' }" @pointerdown.stop="startPageResize($event, 'h')"
+                 :title="'Page height ' + design.page.height + ' px: drag to change it (Page Layout becomes Custom)'"></div>
+            <div class="jd-page-resize is-wh" :style="{ left: (pageW * zoom - 6) + 'px', top: (design.page.height * zoom - 6) + 'px' }" @pointerdown.stop="startPageResize($event, 'wh')"
+                 :title="'Page ' + pageW + ' × ' + design.page.height + ' px: drag to change both (Page Layout becomes Custom)'"></div>
 
             <div v-if="dropHint" class="jd-drop-hint" :style="dropHint.style"></div>
           </div>
@@ -377,17 +389,13 @@
         </div>
       </div>
 
-      <!-- Report-wide: where it is published (the dataset is edited from the toolbar's Dataset and Query) -->
-      <div class="jd-side-rest">
-        <div class="jd-panel-head jd-side-head"><i class="fas fa-server"></i> JasperServer</div>
-        <div class="jd-props-body jd-side-body">
-          <label class="jd-field">Folder<input v-model="design.folder" @change="commit" :placeholder="defaults.folder"></label>
-          <label class="jd-field">Data source<input v-model="design.dataSource" @change="commit" :placeholder="defaults.dataSource"></label>
-        </div>
-      </div>
 
+
+    </aside>
+
+    <!-- Properties popup (fixed on screen): outside the palette panel, so it shows when the palette is hidden -->
       <div v-show="propsOpen && tab === 'design'" ref="propsPop" class="jd-panel jd-props jd-props-pop" role="dialog" aria-label="Properties"
-           :style="{ left: propsPos.x + 'px', top: propsPos.y + 'px', maxHeight: 'calc(100vh - ' + (propsPos.y + 8) + 'px)' }" @keydown.esc.stop="propsCancel">
+           :style="{ left: propsPos.x + 'px', top: propsPos.y + 'px', maxHeight: 'min(560px, calc(100vh - ' + (propsPos.y + 8) + 'px))' }" @keydown.esc.stop="propsCancel">
         <div class="jd-panel-head jd-props-drag" @pointerdown="startPropsDrag" title="Drag to move">
           <i class="fas fa-sliders-h"></i> Properties
           <span class="jd-props-what">{{ propsTitle }}</span>
@@ -468,6 +476,12 @@
                     <label v-if="sel.rowSource === 'fixed'">Number of rows<input type="number" min="1" max="200" v-model.number="sel.rowCount" @change="tableChanged(sel)"></label>
                     <label>Row height (px)<input type="number" min="6" max="500" v-model.number="sel.rowHeight" @change="tableChanged(sel)"></label>
                   </div>
+                  <template v-if="sel.rowSource === 'query'">
+                    <label class="jd-tb-check" title="When the report query gives no records, a row across the table with this text prints under the header">
+                      <input type="checkbox" v-model="sel.noDataShow" @change="commit"> Show a "No Data" row when the query has no records</label>
+                    <label v-if="sel.noDataShow">No Data text<input v-model="sel.noDataText" @change="commit" placeholder="No Data"></label>
+                    <small v-if="sel.noDataShow && find(sel.id).band.indexOf('detail') !== 0" class="jd-tb-note">Only a table in a Detail section prints it; move the table into Detail.</small>
+                  </template>
                   <div class="jd-field-h">Text adjust <span class="jd-sub-note">when a cell's text doesn't fit</span></div>
                   <div class="jd-seg" role="group" aria-label="Row text adjust">
                     <button v-for="ta in textAdjusts" :key="'r' + ta.v" type="button" :class="{ 'is-on': sel.textAdjust === ta.v }" @click="sel.textAdjust = ta.v; commit()" :title="ta.tip" :aria-pressed="sel.textAdjust === ta.v ? 'true' : 'false'"><i :class="ta.icon"></i> {{ ta.v }}</button>
@@ -716,22 +730,22 @@
               </div>
             </template>
             </div>
-           </div>
 
-            <template v-if="sel.type !== 'raw'">
-              <div class="jd-sub">Print When Expression <span class="jd-sub-note">Boolean · empty = always</span></div>
-              <jd-expr v-model="sel.printWhen" :catalog="exprCatalog" :rows="1" label="Print When Expression" placeholder="$F{field} != null" @change="commit"></jd-expr>
-            </template>
-            <div class="jd-sub">Arrange <span class="jd-sub-note">order {{ stackInfo().index }} of {{ stackInfo().count }} in {{ bandName(find(sel.id).band) }} · higher prints on top</span></div>
+            <div class="jd-pp-col">
+            <div class="jd-sub">Arrange <span class="jd-sub-note">{{ stackInfo().index }} of {{ stackInfo().count }} in {{ bandName(find(sel.id).band) }}</span></div>
             <div class="jd-seg jd-arrange" role="group" aria-label="Arrange">
               <button type="button" @click="order('front')" :disabled="stackInfo().top" title="Ctrl+Shift+]"><i class="fas fa-angle-double-up"></i> Bring to Front</button>
               <button type="button" @click="order('forward')" :disabled="stackInfo().top" title="Ctrl+]"><i class="fas fa-angle-up"></i> Bring Forward</button>
               <button type="button" @click="order('backward')" :disabled="stackInfo().bottom" title="Ctrl+["><i class="fas fa-angle-down"></i> Send Backward</button>
               <button type="button" @click="order('back')" :disabled="stackInfo().bottom" title="Ctrl+Shift+["><i class="fas fa-angle-double-down"></i> Send to Back</button>
             </div>
-            <div class="jd-prop-actions">
-              <button type="button" class="btn btn-sm btn-light" @click="duplicate"><i class="far fa-clone"></i> Duplicate</button>
-              <button type="button" class="btn btn-sm btn-outline-danger" @click="removeSelected"><i class="far fa-trash-alt"></i> Delete</button>
+            </div>
+           </div>
+
+            <!-- Full width: the element's Print When Expression -->
+            <div v-if="sel.type !== 'raw'" class="jd-pp-wide">
+              <div class="jd-sub">Print When Expression <span class="jd-sub-note">Boolean · empty = always</span></div>
+              <jd-expr v-model="sel.printWhen" :catalog="exprCatalog" :rows="1" label="Print When Expression" placeholder="$F{field} != null" @change="commit"></jd-expr>
             </div>
           </template>
 
@@ -749,8 +763,19 @@
 
           <!-- A band -->
           <template v-else-if="selectedBand">
-            <label class="jd-field">{{ bandName(selectedBand) }} height (px)<input type="number" min="0" v-model.number="design.bands[selectedBand].height" @change="commit"></label>
-            <p class="small text-muted">{{ design.bands[selectedBand].elements.length }} element{{ design.bands[selectedBand].elements.length === 1 ? '' : 's' }}. Drag the band's bottom edge to resize it. Set 0 to leave it out.</p>
+            <button type="button" class="btn btn-sm jd-autosave jd-band-active mb-2" :class="design.bands[selectedBand].hidden ? 'btn-light' : 'is-on'" role="switch"
+                    :aria-checked="design.bands[selectedBand].hidden ? 'false' : 'true'" @click="toggleSection(selectedBand)"
+                    :title="design.bands[selectedBand].hidden ? 'Inactive: left out of the report, its elements are kept. Click to make it active.' : 'Active: printed in the report. Click to make it inactive.'">
+              <span class="jd-switch" aria-hidden="true"></span> {{ design.bands[selectedBand].hidden ? 'Inactive' : 'Active' }}
+            </button>
+            <p v-if="design.bands[selectedBand].hidden" class="small text-muted">{{ bandName(selectedBand) }} is inactive: it is left out of the report and not shown on the page. Its {{ design.bands[selectedBand].elements.length }} element{{ design.bands[selectedBand].elements.length === 1 ? ' is' : 's are' }} kept.</p>
+            <label class="jd-field" v-if="!design.bands[selectedBand].hidden">{{ bandName(selectedBand) }} height (px)<input type="number" min="0" v-model.number="design.bands[selectedBand].height" @change="commit"></label>
+            <button v-if="!design.bands[selectedBand].hidden" type="button" class="btn btn-sm btn-light mb-2" @click="fitBand(selectedBand)"
+                    :disabled="bandFitHeight(selectedBand, true) === design.bands[selectedBand].height && !(selectedBand === 'columnHeader' && bandContent(selectedBand).top)"
+                    :title="'Set the height to just fit its elements: ' + bandFitHeight(selectedBand, true) + ' px (or double-click the section\'s bottom edge)'">
+              <i class="fas fa-compress-alt"></i> Fit height to elements ({{ bandFitHeight(selectedBand, true) }} px)
+            </button>
+            <p class="small text-muted" v-if="!design.bands[selectedBand].hidden">{{ design.bands[selectedBand].elements.length }} element{{ design.bands[selectedBand].elements.length === 1 ? '' : 's' }}<template v-if="selectedBand === 'columnHeader' && tableHeads().length"> and {{ tableHeads().length }} table header{{ tableHeads().length === 1 ? '' : 's' }}</template>. Drag the band's bottom edge to resize it, or double-click it to fit. Set 0 to leave it out.</p>
             <button type="button" class="btn btn-sm btn-link px-0" @click="selectedBand = null">Report properties</button>
           </template>
 
@@ -791,6 +816,8 @@
             <!-- Watermark: on every page, behind everything (Background band) -->
             <div v-if="design.watermark" class="jd-wm-props">
               <div class="jd-sub">Watermark <span class="jd-sub-note">every page · behind the content</span></div>
+              <button v-if="defaults.watermark" type="button" class="btn btn-sm btn-light mb-2" @click="useDefaultWatermark"
+                      :title="'Reports > Settings: “' + defaults.watermark.text.replace(/\n/g, ' ') + '”, ' + defaults.watermark.angle + '°, ' + defaults.watermark.size + ' pt'"><i class="fas fa-stamp"></i> Use the default watermark</button>
               <label class="jd-wm-on"><input type="checkbox" v-model="design.watermark.enabled" @change="commit"> Show a watermark</label>
               <template v-if="design.watermark.enabled">
                 <label class="jd-field">Text <span class="jd-sub-note">Enter for a new line</span>
@@ -825,6 +852,10 @@
           </template>
         </div>
         <div class="jd-props-foot">
+          <div v-if="selection.length" class="jd-prop-actions">
+            <button type="button" class="btn btn-sm btn-light" @click="duplicate" :title="selection.length > 1 ? 'Duplicate the ' + selection.length + ' elements' : 'Duplicate'"><i class="far fa-clone"></i> Duplicate</button>
+            <button type="button" class="btn btn-sm btn-outline-danger" @click="removeSelected" :title="selection.length > 1 ? 'Delete the ' + selection.length + ' elements' : 'Delete (Del)'"><i class="far fa-trash-alt"></i> Delete</button>
+          </div>
           <span class="jd-props-state" :class="{ 'is-changed': propsChanged() }">
             <template v-if="propsChanged()"><i class="fas fa-circle"></i> Changed · shown on the page now</template>
             <template v-else>No changes</template>
@@ -833,7 +864,6 @@
           <button type="button" class="btn btn-sm btn-primary" @click="propsOk" title="Keep the changes and close">OK</button>
         </div>
       </div>
-    </aside>
 
     <!-- Live preview (far right): the report filled with data. Design edits redraw it from the
          loaded rows; a change of query, fields, parameters or data source reloads the rows. -->
@@ -849,7 +879,7 @@
         <select class="jd-select" v-model.number="pv.zoom" aria-label="Preview zoom">
           <option :value="0">Fit</option><option :value="0.5">50%</option><option :value="0.75">75%</option><option :value="1">100%</option><option :value="1.25">125%</option><option :value="1.5">150%</option>
         </select>
-        <button type="button" class="jd-tb" @click="printPreview" :disabled="!pv.result || !pv.result.pages.length || pv.view !== 'local'" title="Save PDF / Print (choose Save as PDF in the print dialog)"><i class="fas fa-file-pdf"></i></button>
+        <button v-if="designerPrint !== false" type="button" class="jd-tb" @click="printPreview" :disabled="!pv.result || !pv.result.pages.length || pv.view !== 'local'" title="Save PDF / Print (choose Save as PDF in the print dialog)"><i class="fas fa-file-pdf"></i></button>
         <button type="button" class="jd-tb" @click="runPreview" :disabled="busy.preview || !jasper.configured"
                 :title="jasper.configured ? 'Run on JasperServer: a temporary copy, shown as its PDF' : 'JasperServer is not set up (Reports > Settings)'"><i class="fas" :class="busy.preview ? 'fa-spinner fa-spin' : 'fa-server'"></i></button>
         <button type="button" class="jd-tb" @click="toggleLive" title="Close the live preview" aria-label="Close the live preview"><i class="fas fa-times"></i></button>
@@ -957,14 +987,21 @@
     <div class="jd-qd" role="dialog" aria-modal="true" aria-labelledby="jdQdTitle">
       <div class="jd-qd-head">
         <h3 id="jdQdTitle"><i class="fas fa-database"></i> Dataset and Query</h3>
-        <span class="jd-qd-adapter"><i class="fas fa-plug"></i> Data adapter: the connected Centrix site (MongoDB)</span>
+        <span class="jd-qd-adapter"><i class="fas fa-plug"></i> Data adapter: {{ qd.language === 'json' ? 'a web service that answers JSON (the server running this tool calls it)' : 'the connected Centrix site (MongoDB)' }}</span>
         <button type="button" class="jd-x" @click="closeQuery(false)" aria-label="Close">&times;</button>
       </div>
       <div class="jd-qd-bar">
-        <span class="jd-qd-lang"><i class="fas fa-leaf"></i> MongoDB query <code>MongoDbQuery</code></span>
-        <a class="small" href="https://community.jaspersoft.com/knowledgebase/faq/jaspersoft-mongodb-query-language" target="_blank" rel="noopener">Query language reference</a>
+        <label class="jd-qd-lang">
+          <i class="fas" :class="qd.language === 'json' ? 'fa-globe' : 'fa-leaf'"></i>
+          <select class="jd-qd-langsel" :value="qd.language" @change="setQueryLanguage($event.target.value)" aria-label="Query language">
+            <option value="MongoDbQuery">MongoDB query</option>
+            <option value="json">Web service query (JSON)</option>
+          </select>
+          <code>{{ qd.language }}</code>
+        </label>
+        <a v-if="qd.language !== 'json'" class="small" href="https://community.jaspersoft.com/knowledgebase/faq/jaspersoft-mongodb-query-language" target="_blank" rel="noopener">Query language reference</a>
         <span class="jd-tb-grow"></span>
-        <div class="jd-saved-q">
+        <div class="jd-saved-q" v-if="qd.language !== 'json'">
           <button type="button" class="btn btn-sm btn-light" @click="toggleSavedQueries" :aria-expanded="qd.savedOpen ? 'true' : 'false'" aria-haspopup="listbox"
                   title="Load a Jasper query you saved in Query Data (To Jasper → Save)">
             <i class="fas fa-bookmark"></i> Saved Jasper queries <i class="fas fa-chevron-down" style="font-size: .6rem"></i>
@@ -994,18 +1031,59 @@
             </ul>
           </div>
         </div>
-        <button type="button" class="btn btn-sm btn-light" @click="formatQuery" :disabled="!!qd.busy || !qd.query.trim()" title="Format the query: one key per line, two-space indent (Shift+Alt+F)">
+        <button v-if="qd.language !== 'json'" type="button" class="btn btn-sm btn-light" @click="formatQuery" :disabled="!!qd.busy || !qd.query.trim()" title="Format the query: one key per line, two-space indent (Shift+Alt+F)">
           <i class="fas fa-magic"></i> Format
         </button>
         <button type="button" class="btn btn-sm btn-light" @click="runDataPreview" :disabled="!!qd.busy">
           <i class="fas" :class="qd.busy === 'preview' ? 'fa-spinner fa-spin' : 'fa-table'"></i> Data preview
         </button>
-        <button type="button" class="btn btn-sm btn-primary" @click="readFields" :disabled="!!qd.busy" title="Run the query (read-only, up to 100 documents) and list its fields">
+        <button type="button" class="btn btn-sm btn-primary" @click="readFields" :disabled="!!qd.busy" :title="qd.language === 'json' ? 'Call the web service and list the fields of its records (up to 100)' : 'Run the query (read-only, up to 100 documents) and list its fields'">
           <i class="fas" :class="qd.busy === 'fields' ? 'fa-spinner fa-spin' : 'fa-list'"></i> Read Fields
         </button>
       </div>
-      <div class="jd-qd-editor"><div v-if="cmAvailable" ref="qdEditor" class="jd-qd-cm"></div><textarea v-else class="jd-code jd-code-edit" v-model="qd.query" spellcheck="false" aria-label="Query"></textarea></div>
+      <div class="jd-qd-editor" v-show="qd.language !== 'json'"><div v-if="cmAvailable" ref="qdEditor" class="jd-qd-cm"></div><textarea v-else class="jd-code jd-code-edit" v-model="qd.query" spellcheck="false" aria-label="Query"></textarea></div>
+      <!-- Web service query: the HTTP request (like Postman) and where its records are in the JSON answer -->
+      <div v-if="qd.language === 'json'" class="jd-ws">
+        <div class="jd-ws-line">
+          <select v-model="qd.ws.method" class="jd-ws-method" aria-label="HTTP method"><option v-for="m in JD.WS_METHODS" :key="m">{{ m }}</option></select>
+          <input v-model.trim="qd.ws.url" class="jd-ws-url jd-mono" placeholder="http://localhost:8199/interface/lab/generateHL7file" spellcheck="false" aria-label="Web service URL"
+                 @keydown.enter.prevent="readFields">
+        </div>
+        <div class="jd-ws-tabs" role="tablist">
+          <button v-for="t in [['params', 'Params', qd.ws.params.length], ['headers', 'Headers', qd.ws.headers.length], ['body', 'Body', null]]" :key="t[0]" type="button" role="tab"
+                  :class="{ 'is-on': qd.wsTab === t[0] }" @click="qd.wsTab = t[0]">{{ t[1] }}<span v-if="t[2]" class="jd-qd-count">{{ t[2] }}</span><i v-if="t[0] === 'body' && qd.ws.body.trim()" class="jd-ws-dot" aria-label="has a body"></i></button>
+          <span class="jd-tb-grow"></span>
+          <span class="small text-muted">$P{name} is replaced by the parameter's value</span>
+        </div>
+        <div class="jd-ws-pane">
+          <template v-if="qd.wsTab !== 'body'">
+            <table class="jd-qd-table">
+              <thead><tr><th style="width: 28px"></th><th>Key</th><th>Value</th><th style="width: 32px"></th></tr></thead>
+              <tbody>
+                <tr v-for="(x, i) in qd.ws[qd.wsTab]" :key="qd.wsTab + i">
+                  <td class="text-center"><input type="checkbox" v-model="x.on" :aria-label="'Send ' + (x.key || 'row ' + (i + 1))"></td>
+                  <td><input v-model="x.key" spellcheck="false" :placeholder="qd.wsTab === 'headers' ? 'Authorization' : 'patientvisituid'" aria-label="Key"></td>
+                  <td><input v-model="x.value" class="jd-mono" spellcheck="false" :placeholder="qd.wsTab === 'headers' ? 'Bearer …' : '$P{patientvisituid}'" aria-label="Value"></td>
+                  <td><button type="button" class="jd-x" @click="wsRemove(qd.wsTab, i)" :aria-label="'Delete ' + (x.key || 'row')">&times;</button></td>
+                </tr>
+              </tbody>
+            </table>
+            <button type="button" class="btn btn-sm btn-light m-2" @click="wsAdd(qd.wsTab)"><i class="fas fa-plus"></i> Add {{ qd.wsTab === 'headers' ? 'header' : 'parameter' }}</button>
+          </template>
+          <template v-else>
+            <p v-if="qd.ws.method === 'GET'" class="small text-muted px-2 pt-2 mb-0">A GET request has no body. Choose POST, PUT or PATCH to send one.</p>
+            <textarea v-model="qd.ws.body" class="jd-mono jd-ws-body" :disabled="qd.ws.method === 'GET'" spellcheck="false" aria-label="Request body"
+                      placeholder='{ "patientvisituid": "$P{patientvisituid}" }'></textarea>
+          </template>
+        </div>
+        <label class="jd-ws-path">
+          <span>Records path</span>
+          <input v-model="qd.path" class="jd-mono" spellcheck="false" placeholder="(empty: the whole answer)  e.g. data.items or result[0].orders" aria-label="Records path">
+          <span class="small text-muted">Where the records are in the JSON answer: an array gives one record per item.</span>
+        </label>
+      </div>
       <div v-if="qd.error" class="jd-msg is-error mx-3" role="alert"><i class="fas fa-exclamation-triangle"></i> <span>{{ qd.error }}</span></div>
+      <div v-if="qd.warn" class="jd-msg is-warn mx-3" role="alert"><i class="fas fa-exclamation-triangle"></i> <span>{{ qd.warn }}</span></div>
       <div v-if="qd.info" class="jd-msg is-ok mx-3" role="status"><i class="fas fa-check-circle"></i> <span>{{ qd.info }}</span></div>
 
       <div class="jd-qd-tabs" role="tablist">
@@ -1079,7 +1157,8 @@
         </div>
       </div>
       <div class="jd-qd-foot">
-        <span class="small text-muted"><i class="fas fa-lock"></i> Read-only: runs on the connected site with a 30 s limit; runs are recorded in Query Data Audit.</span>
+        <span class="small text-muted" v-if="qd.language === 'json'"><i class="fas fa-globe"></i> The request is sent as written (a POST can change data on that service), with a 30 s limit; runs are recorded in Query Data Audit.</span>
+        <span class="small text-muted" v-else><i class="fas fa-lock"></i> Read-only: runs on the connected site with a 30 s limit; runs are recorded in Query Data Audit.</span>
         <span class="jd-tb-grow"></span>
         <button type="button" class="btn btn-light" @click="closeQuery(false)">Cancel</button>
         <button type="button" class="btn btn-primary" @click="closeQuery(true)">OK</button>
@@ -1220,8 +1299,8 @@
         <div v-if="dialog.mode === 'open' && dialog.source === 'local' && dialog.confirmOpen" class="jd-msg is-warn mt-2"><i class="fas fa-exclamation-triangle"></i> <span>The open design has unsaved changes. Press Open again to open the other one anyway.</span></div>
 
         <template v-if="dialog.mode === 'save'">
-          <label class="jd-field mt-3">Report name<input v-model="dialog.name" ref="dialogInput" @input="dialog.confirmReplace = null" @keydown.enter.prevent="fmSave" maxlength="100"></label>
-          <small class="text-muted">Saved in <b>{{ dialog.path ? '/' + dialog.path : 'Designs (top level)' }}</b>. English letters, numbers and _ only; other characters become _.</small>
+          <label class="jd-field mt-3">Report name<input :value="dialog.name" ref="dialogInput" @input="nameInput($event, dialog); dialog.confirmReplace = null" @keydown.enter.prevent="fmSave" maxlength="100"></label>
+          <small class="text-muted">Saved in <b>{{ dialog.path ? '/' + dialog.path : 'Designs (top level)' }}</b>. <span class="jd-name-rule" :class="{ 'is-bad': nameWarn }" :role="nameWarn ? 'alert' : null">English letters, numbers and _ only; other characters become _.</span></small>
           <div v-if="dialog.confirmReplace" class="jd-msg is-warn mt-2"><i class="fas fa-exclamation-triangle"></i> <span>"{{ dialog.name }}" already exists in this folder. Click Replace to overwrite it.</span></div>
         </template>
         <div class="jd-modal-actions">
@@ -1299,7 +1378,8 @@
       <template v-else-if="dialog.kind === 'publish'">
         <h3 id="jdDialogTitle"><i class="fas fa-paper-plane"></i> Publish {{ cleanName }}</h3>
         <jr-publish-to v-if="!dialog.done" :form="dialog.form" :ctx="ctx" :report-name="cleanName" :own-code="dialog.ownCode"
-                       check-url="/reports/jasper-designer/check-code" uid="jd-pub" :disabled="busy.dialog"></jr-publish-to>
+                       check-url="/reports/jasper-designer/check-code" uid="jd-pub" :disabled="busy.dialog"
+                       browse-url="/reports/jasper-designer/servers/{sid}/browse"></jr-publish-to>
         <div v-if="!dialog.done && problems.length" class="jd-msg is-warn"><i class="fas fa-exclamation-triangle"></i> <span>{{ problems.length }} problem{{ problems.length > 1 ? 's' : '' }} found. The report may not run until they are fixed.</span></div>
         <p v-if="!dialog.done && !currentId" class="small text-muted">Save the design to keep a publish history of it.</p>
         <div v-if="dialog.error" class="jd-msg is-error" role="alert"><i class="fas fa-exclamation-triangle"></i> <span>{{ dialog.error }}</span></div>
@@ -1318,6 +1398,23 @@
           <button v-if="!dialog.done" type="button" class="btn btn-primary" @click="publish" :disabled="busy.dialog || !!dialogIssue">
             <i class="fas" :class="busy.dialog ? 'fa-spinner fa-spin' : 'fa-paper-plane'"></i> {{ busy.dialog ? 'Publishing…' : (dialog.form.target === 'both' ? 'Publish and save to HIS' : 'Publish') }}
           </button>
+        </div>
+      </template>
+
+      <!-- JasperServer: the folder and data source Publish uses for this report -->
+      <template v-else-if="dialog.kind === 'jasper'">
+        <h3 id="jdDialogTitle"><i class="fas fa-server"></i> JasperServer</h3>
+        <p class="small text-muted">Where Publish puts this report. Empty boxes use Reports &gt; Settings.</p>
+        <div class="jd-field mb-2">
+          <label for="jdJsFolder" class="mb-1">Folder</label>
+          <jr-folder-pick v-model="dialog.folder" :ctx="ctx" browse-url="/reports/jasper-designer/servers/{sid}/browse" input-id="jdJsFolder" :placeholder="defaults.folder + ' (Settings)'"></jr-folder-pick>
+        </div>
+        <label class="jd-field">Data source<input v-model.trim="dialog.dataSource" :placeholder="defaults.dataSource + ' (Settings)'" spellcheck="false"></label>
+        <p class="small text-muted mb-0">Published as <code>/{{ (dialog.folder || defaults.folder || '').replace(/^\/+|\/+$/g, '') }}/{{ cleanName }}</code></p>
+        <div v-if="jasperSettingsIssue" class="jd-msg is-error" role="alert"><i class="fas fa-exclamation-triangle"></i> <span>{{ jasperSettingsIssue }}</span></div>
+        <div class="jd-modal-actions">
+          <button type="button" class="btn btn-light" @click="dialog = null">Cancel</button>
+          <button type="button" class="btn btn-primary" @click="applyJasperSettings" :disabled="!!jasperSettingsIssue">OK</button>
         </div>
       </template>
 
@@ -1404,7 +1501,8 @@
   .jd-ox-switch span { position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: #fff; transition: left .15s ease; }
   .jd-ox-switch.is-on { background: var(--success); }
   .jd-ox-switch.is-on span { left: 14px; }
-  .jd-ox-switch:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+  .jd-ox-switch { cursor: inherit; }
+  .jd-band-active { display: flex; }
   .jd-work { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-right: 1px solid var(--border); }
   .jd-toolbar { display: flex; align-items: center; gap: 2px; padding: 5px 8px; border-bottom: 1px solid var(--border); background: var(--surface-2); flex-wrap: wrap; }
   .jd-tb { width: 28px; height: 28px; border: 0; border-radius: 6px; background: none; color: var(--text-2); cursor: pointer; display: grid; place-items: center; font-size: .82rem; }
@@ -1496,8 +1594,17 @@
   .jd-band.is-selected { background-color: rgba(37, 99, 235, .05); outline: 1px solid rgba(37, 99, 235, .4); }
   .jd-band.is-drop { background-color: rgba(16, 185, 129, .07); }
   .jd-band-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #c0c8d4; font-size: 15px; pointer-events: none; font-weight: 500; }
+  .jd-name-rule { transition: color .15s ease; }
+  .jd-name-rule.is-bad { color: var(--danger); font-weight: 600; }
+  .jd-name.is-bad { box-shadow: 0 0 0 2px var(--danger); }
   .jd-band-resize { position: absolute; height: 7px; cursor: row-resize; z-index: 2; }
   .jd-band-resize:hover { background: rgba(37, 99, 235, .25); }
+  .jd-page-resize { position: absolute; z-index: 3; }
+  .jd-page-resize.is-w { top: 0; width: 8px; cursor: col-resize; }
+  .jd-page-resize.is-h { left: 0; height: 8px; cursor: row-resize; }
+  .jd-page-resize.is-wh { width: 12px; height: 12px; cursor: nwse-resize; border-right: 3px solid #94a3b8; border-bottom: 3px solid #94a3b8; border-radius: 0 0 3px 0; }
+  .jd-page-resize.is-w:hover, .jd-page-resize.is-h:hover { background: rgba(37, 99, 235, .3); }
+  .jd-page-resize.is-wh:hover { border-color: var(--primary); }
   .jd-band-tag { position: absolute; right: 4px; top: -5px; font-size: 9px; color: #6366f1; background: #fff; padding: 0 4px; border-radius: 3px; pointer-events: none; }
 
   .jd-el { position: absolute; cursor: move; outline: 1px dashed rgba(100, 116, 139, .35); overflow: hidden; }
@@ -1674,6 +1781,23 @@
   .jd-saved-main code { font-size: .7rem; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: none; padding: 0; }
   .jd-qd-lang { display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; font-weight: 600; color: var(--text); }
   .jd-qd-lang i { color: #16a34a; }
+  .jd-qd-lang i.fa-globe { color: var(--primary); }
+  .jd-qd-langsel { height: 28px; border: 1px solid var(--border); border-radius: 6px; padding: 0 6px; font-size: .8rem; font-weight: 600; background: var(--surface); color: var(--text); }
+  .jd-ws { flex: 1 1 45%; min-height: 200px; margin: 0 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .jd-ws-line { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .jd-ws-method { width: 110px; border: 0; border-right: 1px solid var(--border); padding: 0 10px; font-weight: 700; color: #b45309; background: var(--surface-2); }
+  .jd-ws-url { flex: 1; min-width: 0; height: 36px; border: 0; padding: 0 10px; font-size: .85rem; background: var(--surface); color: var(--text); }
+  .jd-ws-url:focus, .jd-ws-method:focus { outline: 2px solid var(--primary); outline-offset: -2px; }
+  .jd-ws-tabs { display: flex; align-items: center; gap: 2px; border-bottom: 1px solid var(--border); }
+  .jd-ws-tabs button { border: 0; border-bottom: 2px solid transparent; background: none; padding: 5px 10px; font-size: .8rem; font-weight: 600; color: var(--text-2); cursor: pointer; }
+  .jd-ws-tabs button.is-on { color: var(--text); border-bottom-color: #f97316; }
+  .jd-ws-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #16a34a; margin-left: 5px; vertical-align: middle; }
+  .jd-ws-pane { flex: 1; min-height: 80px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; }
+  .jd-ws-body { flex: 1; min-height: 80px; border: 0; padding: 8px 10px; font-size: .8rem; resize: none; background: var(--surface); color: var(--text); }
+  .jd-ws-body:focus { outline: none; }
+  .jd-ws-path { display: flex; align-items: center; gap: 8px; margin: 0; font-size: .8rem; font-weight: 600; }
+  .jd-ws-path input { flex: 0 1 360px; height: 28px; border: 1px solid var(--border); border-radius: 6px; padding: 0 8px; font-size: .8rem; background: var(--surface); color: var(--text); }
+  .jd-ws-path .text-muted { font-weight: 400; }
   .jd-qd-bar select { height: 30px; border: 1px solid var(--border); border-radius: 6px; padding: 0 8px; font-size: .82rem; min-width: 180px; }
   .jd-qd-editor { flex: 1 1 45%; min-height: 160px; margin: 0 16px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; display: flex; }
   .jd-qd-editor > textarea { flex: 1; border-radius: 0; }
@@ -1721,12 +1845,12 @@
   .jd-pal-item:hover, .jd-pal-item:focus-visible { border-color: var(--primary); background: var(--primary-soft); outline: none; }
   .jd-pal-item i { flex: none; width: 13px; font-size: .74rem; text-align: center; color: var(--text-2); }
   .jd-props { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-  .jd-props-pop { position: fixed; z-index: 1040; width: 660px; max-width: calc(100vw - 16px); max-height: calc(100vh - 96px); resize: both; overflow: hidden; min-width: 300px; min-height: 160px;
+  .jd-props-pop { position: fixed; z-index: 1040; width: 960px; max-width: calc(100vw - 16px); max-height: calc(100vh - 96px); resize: both; overflow: hidden; min-width: 300px; min-height: 160px;
                   background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-lg); }
   .jd-props-drag { cursor: move; user-select: none; touch-action: none; border-radius: 10px 10px 0 0; }
   .jd-props-close { border: 0; background: none; color: var(--muted); font-size: 1.2rem; line-height: 1; padding: 0 2px; margin-left: 4px; cursor: pointer; }
   .jd-props-close:hover { color: var(--text); }
-  /* Two columns while the popup is wide enough; one when it is resized narrow. */
+  /* Up to three columns side by side (a wide, short popup); fewer when it is resized narrow. */
   .jd-pp-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); column-gap: 22px; align-items: start; }
   .jd-pp-col { min-width: 0; }
   .jd-pp-col > .jd-sub:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
@@ -1804,7 +1928,8 @@
   .jd-row-def .is-bad { border-color: var(--danger) !important; }
   .jd-x { border: 0; background: none; color: var(--muted); font-size: 1.05rem; line-height: 1; cursor: pointer; border-radius: 4px; padding: 0 4px; }
   .jd-x:hover { color: var(--danger); background: var(--danger-soft); }
-  .jd-prop-actions { display: flex; gap: 6px; margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--border); }
+  .jd-prop-actions { display: flex; gap: 6px; padding-right: 10px; margin-right: 2px; border-right: 1px solid var(--border); }
+  .jd-pp-wide { min-width: 0; }
 
   .jd-modal { position: fixed; inset: 0; z-index: 1060; background: rgba(15, 23, 42, .45); display: flex; align-items: center; justify-content: center; padding: 16px; }
   .jd-modal-box { background: var(--surface); border-radius: 12px; box-shadow: var(--shadow-lg); padding: 20px 22px 16px; width: 100%; max-width: 440px; max-height: 90vh; overflow: auto; }

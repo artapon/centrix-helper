@@ -159,6 +159,8 @@
     data: function () {
       var design = JD.newDesign('New_Report');
       design.font.name = 'TH SarabunPSK';
+      var wmDefault = Page.data.defaults && Page.data.defaults.watermark;      // Reports > Settings: the default watermark
+      if (wmDefault) design.watermark = JD.sanitizeWatermark(Object.assign({}, wmDefault, { enabled: true }));
       return {
         JD: Object.freeze(JD),
         design: design,
@@ -177,6 +179,7 @@
         cursor: null,
         history: [], future: [],
         dialog: null,
+        nameWarn: false,          // a character just typed in a report name was not allowed (shown in red for a while)
         busy: { save: false, dialog: false, preview: false, docx: false },
         sourceEdit: false, sourceText: '', copied: false,
         previewParams: {}, previewUrl: '', previewError: '',
@@ -313,7 +316,7 @@
         return list;
       },
       pvSource: {
-        get: function () { return this.pv.source || (this.design.query.trim() ? 'query' : 'empty'); },
+        get: function () { return this.pv.source || (JD.hasQuery(this.design) ? 'query' : 'empty'); },
         set: function (v) { this.pv.source = v; }
       },
       // Filled pages drawn at the preview zoom.
@@ -321,7 +324,7 @@
       // What the loaded rows depend on: a change reloads them (design edits only redraw).
       liveKey: function () {
         var d = this.design;
-        return JSON.stringify([this.pvSource, d.language, d.query, d.params.map(function (x) { return [x.name, x.def]; }),
+        return JSON.stringify([this.pvSource, d.language, d.query, d.language === 'json' ? d.ws : null, d.params.map(function (x) { return [x.name, x.def]; }),
           d.fields.map(function (f) { return f.name; }), this.previewParams, this.pv.limit]);
       },
       pvStale: function () { return this.pvSource === 'query' && this.pv.dataKey !== null && this.pv.dataKey !== this.liveKey; },
@@ -403,6 +406,12 @@
       // Role actions (Administration > Roles) and Reports > Settings: what this user may do here.
       canPublish: function () { return this.directPublish !== false && !!(this.can && this.can.designer && this.can.designer.publish); },
       canDelete: function () { return !!(this.can && this.can.designer && this.can.designer.delete); },
+      // Where Publish puts the report: /folder/name (the Settings folder when the design has none).
+      jasperRoute: function () { return '/' + String(this.design.folder || this.defaults.folder || '').replace(/^\/+|\/+$/g, '') + '/' + this.cleanName; },
+      jasperSettingsIssue: function () {
+        var dl = this.dialog;
+        return dl && dl.kind === 'jasper' ? JRPublish.folderIssue(dl.folder) : '';
+      },
       dialogIssue: function () {
         var dl = this.dialog;
         return dl && dl.kind === 'publish' && dl.form ? JRPublish.issue(dl.form, this.ctx) : '';
@@ -714,6 +723,10 @@
         this.selection = [];
         this.selectedBand = inBand ? this.bandAt(pt.y).key : null;
       },
+      // Double-click on a section's empty space: its properties (the pointerdown before it selected the section).
+      onPageDblClick: function () {
+        if (this.selectedBand && !this.selection.length) this.openProps(false);
+      },
       onElementPointerDown: function (e, el, band) {
         if (e.button !== 0) return;
         if (e.shiftKey || e.ctrlKey || e.metaKey) {
@@ -749,6 +762,51 @@
         this.selectedBand = key;
         this.drag = { mode: 'band', key: key, startY: e.clientY, orig: this.design.bands[key].height };
       },
+      // What a band holds: its elements and, in Column Header, the header row of every table shown (the
+      // table itself is in a detail band). { top, bottom } of all of it, heads: those tables.
+      bandContent: function (key) {
+        var d = this.design, els = d.bands[key].elements, heads = [];
+        if (key === 'columnHeader') {
+          this.visibleBands.forEach(function (b) {
+            d.bands[b.key].elements.forEach(function (el) { if (el.type === 'table' && el.headerShow) heads.push(el); });
+          });
+        }
+        var tops = els.map(function (el) { return el.y; }).concat(heads.map(function (t) { return t.headerY; }));
+        var bottoms = els.map(function (el) { return el.y + el.height; }).concat(heads.map(function (t) { return t.headerY + t.headerHeight; }));
+        return { top: tops.length ? Math.max(0, Math.min.apply(null, tops)) : 0, bottom: bottoms.length ? Math.max.apply(null, bottoms) : 0, heads: heads };
+      },
+      // The height that just fits a band's content. trim: Column Header's empty space above it goes too (a
+      // table's header is put at the bottom of Column Header); otherwise the lowest bottom edge (resize limit).
+      bandFitHeight: function (key, trim) {
+        var c = this.bandContent(key);
+        return round(c.bottom - (trim && key === 'columnHeader' ? c.top : 0));
+      },
+      // Double-click on a band's bottom edge, or Fit to elements in its properties: shrink/grow it to just fit its elements.
+      fitBand: function (key) {
+        var band = this.design.bands[key], c = this.bandContent(key), h = this.bandFitHeight(key, true);
+        this.drag = null;
+        this.selection = [];
+        this.selectedBand = key;
+        if (h === band.height && !(key === 'columnHeader' && c.top)) return;
+        if (key === 'columnHeader' && c.top) {
+          band.elements.forEach(function (el) { el.y = round(el.y - c.top); });
+          c.heads.forEach(function (t) { t.headerY = round(t.headerY - c.top); });
+        }
+        band.height = h;
+        this.commit();
+      },
+      // Drag the page's right edge (w), bottom edge (h) or corner (wh): Page Layout becomes Custom.
+      startPageResize: function (e, edge) {
+        if (e.button !== 0) return;
+        var p = this.design.page;
+        this.drag = { mode: 'page', edge: edge, startX: e.clientX, startY: e.clientY, orig: { w: p.width, h: p.height } };
+      },
+      // The narrowest page that keeps every element inside the right margin, and the lowest that keeps some room between the margins.
+      pageMinSize: function () {
+        var d = this.design, m = d.page.margins, right = 0;
+        Object.keys(d.bands).forEach(function (k) { d.bands[k].elements.forEach(function (el) { right = Math.max(right, el.x + el.width); }); });
+        return { w: Math.max(50, round(m.left + m.right + right)), h: Math.max(50, m.top + m.bottom + 20) };
+      },
       onPointerMove: function (e) {
         var g = this.drag;
         if (!g) return;
@@ -780,10 +838,19 @@
           if (!alone) t.columns[i + 1].width = o[i] + o[i + 1] - w;
           t.width = t.columns.reduce(function (s, c) { return s + c.width; }, 0);
           g.label = (t.columns[i].header || 'Column ' + (i + 1)) + ' ' + w + ' px' + (alone ? ' · table ' + t.width + ' px' : ' · ' + (t.columns[i + 1].header || 'Column ' + (i + 2)) + ' ' + t.columns[i + 1].width + ' px');
+        } else if (g.mode === 'page') {
+          if (!g.moved && Math.abs(dx) < 2 / this.zoom && Math.abs(dy) < 2 / this.zoom) return;
+          g.moved = true;
+          var p = this.design.page, min = this.pageMinSize();
+          var w = g.edge.indexOf('w') >= 0 ? Math.min(5000, Math.max(min.w, round(this.snapTo(g.orig.w + dx, e.altKey)))) : g.orig.w;
+          var h = g.edge.indexOf('h') >= 0 ? Math.min(14400, Math.max(min.h, round(this.snapTo(g.orig.h + dy, e.altKey)))) : g.orig.h;
+          p.size = 'Custom';
+          p.width = w;
+          p.height = h;
+          p.orientation = w > h ? 'landscape' : 'portrait';
+          g.label = 'Custom page ' + w + ' × ' + h + ' px' + (w === min.w && g.edge.indexOf('w') >= 0 ? ' · narrowest that keeps the elements inside' : '') + ' · Alt: no snapping';
         } else if (g.mode === 'band') {
-          var band = this.design.bands[g.key];
-          var lowest = band.elements.reduce(function (m, el) { return Math.max(m, el.y + el.height); }, 0);
-          band.height = Math.max(lowest, this.snapTo(g.orig + dy, e.altKey), 0);
+          this.design.bands[g.key].height = Math.max(this.bandFitHeight(g.key), this.snapTo(g.orig + dy, e.altKey), 0);
         }
       },
       onPointerUp: function () {
@@ -810,6 +877,8 @@
           vm.commit();
         } else if (g.mode === 'col') {
           vm.commit();
+        } else if (g.mode === 'page') {
+          if (g.moved) { vm.commit(); vm.toast('Page Layout: Custom ' + vm.design.page.width + ' × ' + vm.design.page.height + ' px.'); }
         } else if (g.mode === 'band') {
           vm.commit();
         }
@@ -940,23 +1009,26 @@
             var work = vm.$el.querySelector('.jd-work'), tb = vm.$el.querySelector('.jd-toolbar');
             if (!work) return;
             var rc = work.getBoundingClientRect(), top = tb ? tb.getBoundingClientRect().bottom : rc.top + 40;
-            var pop = vm.$refs.propsPop, w = pop && pop.offsetWidth ? pop.offsetWidth : 660;
+            var pop = vm.$refs.propsPop, w = pop && pop.offsetWidth ? pop.offsetWidth : 960;
             vm.propsPos = { x: Math.round(rc.right - w - 28), y: Math.round(top + 12) };
-            vm.clampProps();
+            vm.clampProps(true);
           };
           window.addEventListener('load', place);
           setTimeout(place, 0);
         }
-        vm.clampProps();
+        vm.clampProps(true);
+        vm.$nextTick(function () { vm.clampProps(true); });
         try { var ps = JSON.parse(store(PVSET_KEY) || 'null'); if (ps && isFinite(ps.x) && isFinite(ps.y)) vm.pvSetPos = { x: ps.x, y: ps.y }; } catch (e) { /* placed on open */ }
         vm._onPropsResize = function () { vm.clampProps(); vm.clampPvSet(); };
         window.addEventListener('resize', vm._onPropsResize);
       },
-      clampProps: function () {
-        var w = 660, el = this.$refs.propsPop;
+      // fit: keep the whole popup on screen (on load: a position saved for the narrower popup); dragging leaves 120 px in view.
+      clampProps: function (fit) {
+        var w = 960, el = this.$refs.propsPop;
         if (el && el.offsetWidth) w = el.offsetWidth;
+        var keep = fit === true ? Math.min(w, window.innerWidth - 16) : Math.min(w, 120);
         this.propsPos = {
-          x: Math.max(8, Math.min(this.propsPos.x, window.innerWidth - Math.min(w, 120) - 8)),
+          x: Math.max(8, Math.min(this.propsPos.x, window.innerWidth - keep - 8)),
           y: Math.max(8, Math.min(this.propsPos.y, window.innerHeight - 208))
         };
       },
@@ -1119,7 +1191,6 @@
         band.hidden = !band.hidden;
         if (band.hidden) {
           vm.selection = vm.selection.filter(function (id) { var f = vm.find(id); return f && f.band !== key; });
-          if (vm.selectedBand === key) vm.selectedBand = null;
         } else if (!band.height) {
           band.height = key.indexOf('detail') === 0 ? 125 : key === 'title' ? 79 : 40;     // a shown section gets room to drop into
         }
@@ -1430,6 +1501,7 @@
         else if (mod && k === 'a') {
           e.preventDefault();
           var band = this.selectedBand || (this.sel && this.find(this.sel.id).band) || 'detail';
+          if (this.design.bands[band].hidden) return;
           this.selection = this.design.bands[band].elements.map(function (el) { return el.id; });
         }
         else if (e.key === 'Delete' || e.key === 'Backspace') { if (this.selection.length) { e.preventDefault(); this.removeSelected(); } }
@@ -1594,6 +1666,7 @@
       askNew: function () { if (this.dirty) this.dialog = { kind: 'new' }; else this.newDesign(true); },
       newDesign: function () {
         this.design = JD.newDesign('New_Report');
+        if (this.defaults && this.defaults.watermark) this.design.watermark = JD.sanitizeWatermark(Object.assign({}, this.defaults.watermark, { enabled: true }));
         this.images = {};
         this.currentId = null;
         this.selection = []; this.selectedBand = null;
@@ -1622,7 +1695,8 @@
       // ─── Open a design > a JasperServer tab ─────────────────────────────
       // Browse the server's repository; opening a report unit imports its JRXML and images as a new,
       // unsaved design (Save keeps it in Local). The server reads JasperServer with the Settings login.
-      fmServers: function () { return ((this.jasper && this.jasper.servers) || []).filter(function (s) { return s.configured; }); },
+      // Servers whose folders Open a design shows (set up, and "Show its folders in Jasper Designer" in Reports > Settings).
+      fmServers: function () { return ((this.jasper && this.jasper.servers) || []).filter(function (s) { return s.configured && s.browseDesigner !== false; }); },
       fmSource: function (src) {
         var dl = this.dialog;
         if (dl.source === src) return;
@@ -1858,6 +1932,20 @@
           .catch(function (err) { dl.confirmDelete = null; dl.error = err.message; });
       },
       // Save into the open folder. A different design with the same name there is replaced after a second click.
+      // Report name inputs: only English letters, numbers and _; anything else becomes _ as it is typed
+      // (the cursor stays where it was). obj.name gets the cleaned text.
+      nameInput: function (e, obj) {
+        var input = e.target, raw = input.value, clean = raw.replace(/[^A-Za-z0-9_]/g, '_');
+        if (clean !== raw) {
+          var vm = this, at = input.selectionStart;
+          vm.nameWarn = true;
+          clearTimeout(vm._nameWarnTimer);
+          vm._nameWarnTimer = setTimeout(function () { vm.nameWarn = false; }, 3000);
+          input.value = clean;
+          if (at != null) input.setSelectionRange(at, at);
+        }
+        obj.name = clean;
+      },
       fmSave: function () {
         var vm = this, dl = vm.dialog;
         var name = JD.sanitize({ name: dl.name }).name;
@@ -2037,6 +2125,14 @@
         ['top', 'left', 'bottom', 'right'].forEach(function (sd) { b.pad[sd] = n; });
         this.commit();
       },
+      // Report properties > Watermark > Use the default (Reports > Settings).
+      useDefaultWatermark: function () {
+        var w = this.defaults && this.defaults.watermark;
+        if (!w) return;
+        this.design.watermark = JD.sanitizeWatermark(Object.assign({}, w, { enabled: true }));
+        this.commit();
+        this.toast('The default watermark from Reports > Settings is used.');
+      },
       setAttr: function (key, v) {
         if (v) this.$set(this.design.attrs, key, v); else this.$delete(this.design.attrs, key);
         this.commit();
@@ -2048,10 +2144,11 @@
         var values = {};
         d.params.forEach(function (p) { values[p.name] = vm.previewParams[p.name] || ''; });
         vm.qd = {
-          language: 'MongoDbQuery', query: d.query,
+          language: d.language, query: d.language === 'json' ? '' : d.query,
+          ws: JD.sanitizeWs(d.ws), path: d.language === 'json' ? d.query : '', wsTab: 'params',
           fields: clone(d.fields), params: clone(d.params), sortFields: clone(d.sortFields), filterExpression: d.filterExpression,
           tab: tab || 'fields', sel: { fields: -1, params: -1, sortFields: -1 }, values: values,
-          busy: '', error: '', info: '', preview: null, limit: 20, filter: '',
+          busy: '', error: '', info: '', warn: '', preview: null, limit: 20, filter: '',
           savedOpen: false, saved: null, savedQ: '', savedLoading: false, savedErr: '', confirmDel: null
         };
         vm.$nextTick(function () { vm.initQueryEditor(); });
@@ -2068,6 +2165,16 @@
         vm._qcm.setOption('extraKeys', { 'Shift-Alt-F': function () { vm.formatQuery(); } });
         setTimeout(function () { if (vm._qcm) vm._qcm.refresh(); }, 50);
       },
+      // MongoDB query or web service: the dialog keeps both while open; Apply keeps the chosen one.
+      setQueryLanguage: function (lang) {
+        var vm = this, q = vm.qd;
+        q.language = lang;
+        q.error = ''; q.info = ''; q.warn = ''; q.preview = null; q.savedOpen = false;
+        if (lang === 'MongoDbQuery') vm.$nextTick(function () { if (vm._qcm) vm._qcm.refresh(); });
+      },
+      // Web service request: a row of its query parameters or headers.
+      wsAdd: function (kind) { this.qd.ws[kind].push({ key: '', value: '', on: true }); },
+      wsRemove: function (kind, i) { this.qd.ws[kind].splice(i, 1); },
       toggleSavedQueries: function () {
         var vm = this, q = vm.qd;
         q.savedOpen = !q.savedOpen;
@@ -2121,8 +2228,10 @@
         if (apply && q) {
           var bad = q.fields.concat(q.params).filter(function (x) { return !JD.NAME_RE.test(x.name); });
           if (bad.length) { q.error = 'These names are not valid: ' + bad.map(function (x) { return x.name || '(empty)'; }).join(', '); q.tab = q.fields.indexOf(bad[0]) >= 0 ? 'fields' : 'params'; return; }
-          vm.design.language = 'MongoDbQuery';
-          vm.design.query = q.query;
+          if (q.language === 'json' && !q.ws.url.trim()) { q.error = 'Type the web service URL, or switch back to MongoDB query.'; return; }
+          vm.design.language = q.language;
+          vm.design.query = q.language === 'json' ? q.path.trim() : q.query;
+          vm.design.ws = q.language === 'json' ? JD.sanitizeWs(q.ws) : JD.emptyWs();
           vm.design.fields = q.fields;
           vm.design.params = q.params;
           vm.design.sortFields = q.sortFields.filter(function (x) { return x.name; });
@@ -2160,18 +2269,41 @@
       },
       qPayload: function (mode) {
         var q = this.qd;
-        return { mode: mode, language: q.language, query: q.query, params: q.params.map(function (p) { return { name: p.name, def: p.def }; }), values: q.values,
+        var json = q.language === 'json';
+        return { mode: mode, language: q.language, query: json ? q.path : q.query, ws: json ? q.ws : undefined, params: q.params.map(function (p) { return { name: p.name, def: p.def }; }), values: q.values,
           fields: mode === 'preview' ? q.fields.map(function (f) { return f.name; }) : undefined, limit: mode === 'preview' ? q.limit : 100 };
+      },
+      // The query's whole result against JasperServer's page limit (count: { total, more } from the server):
+      // a warning when the report would get more pages than JasperServer prints.
+      sizeWarning: function (count) {
+        if (!count || (count.total == null && !count.more)) return '';
+        var max = JD.JASPER_MAX_PAGES, q = this.qd;
+        var est = JD.pageEstimate(this.design, count.total || 0);
+        if (!count.more && est.pages <= max) return '';
+        var n = function (x) { return Number(x).toLocaleString('en-US'); };
+        var size = count.total == null ? 'so many records that counting them took more than 15 seconds'
+          : (count.more ? 'more than ' : '') + n(count.total) + ' records, ' + (count.more ? 'more than ' : 'about ') + n(est.pages) + ' pages at ' + est.perPage + ' rows a page';
+        var fit = max * (est.perPage || 1);      // the most records that fit in JasperServer's page limit
+        if (q.language === 'json') {
+          return 'Too much data: the web service gives ' + size + '. JasperServer stops at ' + max + ' pages ("exceeded the limit of ' + max +
+            ' maximum pages"). Filter the request by a parameter (e.g. ?patientvisituid=$P{patientvisituid}).';
+        }
+        var noLimit = !/\$limit\b|["']?\blimit["']?\s*:/.test(q.query);
+        return 'Too much data: the query gives ' + size + '. JasperServer stops at ' + max + ' pages ("The report has more than ' + max +
+          ' pages" / "exceeded the limit of ' + max + ' maximum pages"). ' +
+          (noLimit ? 'The query has no $limit. ' : '') + 'Filter it by a parameter (e.g. $match on patientvisituid)' +
+          (noLimit ? ' or add { $limit: ' + fit + ' } at the end of the pipeline' : ' or lower its $limit to ' + fit + ' or less') + '.';
       },
       readFields: function () {
         var vm = this, q = vm.qd;
-        q.busy = 'fields'; q.error = ''; q.info = '';
+        q.busy = 'fields'; q.error = ''; q.info = ''; q.warn = '';
         post(BASE + '/query', vm.qPayload('fields'))
           .then(function (d) {
             if (!vm.qd) return;
             var old = {};
             q.fields.forEach(function (f) { old[f.name] = f; });
-            q.fields = d.fields.map(function (f) { var o = old[f.name]; return { name: f.name, cls: f.cls, desc: o ? o.desc : '', props: o ? o.props : [] }; });
+            var json = q.language === 'json';      // Jasper's json data source reads a field from the path in its description
+            q.fields = d.fields.map(function (f) { var o = old[f.name]; return { name: f.name, cls: f.cls, desc: o && o.desc ? o.desc : json ? f.name : '', props: o ? o.props : [] }; });
             // Fields the sample rows lack but the report uses ($F{…} in an expression) are kept.
             var used = vm.jrxml + ' ' + q.filterExpression;
             var kept = [], dropped = [];
@@ -2180,10 +2312,11 @@
               if (used.indexOf('$F{' + n + '}') >= 0) { kept.push(n); q.fields.push(old[n]); } else dropped.push(n);
             });
             if (kept.length) dropped.unshift('(kept because the report uses them: ' + kept.join(', ') + ')');
-            q.info = 'Read ' + d.fields.length + ' fields from ' + d.docs + ' document' + (d.docs === 1 ? '' : 's') + ' of ' + d.collection + '.' +
+            q.info = 'Read ' + d.fields.length + ' fields from ' + d.docs + (json ? ' record' : ' document') + (d.docs === 1 ? '' : 's') + (json ? ' from ' : ' of ') + d.collection + '.' +
               (dropped.length ? ' Not in the results any more: ' + dropped.slice(0, 8).join(', ') + (dropped.length > 8 ? '…' : '') + '.' : '') +
               (d.missing.length ? ' No value for ' + d.missing.map(function (n) { return '$P{' + n + '}'; }).join(', ') + ' (used null).' : '') +
               (!d.docs ? ' The query returned nothing; set parameter values in the Parameters tab and read again.' : '');
+            q.warn = vm.sizeWarning(d.count);
             q.tab = 'fields';
           })
           .catch(function (err) { if (vm.qd) q.error = err.message; })
@@ -2191,9 +2324,9 @@
       },
       runDataPreview: function () {
         var vm = this, q = vm.qd;
-        q.busy = 'preview'; q.error = ''; q.tab = 'preview';
+        q.busy = 'preview'; q.error = ''; q.warn = ''; q.tab = 'preview';
         post(BASE + '/query', vm.qPayload('preview'))
-          .then(function (d) { if (vm.qd) q.preview = Object.freeze(d); })
+          .then(function (d) { if (vm.qd) { q.preview = Object.freeze(d); q.warn = vm.sizeWarning(d.count); } })
           .catch(function (err) { if (vm.qd) q.error = err.message; })
           .then(function () { if (vm.qd) q.busy = ''; });
       },
@@ -2221,6 +2354,21 @@
       // ─── JasperServer ───────────────────────────────────────────────────
       // The shared "Publish to" panel (publish-panel.js): the design's folder and data source, and
       // the servers / HIS settings of its last publish when it is a saved design.
+      // JasperServer popup (toolbar): the design's folder and data source, as the Publish dialog sets them.
+      openJasperSettings: function () {
+        this.dialog = { kind: 'jasper', folder: this.design.folder || '', dataSource: this.design.dataSource || '' };
+      },
+      applyJasperSettings: function () {
+        var dl = this.dialog, folder = String(dl.folder || '').trim().replace(/^\/+|\/+$/g, ''), ds = String(dl.dataSource || '').trim();
+        if (this.jasperSettingsIssue) return;
+        if (folder !== this.design.folder || ds !== this.design.dataSource) {
+          this.design.folder = folder;
+          this.design.dataSource = ds;
+          this.commit();
+          this.toast('JasperServer: published to ' + this.jasperRoute + '.');
+        }
+        this.dialog = null;
+      },
       askPublish: function () {
         var vm = this;
         if (!vm.canPublish) return;      // off in Reports > Settings (deploy workflow only), or not in the role
@@ -2341,14 +2489,14 @@
         clearTimeout(vm._liveFetch);
         pv.view = 'local';
         if (source !== 'query') { pv.dataKey = null; vm.renderLive(); return; }
-        if (!d.query.trim()) { pv.error = ''; pv.dataKey = vm.liveKey; vm.renderLive('This report has no query yet (Dataset & Query)'); return; }
+        if (!JD.hasQuery(d)) { pv.error = ''; pv.dataKey = vm.liveKey; vm.renderLive('This report has no query yet (Dataset & Query)'); return; }
         var limit = Math.max(1, Math.min(1000, parseInt(pv.limit, 10) || 200));
         var key = vm.liveKey, req = (vm._liveReq || 0) + 1;
         vm._liveReq = req;
         pv.busy = true;
         pv.error = '';
         post(BASE + '/query', {
-          mode: 'fill', language: d.language, query: d.query, limit: limit, values: vm.previewParams,
+          mode: 'fill', language: d.language, query: d.query, ws: d.language === 'json' ? d.ws : undefined, limit: limit, values: vm.previewParams,
           params: d.params.map(function (x) { return { name: x.name, def: x.def }; }),
           fields: d.fields.map(function (f) { return f.name; })
         })
@@ -2436,6 +2584,7 @@
       // Save PDF: the pages at print size (1 report px = 1 pt) in a hidden frame, printed by the browser.
       printPreview: function () {
         var vm = this, pv = vm.pv, res = pv.result;
+        if (vm.designerPrint === false) { vm.toast('Save PDF / Print is turned off in Reports > Settings.', 'error'); return; }
         if (!res || !res.pages.length) return;
         var zoom = pv.zoom;
         pv.zoom = 4 / 3;

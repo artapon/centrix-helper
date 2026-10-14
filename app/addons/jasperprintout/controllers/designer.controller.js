@@ -179,11 +179,15 @@ exports.publish = json(async (req, res) => {
 // ─── Open a design > a JasperServer tab: browse its repository and open a report unit ──────────
 // Uses the connection in Reports > Settings, so the browser never sees the JasperServer login.
 
-// The JasperServer with this id, as jasper.service expects it.
-async function remoteServer(id) {
+// The JasperServer with this id, as jasper.service expects it. browse: refused when Reports > Settings
+// does not show its folders in Open a design ("Show its folders in Jasper Designer").
+async function remoteServer(id, browse) {
   const settings = await settingsModel.get('designer');
-  return pub.on(settings, pub.servers({ servers: [String(id || '')] }, settings)[0]);
+  const sv = pub.servers({ servers: [String(id || '')] }, settings)[0];
+  if (browse && !settingsModel.canBrowse(sv, 'designer')) throw bad(`${sv.name}: showing its folders in Open a design is turned off in Reports > Settings.`, 403);
+  return Object.assign(pub.on(settings, sv), { browseFolders: sv.browseFolders || [] });
 }
+const outsideFolders = (settings) => bad(`${settings.name}: that folder is not one Reports > Settings lets Open a design show.`, 403);
 // A repository path from the request: "/" or "/A/B c", without "..".
 function repoUri(value, what) {
   const uri = '/' + String(value || '').split('/').map((s) => s.trim()).filter(Boolean).join('/');
@@ -191,15 +195,24 @@ function repoUri(value, what) {
   return uri;
 }
 
+// folders=1: folders only, for picking where to publish (the Publish dialog / JasperServer popup); allowed
+// whatever Open a design may show. Otherwise folders and report units, for Open a design.
 exports.remoteBrowse = json(async (req, res) => {
   const folder = repoUri(req.query.folder, 'folder');
-  res.json({ folder, items: await jasper.browse(await remoteServer(req.params.sid), folder) });
+  const foldersOnly = req.query.folders === '1';
+  const settings = await remoteServer(req.params.sid, !foldersOnly);
+  const items = await jasper.browse(settings, folder);
+  if (foldersOnly) return res.json({ folder, items: items.filter((x) => x.type === 'folder') });
+  const shown = settingsModel.listFolder(settings, folder, items);
+  if (!shown) throw outsideFolders(settings);
+  res.json({ folder, items: shown });
 });
 
 exports.remoteSearch = json(async (req, res) => {
   const q = String(req.query.q || '').trim().slice(0, 100);
   if (q.length < 2) throw bad('Type at least 2 letters to search.');
-  res.json({ q, items: await jasper.search(await remoteServer(req.params.sid), q) });
+  const settings = await remoteServer(req.params.sid, true);
+  res.json({ q, items: (await jasper.search(settings, q)).filter((x) => settingsModel.inFolders(settings, x.uri)) });
 });
 
 // Image kind from the first bytes (resources often have no file extension).
@@ -209,7 +222,8 @@ const imageType = (buf) => (buf[0] === 0x89 && buf[1] === 0x50 ? 'png' : buf[0] 
 // unsaved design. Files the designer can't keep (subreports, bundles, big images) are listed in `skipped`.
 exports.remoteUnit = json(async (req, res) => {
   const uri = repoUri(req.query.uri, 'report');
-  const settings = await remoteServer(req.params.sid);
+  const settings = await remoteServer(req.params.sid, true);
+  if (!settingsModel.inFolders(settings, uri)) throw outsideFolders(settings);
   const unit = await jasper.reportUnit(settings, uri);
   if (!unit.jrxmlUri) throw bad('That report unit has no JRXML.', 422);
   const jrxml = (await jasper.file(settings, unit.jrxmlUri)).toString('utf8');
@@ -279,7 +293,7 @@ exports.query = json(async (req, res) => {
     result = await datasetQuery.run({
       query: p.query, language: p.language, mode: ['preview', 'fill'].includes(p.mode) ? p.mode : 'fields',
       params: Array.isArray(p.params) ? p.params : [], values: p.values && typeof p.values === 'object' ? p.values : {},
-      fields: p.fields, limit: p.limit
+      fields: p.fields, limit: p.limit, ws: p.ws && typeof p.ws === 'object' ? p.ws : null
     });
     return res.json(result);
   } catch (err) {
@@ -289,9 +303,10 @@ exports.query = json(async (req, res) => {
     try {
       const audit = require('../../querystudio/models/queryAudit.model');
       await audit.record({
-        req: { user: req.user, ip: req.ip, socket: req.socket, get: req.get && req.get.bind(req), body: { query: '// Jasper Designer: ' + ({ preview: 'Data preview', fill: 'Report preview' }[p.mode] || 'Read Fields') + '\n' + String(p.query || '') } },
+        req: { user: req.user, ip: req.ip, socket: req.socket, get: req.get && req.get.bind(req), body: { query: '// Jasper Designer: ' + ({ preview: 'Data preview', fill: 'Report preview' }[p.mode] || 'Read Fields') + '\n' +
+          (p.language === 'json' && p.ws ? '// Web service: ' + String(p.ws.method || 'GET') + ' ' + String(p.ws.url || '') + '\n// Records: ' : '') + String(p.query || '') } },
         action: 'run', startedAt, ms: Date.now() - startedAt,
-        result: result ? { method: 'aggregate', collection: result.collection, docs: new Array(result.docs || 0) } : null,
+        result: result ? { method: p.language === 'json' ? 'webservice' : 'aggregate', collection: result.collection, docs: new Array(result.docs || 0) } : null,
         error: error && !error.expose ? error : (error ? { message: error.message } : null)
       });
     } catch (e) { /* Query Studio not installed */ }

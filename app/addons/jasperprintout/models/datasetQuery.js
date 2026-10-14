@@ -5,10 +5,13 @@
 //   { runCommand: { aggregate: 'patientvisits', pipeline: [ ... ] } }
 //   { collectionName: 'patients', findQuery: { ... }, findFields: { ... }, sort: { ... } }
 //
+// Or (language json) calls a web service and reads the records from its JSON answer: datasetWebService.js.
+//
 // $P{name} is replaced by the parameter's value (or its default expression when it is a plain
 // literal). The text is parsed by Query Studio's safe parser, which refuses $out, $merge,
 // $where, $function and $accumulator.
 const mongoose = require('mongoose');
+const webService = require('./datasetWebService');
 
 const { ObjectId, Long, Decimal128 } = mongoose.mongo;
 const MAX_TIME_MS = 30000;
@@ -37,14 +40,18 @@ function literal(expr) {
   return undefined;
 }
 
+// The value for $P{name}: the one typed for Read Fields / preview, else its literal default; undefined when neither.
+function paramValue(name, params, values) {
+  const v = values && Object.prototype.hasOwnProperty.call(values, name) && values[name] !== '' ? values[name] : undefined;
+  if (v !== undefined) return v;
+  const p = params.find((x) => x.name === name);
+  return p ? literal(p.def) : undefined;
+}
+
 function substitute(text, params, values) {
   const missing = [];
   const out = String(text).replace(/\$P!?\{([^}]+)\}/g, (all, name) => {
-    let v = values && Object.prototype.hasOwnProperty.call(values, name) && values[name] !== '' ? values[name] : undefined;
-    if (v === undefined) {
-      const p = params.find((x) => x.name === name);
-      v = p ? literal(p.def) : undefined;
-    }
+    let v = paramValue(name, params, values);
     if (v === undefined) { missing.push(name); v = null; }
     return JSON.stringify(v);
   });
@@ -104,6 +111,26 @@ async function runSpec(spec, limit) {
   let cursor = db.collection(spec.collection).find(spec.filter, Object.assign({ projection: spec.projection || undefined }, opts));
   if (spec.sort) cursor = cursor.sort(spec.sort);
   return cursor.limit(limit).toArray();
+}
+
+// How many records the whole query gives, for the dialog's "too many pages for JasperServer" warning:
+// { total, more } — more: at least COUNT_CAP, or still counting after COUNT_TIME_MS (total is then null).
+const COUNT_CAP = 100000;
+const COUNT_TIME_MS = 15000;
+async function countSpec(spec) {
+  const coll = mongoose.connection.db.collection(spec.collection);
+  try {
+    let n;
+    if (spec.kind === 'aggregate') {
+      const r = await coll.aggregate(spec.pipeline.concat([{ $limit: COUNT_CAP + 1 }, { $count: 'n' }]), { allowDiskUse: true, maxTimeMS: COUNT_TIME_MS }).toArray();
+      n = r.length ? r[0].n : 0;
+    } else {
+      n = await coll.countDocuments(spec.filter, { limit: COUNT_CAP + 1, maxTimeMS: COUNT_TIME_MS });
+    }
+    return n > COUNT_CAP ? { total: COUNT_CAP, more: true } : { total: n, more: false };
+  } catch (err) {
+    return err.code === 50 || err.codeName === 'MaxTimeMSExpired' ? { total: null, more: true } : { total: null, more: false };
+  }
 }
 
 function flatten(doc, prefix, out) {
@@ -172,24 +199,31 @@ async function censorOn() {
 }
 
 /**
- * opts: { query, language, params: [{ name, def }], values: { name: value }, mode: 'fields' | 'preview', fields: [names], limit }
- * fields → { fields: [{ name, cls }], docs, collection, missing }
- * preview → { columns, rows, docs, masked, collection, missing }
+ * opts: { query, language, params: [{ name, def }], values: { name: value }, mode: 'fields' | 'preview', fields: [names], limit,
+ *         ws }   ws: the web service request when language is json (query: the records path)
+ * fields → { fields: [{ name, cls }], docs, collection, missing, count }
+ * preview → { columns, rows, docs, masked, collection, missing, count }   (count: { total, more } of the whole query)
  * fill    → { columns, rows: [{ field: typed value }], docs, masked, collection, missing }   (the designer's local preview)
  */
 exports.run = async function (opts) {
-  if ((opts.language || 'MongoDbQuery') !== 'MongoDbQuery') throw bad('Read Fields and Data preview work with MongoDbQuery reports.');
-  if (!String(opts.query || '').trim()) throw bad('Type the query first.');
-  if (mongoose.connection.readyState !== 1 || !mongoose.connection.db) throw bad('Connect to a Centrix site first (DB Info / Manage Connections).', 409);
-  const { text, missing } = substitute(opts.query, opts.params || [], opts.values || {});
-  const spec = parseSpec(text);
+  const language = opts.language || 'MongoDbQuery';
+  if (language !== 'MongoDbQuery' && language !== 'json') throw bad('Read Fields and Data preview work with MongoDbQuery and web service (json) reports.');
   const max = opts.mode === 'fill' ? 1000 : 200;
   const limit = Math.max(1, Math.min(max, parseInt(opts.limit, 10) || (opts.mode === 'preview' ? 20 : 100)));
-  let docs;
-  try {
-    docs = await runSpec(spec, limit);
-  } catch (err) {
-    throw bad('MongoDB: ' + [err.codeName, err.errmsg || err.message].filter(Boolean).join(': '));
+  let docs, count = null, spec, missing;
+  if (language === 'json') {
+    ({ docs, count, missing, source: spec } = await webService.run(opts, limit, (name) => paramValue(name, opts.params || [], opts.values || {})));
+  } else {
+    if (!String(opts.query || '').trim()) throw bad('Type the query first.');
+    if (mongoose.connection.readyState !== 1 || !mongoose.connection.db) throw bad('Connect to a Centrix site first (DB Info / Manage Connections).', 409);
+    const sub = substitute(opts.query, opts.params || [], opts.values || {});
+    missing = sub.missing;
+    spec = parseSpec(sub.text);
+    try {
+      [docs, count] = await Promise.all([runSpec(spec, limit), opts.mode === 'fill' ? null : countSpec(spec)]);
+    } catch (err) {
+      throw bad('MongoDB: ' + [err.codeName, err.errmsg || err.message].filter(Boolean).join(': '));
+    }
   }
   const flat = docs.map((doc) => flatten(doc, '', {}));
   if (opts.mode === 'fill') {
@@ -213,7 +247,7 @@ exports.run = async function (opts) {
       if (v === null || v === undefined) return null;
       return masked && personal(c) ? '***' : display(v);
     }));
-    return { columns, rows, docs: docs.length, masked, collection: spec.collection, missing };
+    return { columns, rows, docs: docs.length, masked, collection: spec.collection, missing, count };
   }
   const types = new Map();
   flat.forEach((f) => Object.keys(f).forEach((k) => {
@@ -223,7 +257,7 @@ exports.run = async function (opts) {
     else if (cls && !types.get(k)) types.set(k, cls);
   }));
   const fields = [...types.entries()].map(([name, cls]) => ({ name, cls: cls || 'java.lang.Object' }));
-  return { fields, docs: docs.length, collection: spec.collection, missing };
+  return { fields, docs: docs.length, collection: spec.collection, missing, count };
 };
 
 // Sample values for the preview's well-known parameters: the _id of the first record of each collection.
@@ -239,4 +273,4 @@ exports.sampleParams = async function () {
   return out;
 };
 
-exports._test ={ substitute, parseSpec, flatten, javaClass, literal, personal, typed };
+exports._test = { substitute, parseSpec, flatten, javaClass, literal, personal, typed };

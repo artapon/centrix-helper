@@ -15,5 +15,7 @@ router.post('/api/database/connections/test', asyncHandler(dbConnectionsControll
 router.post('/api/database/connections/uri', asyncHandler(dbConnectionsController.uri));
 router.get('/api/database/connections/:id', asyncHandler(dbConnectionsController.getOne));
 router.post('/database/connect', asyncHandler(dbConnectionsController.connect));
+// Top bar Connect DB / Reconnect DB (same permission as /database/connect: "DB Info").
+router.post('/database/connect/last', asyncHandler(dbConnectionsController.reconnect));
 
 module.exports = router;

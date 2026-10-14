@@ -105,6 +105,7 @@ router.post('/reports/publish/deploys/:id/production', requireAction(PUBLISH, 'd
 router.get('/reports/settings', requireAdmin, asyncHandler(settings.index));
 router.post('/reports/settings', requireAdmin, settings.save);
 router.post('/reports/settings/test', requireAdmin, settings.test);
+router.get('/reports/settings/servers/:sid/browse', requireAdmin, settings.browse);
 router.get('/reports/print-out-settings', (req, res) => res.redirect(302, '/reports/settings'));   // old link
 
 module.exports = router;

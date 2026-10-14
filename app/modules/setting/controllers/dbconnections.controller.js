@@ -144,6 +144,21 @@ exports.uri = async function (req, res) {
 };
 
 // Switches the active Mongo connection to the site of a Manage Connections row.
+// Top bar "Connect DB" / "Reconnect DB": the last connection used (or the first one listed), then
+// back to the page it was pressed on (next: a path of this app only).
+exports.reconnect = async function (req, res) {
+  const raw = String((req.body && req.body.next) || '');
+  const next = /^\/(?!\/)[^\s\\]*$/.test(raw) ? raw : '/overview';
+  try {
+    await activeConnection.ensure(req);
+    return res.redirect(next);
+  } catch (err) {
+    console.error('Reconnect failed:', err.message);
+    activeConnection.clearSession(req);
+    return back(res, 'error', `Connecting failed: ${err.message}`);
+  }
+};
+
 exports.connect = async function (req, res) {
   try {
     await connectTo(req, req.body.site_index);

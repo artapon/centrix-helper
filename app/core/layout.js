@@ -63,6 +63,9 @@ function renderSidebar(menu, active) {
  *   shell.siteColor    connection's "Mark with color" (#rrggbb) or ''
  *   shell.connected    whether a Mongo connection is active for this session
  *   shell.connectLink  where the connection chip goes: Manage Connections, or /database/info without that permission
+ *   shell.canConnect   the user may connect (DB Info): the top bar shows Connect DB / Reconnect DB when not connected
+ *   shell.lastSite     the site the app was connected to before it dropped ('' since start-up): "Reconnect DB"
+ *   shell.here         this page's path, to come back to after connecting
  *   shell.user         signed-in user { username, name, initials, roleName, isAdmin }, escaped; null when signed out
  *   shell.title        page title as markup (controllers put HN/VN links in some titles)
  *   shell.docTitle     plain-text title for <title>
@@ -82,6 +85,9 @@ exports.build = function (req, title) {
     connected,
     // The connection chip opens Manage Connections (connect from there), or DB Info for roles without it.
     connectLink: account && permissions.canAccessPath(account, '/database/connections') ? '/database/connections' : '/database/info',
+    canConnect: !connected && !!account && permissions.canAccessPath(account, '/database/connect/last'),
+    lastSite: !connected ? escapeHtml((global.sessionData && global.sessionData.site_name) || '') : '',
+    here: escapeHtml(req.originalUrl || '/'),
     title: title || 'Centrix HIS Helper Tools',
     docTitle: escapeHtml(String(title || 'Centrix HIS Helper Tools').replace(/<[^>]*>/g, '')),
     user: account && {

@@ -10,6 +10,14 @@
   </nav>
 
   <div class="topbar-actions">
+    ${shell.canConnect
+      ? `<form method="post" action="/database/connect/last" class="conn-connect" onsubmit="var b=this.querySelector('button');b.disabled=true;b.querySelector('i').className='fas fa-spinner fa-spin';">
+           <input type="hidden" name="next" value="${shell.here}">
+           <button type="submit" class="conn-btn" title="${shell.lastSite ? 'Connect to ' + shell.lastSite + ' again' : 'Connect to the last database used (or the first one in Manage Connections)'}">
+             <i class="fas fa-plug"></i> <span>${shell.lastSite ? 'Reconnect DB' : 'Connect DB'}</span>
+           </button>
+         </form>`
+      : ''}
     ${shell.connected
       ? `<a href="${shell.connectLink}" class="conn-chip is-connected" title="Connected — click to switch site"${shell.siteColor ? ` style="border-color:${shell.siteColor};box-shadow:inset 3px 0 0 ${shell.siteColor}"` : ''}>
            <span class="conn-dot"></span>

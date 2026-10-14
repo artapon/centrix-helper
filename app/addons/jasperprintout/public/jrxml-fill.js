@@ -903,8 +903,17 @@
     };
 
     var list = rows || [];
+    // Tables with rows from the query that print "No Data" without records. As in the JRXML (JD.noDataAttrs),
+    // they make the report print all sections but the details then, and the row comes right under the headers.
+    var noDataTables = [];
+    Object.keys(d.bands).forEach(function (k) {
+      var b = d.bands[k];
+      if (!b || b.hidden || k.indexOf('detail') !== 0) return;
+      b.elements.forEach(function (el) { if (el.type === 'table' && el.noDataShow && el.rowSource === 'query') noDataTables.push(el); });
+    });
     if (!list.length) {
       var wnd = attrs.whenNoDataType || 'NoPages';
+      if (noDataTables.length && wnd === 'NoPages') wnd = 'AllSectionsNoDetail';
       if (wnd === 'NoPages') return { pages: [], notes: notes, empty: 'The data source has no rows, and "When no data" is "No pages", so the report is empty. Change it in the report properties, or use "One empty record".' };
       if (wnd === 'BlankPage') return { pages: [{ num: 1, width: W, height: H, items: [] }], notes: notes };
       if (wnd === 'NoDataSection') {
@@ -924,6 +933,15 @@
       if (te !== false) page.y = te;
       if (!page.headed) headers();                    // a page break in the title already started a page with them
     }
+
+    // No records: each "No Data" table gets one row across its width with its text.
+    if (!list.length) noDataTables.forEach(function (el) {
+      var one = Object.assign({}, el, { columns: [{ id: el.id + '-nd', width: el.width, hAlign: 'Center', header: '', expression: '', pattern: '' }] });
+      var r = tableRow(one, [el.noDataText], el.rowHeight, el.textAdjust, false);
+      page.items.push({ el: one, band: 'columnFooter', x: m.left + el.x, y: page.y, w: el.width, h: r.height, text: null, src: null,
+        table: { rows: [r.cells], heights: [r.height], header: false } });
+      page.y += r.height;
+    });
 
     var titled = pages.length === 1 && !!band('title'), stop = false;
     for (var i = 0; i < list.length && !stop; i++) {

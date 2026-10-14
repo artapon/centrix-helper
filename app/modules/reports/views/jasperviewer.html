@@ -1,1301 +1,729 @@
+<div class="col-12">
+<div class="jv" ref="root" :class="{ 'is-full': fullscreen }">
+
+  <!-- Header: what the page does, where it connects, tools -->
+  <header class="jv-top">
+    <span class="jv-top-icon"><i class="fas fa-file-alt"></i></span>
+    <div class="jv-top-title">
+      <h1>Jasper Report Viewer</h1>
+      <p>Open a report from JasperServer or from a JasperServer link, fill in its parameters and view it.</p>
+    </div>
+    <span class="jv-conn" :class="servers.length ? 'is-ok' : 'is-bad'" :title="serversTitle">
+      <i class="fas fa-circle"></i>
+      {{ servers.length ? (servers.length === 1 ? 'JasperServer ' + servers[0].name : servers.length + ' JasperServers') : 'No JasperServer set up' }} · login from Reports &gt; Settings
+    </span>
+    <a v-if="isAdmin" class="btn btn-sm btn-light" href="/reports/settings" title="Reports > Settings: JasperServers and their login"><i class="fas fa-sliders-h"></i> Settings</a>
+    <button type="button" class="btn btn-sm btn-light" @click="basicOpen = true" title="Organisation, date, visit and encounter-type ids to type into the report parameters"><i class="fas fa-id-card"></i> Basic Data</button>
+    <button type="button" class="btn btn-sm btn-light" @click="toggleFullscreen" :title="fullscreen ? 'Exit full screen (Esc)' : 'Full screen'" :aria-pressed="fullscreen ? 'true' : 'false'"><i class="fas" :class="fullscreen ? 'fa-compress' : 'fa-expand'"></i> {{ fullscreen ? 'Exit full screen' : 'Full screen' }}</button>
+  </header>
+
+  <div v-if="setupError || !servers.length" class="jv-msg is-warn" role="alert">
+    <i class="fas fa-exclamation-triangle"></i>
+    <span>{{ setupError || 'No JasperServer is set up yet.' }} <template v-if="!setupError">{{ isAdmin ? 'Add one in Reports > Settings (URL, user and password).' : 'An administrator can add one in Reports > Settings.' }}</template></span>
+  </div>
+
+  <div class="jv-layout" :class="{ 'no-side': !sideOpen, 'no-params': !paramsOpen }">
+    <!-- Left: open a report (show / hide from the report bar) -->
+    <div v-show="sideOpen" class="jv-side">
+      <section class="jv-card jv-open">
+        <div class="jv-card-head">
+          <h2><i class="fas fa-folder-open"></i> Open report</h2>
+          <div class="jv-seg" role="tablist">
+            <button type="button" role="tab" :class="{ 'is-on': source === 'server' }" @click="source = 'server'"><i class="fas fa-server"></i> JasperServer</button>
+            <button type="button" role="tab" :class="{ 'is-on': source === 'url' }" @click="source = 'url'"><i class="fas fa-link"></i> URL</button>
+          </div>
+        </div>
+
+        <!-- From a JasperServer of Reports > Settings -->
+        <div v-if="source === 'server' && !browsable.length" class="jv-card-body">
+          <p class="jv-note mb-0"><i class="fas fa-eye-slash"></i> Showing JasperServer folders here is turned off in Reports &gt; Settings. Open a report from its link in the <a href="#" @click.prevent="source = 'url'">URL</a> tab.</p>
+        </div>
+        <div v-else-if="source === 'server'" class="jv-card-body jv-open-body">
+          <div class="jv-row">
+            <select v-if="browsable.length > 1" class="custom-select custom-select-sm jv-server" v-model="sid" @change="go('/')" aria-label="JasperServer">
+              <option v-for="s in browsable" :key="s.id" :value="s.id">{{ s.name }}</option>
+            </select>
+            <div class="jv-search">
+              <i class="fas fa-search"></i>
+              <input v-model="repo.q" @keydown.enter.prevent="find" placeholder="Search report name…" aria-label="Search reports" :disabled="!sid">
+              <button v-if="repo.found" type="button" class="jv-x" @click="repo.found = null; repo.q = ''" aria-label="Clear search">&times;</button>
+            </div>
+          </div>
+          <div class="jv-crumbs" v-if="!repo.found">
+            <template v-for="(c, i) in crumbs"><span v-if="i" :key="'s' + i">/</span><button :key="c.path" type="button" :class="{ 'is-here': i === crumbs.length - 1 }" @click="i < crumbs.length - 1 && go(c.path)">{{ c.name }}</button></template>
+          </div>
+          <div v-else class="jv-crumbs"><span>{{ repo.found.length }} report{{ repo.found.length === 1 ? '' : 's' }} found for “{{ repo.lastQ }}”</span></div>
+          <ul class="jv-list" aria-label="Repository">
+            <li v-if="repo.loading" class="jv-empty"><i class="fas fa-spinner fa-spin"></i> Loading…</li>
+            <li v-else-if="repo.error" class="jv-empty text-danger">{{ repo.error }}</li>
+            <template v-else>
+              <li v-for="it in repoItems" :key="it.uri">
+                <button type="button" :class="{ 'is-on': report && report.uri === it.uri && report.sid === sid }" @click="it.type === 'folder' ? go(it.uri) : openUnit(sid, it.uri)" :title="it.uri">
+                  <i class="fas" :class="it.type === 'folder' ? 'fa-folder' : 'fa-file-alt'"></i>
+                  <span>{{ it.label }}<small v-if="repo.found">{{ it.uri }}</small></span>
+                </button>
+              </li>
+              <li v-if="!repoItems.length" class="jv-empty">{{ repo.found ? 'No report matches.' : 'This folder is empty.' }}</li>
+            </template>
+          </ul>
+
+          <div v-if="templates.length" class="jv-tpl">
+            <div class="jv-sub"><i class="fas fa-hospital"></i> HIS report templates <small>{{ org ? org.name : '' }}</small></div>
+            <div class="jv-tpl-filter mb-1">
+              <div class="jv-search"><i class="fas fa-filter"></i><input v-model="tplQ" placeholder="Filter by name or code…" aria-label="Filter report templates"></div>
+              <!-- Report parameter type (paramtype): a dropdown with a search box -->
+              <div v-if="paramTypes.length > 1" class="jv-combo jv-tpl-type" @keydown.esc.stop="typeOpen = false">
+                <button type="button" class="jv-combo-btn" :class="{ 'is-set': tplType }" @click="toggleTypes" :aria-expanded="typeOpen ? 'true' : 'false'" aria-haspopup="listbox"
+                        :title="'Report parameter type (paramtype): ' + typeLabel">
+                  <span>{{ typeLabel }}</span><i class="fas fa-chevron-down"></i>
+                </button>
+                <div v-if="typeOpen" class="jv-combo-backdrop" @click="typeOpen = false"></div>
+                <div v-if="typeOpen" class="jv-combo-pop">
+                  <div class="jv-search">
+                    <i class="fas fa-search"></i>
+                    <input ref="typeSearch" v-model="typeQ" placeholder="Search type…" aria-label="Search report parameter types"
+                           @keydown.down.prevent="moveType(1)" @keydown.up.prevent="moveType(-1)" @keydown.enter.prevent="pickType(typesShown[typeAt] ? typesShown[typeAt].value : null)">
+                  </div>
+                  <ul class="jv-combo-list" role="listbox" aria-label="Report parameter types">
+                    <li v-for="(pt, i) in typesShown" :key="pt.value" role="option" :aria-selected="tplType === pt.value ? 'true' : 'false'"
+                        :class="{ 'is-on': tplType === pt.value, 'is-at': i === typeAt }" @click="pickType(pt.value)" @mouseenter="typeAt = i">
+                      <span>{{ pt.label }}</span><small>{{ pt.count }}</small>
+                    </li>
+                    <li v-if="!typesShown.length" class="jv-empty">No type matches “{{ typeQ }}”.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+            <ul class="jv-list jv-tpl-list">
+              <li v-for="t in templatesShown" :key="t.code + t.routepath">
+                <button type="button" @click="openTemplate(t)" :title="t.routepath + (t.paramType ? ' · ' + t.paramType : '')"><i class="fas fa-file-invoice"></i><span>{{ t.name }}<small>{{ t.code }}<template v-if="t.paramType"> · <b class="jv-tpl-pt">{{ t.paramType }}</b></template> · {{ t.routepath }}</small></span></button>
+              </li>
+              <li v-if="!templatesShown.length" class="jv-empty">No template matches.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- From a JasperServer link -->
+        <div v-else class="jv-card-body">
+          <label class="jv-label" for="jvUrl">JasperServer report URL</label>
+          <textarea id="jvUrl" v-model.trim="urlText" rows="4" class="jv-mono" spellcheck="false" @keydown.ctrl.enter.prevent="openUrl"
+                    placeholder="https://jasper:8443/jasperserver/flow.html?_flowId=viewReportFlow&reportUnit=/Centrixreports/Lab/MyReport&output=pdf&patientvisituid=…"></textarea>
+          <p class="jv-note">flow.html (reportUnit=…) or rest_v2/reports/… links of a JasperServer in Reports &gt; Settings. Its saved login is used; a user name or password in the link is ignored.</p>
+          <div v-if="urlInfo" class="jv-msg is-warn"><i class="fas fa-info-circle"></i> <span>{{ urlInfo }}</span></div>
+          <div v-if="urlError" class="jv-msg is-error"><i class="fas fa-exclamation-triangle"></i> <span>{{ urlError }}</span></div>
+          <button type="button" class="btn btn-sm btn-primary" @click="openUrl" :disabled="!urlText || urlBusy"><i class="fas" :class="urlBusy ? 'fa-spinner fa-spin' : 'fa-folder-open'"></i> Open</button>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- Middle: the report -->
+    <section class="jv-card jv-view">
+      <div class="jv-view-bar">
+        <button type="button" class="jv-icon jv-toggle" :class="{ 'is-on': sideOpen }" @click="togglePanel('side')" :aria-pressed="sideOpen ? 'true' : 'false'"
+                :title="(sideOpen ? 'Hide' : 'Show') + ' the Open report panel'"><i class="fas" :class="sideOpen ? 'fa-angle-double-left' : 'fa-folder-open'"></i></button>
+        <div class="jv-view-title">
+          <b>{{ report ? report.label : 'No report open' }}</b>
+          <small v-if="report">{{ report.server }} · {{ report.uri }}</small>
+        </div>
+        <select class="custom-select custom-select-sm" v-model="format" aria-label="Output format">
+          <option value="pdf">PDF</option><option value="html">HTML</option>
+          <template v-if="output.download"><option value="xlsx">Excel (xlsx)</option><option value="docx">Word (docx)</option><option value="csv">CSV</option></template>
+        </select>
+        <select class="custom-select custom-select-sm jv-locale" v-model="locale" aria-label="Locale" title="Report locale">
+          <option value="">Server locale</option><option value="th_TH">th_TH</option><option value="th">th</option><option value="en_US">en_US</option><option value="en">en</option>
+        </select>
+        <button v-if="!paramsOpen && out.loading" type="button" class="btn btn-sm btn-outline-danger" @click="stopRun" title="Stop running the report" aria-label="Stop"><i class="fas fa-stop"></i></button>
+        <button v-else-if="!paramsOpen" type="button" class="btn btn-sm btn-primary" @click="run" :disabled="!report" title="Run report (Input Parameters is hidden)" aria-label="Run report"><i class="fas fa-play"></i></button>
+        <a v-if="out.url && output.download" class="btn btn-sm btn-light" :href="out.url" :download="out.file" title="Download"><i class="fas fa-download"></i></a>
+        <button v-if="out.url && out.inline && output.print" type="button" class="btn btn-sm btn-light" @click="printOut" title="Print"><i class="fas fa-print"></i></button>
+        <a v-if="out.url && out.inline && openTabOk" class="btn btn-sm btn-light" :href="out.url" target="_blank" rel="noopener" title="Open in a new tab"><i class="fas fa-external-link-alt"></i></a>
+        <button type="button" class="jv-icon jv-toggle" :class="{ 'is-on': fullscreen }" @click="toggleFullscreen" :aria-pressed="fullscreen ? 'true' : 'false'"
+                :title="fullscreen ? 'Exit full screen (Esc)' : 'Full screen'" :aria-label="fullscreen ? 'Exit full screen' : 'Full screen'"><i class="fas" :class="fullscreen ? 'fa-compress' : 'fa-expand'"></i></button>
+        <button type="button" class="jv-icon jv-toggle" :class="{ 'is-on': paramsOpen }" @click="togglePanel('params')" :aria-pressed="paramsOpen ? 'true' : 'false'"
+                :title="(paramsOpen ? 'Hide' : 'Show') + ' Input Parameters'"><i class="fas" :class="paramsOpen ? 'fa-angle-double-right' : 'fa-sliders-h'"></i><span v-if="!paramsOpen && filledCount" class="jv-badge">{{ filledCount }}</span></button>
+      </div>
+      <div class="jv-view-body">
+        <div v-if="out.loading" class="jv-view-msg">
+          <i class="fas fa-spinner fa-spin"></i>
+          <span>Running the report on {{ report && report.server }}… <small class="text-muted">{{ elapsed }} s</small></span>
+          <button type="button" class="btn btn-sm btn-outline-danger mt-2" @click="stopRun"><i class="fas fa-stop"></i> Stop</button>
+        </div>
+        <div v-else-if="out.stopped" class="jv-view-msg"><i class="fas fa-stop-circle text-muted"></i> Stopped after {{ out.stopped }} s. <button type="button" class="btn btn-link btn-sm p-0" @click="run">Run again</button></div>
+        <div v-else-if="out.error" class="jv-view-msg text-danger"><i class="fas fa-times-circle"></i> {{ out.error }}</div>
+        <iframe v-else-if="out.url && out.inline" ref="outFrame" :src="frameSrc" title="Report output"></iframe>
+        <div v-else-if="out.url" class="jv-view-msg"><i class="fas fa-file-download"></i> {{ out.file }} was downloaded.</div>
+        <div v-else class="jv-view-msg is-empty">
+          <i class="far fa-file-pdf"></i>
+          <b>{{ report ? 'Fill in the parameters, then Run report' : 'Open a report' }}</b>
+          <span>{{ report ? 'Empty boxes use the report\'s defaults.' : 'Pick one on JasperServer, an HIS report template, or paste a JasperServer link.' }}</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right: the report's input parameters (show / hide from the report bar) -->
+    <aside v-show="paramsOpen" class="jv-params">
+      <section class="jv-card jv-params-card">
+        <div class="jv-card-head">
+          <h2><i class="fas fa-sliders-h"></i> Input Parameters</h2>
+          <button type="button" class="jv-icon" @click="fillSamples" :disabled="sampling || !report" title="Fill empty ID parameters with values from the connected Centrix site"><i class="fas" :class="sampling ? 'fa-spinner fa-spin' : 'fa-magic'"></i></button>
+          <button type="button" class="jv-icon" @click="basicOpen = true" title="Basic Data: ids to type in"><i class="fas fa-id-card"></i></button>
+          <button type="button" class="jv-icon" @click="resetValues" :disabled="!report" title="Clear the values (defaults are used)"><i class="fas fa-undo"></i></button>
+          <button type="button" class="jv-icon" @click="togglePanel('params')" title="Hide Input Parameters" aria-label="Hide Input Parameters"><i class="fas fa-times"></i></button>
+        </div>
+        <div v-if="!report" class="jv-card-body"><p class="jv-note mb-0">Open a report to fill in its parameters.</p></div>
+        <div v-else class="jv-card-body jv-form">
+          <p v-if="report.loading" class="jv-note"><i class="fas fa-spinner fa-spin"></i> Reading its parameters…</p>
+          <p v-if="report.note" class="jv-note text-warning">{{ report.note }}</p>
+          <p v-if="sampleNote" class="jv-note">{{ sampleNote }}</p>
+          <p v-if="!report.loading && !prompted.length && !report.note" class="jv-note">This report has no parameters to fill in.</p>
+          <template v-for="prm in prompted">
+            <label v-if="/Boolean$/.test(prm.cls)" :key="prm.name" class="jv-check" :title="prm.desc">
+              <input type="checkbox" :checked="boolOn(prm)" @change="$set(values, prm.name, $event.target.checked ? 'true' : 'false')"> {{ prm.name }}
+            </label>
+            <label v-else :key="prm.name" class="jv-label" :title="prm.desc">
+              <span>{{ prm.name }} <small class="text-muted">{{ prm.cls.split('.').pop() }}</small><small v-if="prm.desc" class="jv-desc">{{ prm.desc }}</small></span>
+              <input v-model="values[prm.name]" :placeholder="prm.def ? 'Default: ' + prm.def : ''" @keydown.enter="run" spellcheck="false">
+            </label>
+          </template>
+          <template v-if="hidden.length">
+            <button type="button" class="btn btn-link btn-sm px-0" @click="showHidden = !showHidden">{{ showHidden ? 'Hide' : 'Show' }} {{ hidden.length }} parameter{{ hidden.length === 1 ? '' : 's' }} not prompted</button>
+            <template v-if="showHidden">
+              <label v-for="prm in hidden" :key="'h' + prm.name" class="jv-label is-hidden">
+                <span>{{ prm.name }} <small class="text-muted">{{ prm.cls.split('.').pop() }}</small></span>
+                <input v-model="values[prm.name]" :placeholder="prm.def ? 'Default: ' + prm.def : ''" @keydown.enter="run" spellcheck="false">
+              </label>
+            </template>
+          </template>
+          <div class="jv-sub">Other parameters <small>sent as they are</small></div>
+          <div v-for="(x, i) in extras" :key="'x' + i" class="jv-extra">
+            <input v-model.trim="x.key" placeholder="name" aria-label="Parameter name" spellcheck="false">
+            <input v-model="x.value" placeholder="value" aria-label="Parameter value" spellcheck="false" @keydown.enter="run">
+            <button type="button" class="jv-x" @click="extras.splice(i, 1)" aria-label="Remove">&times;</button>
+          </div>
+          <button type="button" class="btn btn-sm btn-light" @click="extras.push({ key: '', value: '' })"><i class="fas fa-plus"></i> Parameter</button>
+        </div>
+        <div class="jv-params-foot">
+          <span v-if="report && filledCount" class="jv-note mb-0">{{ filledCount }} set · empty ones use the defaults</span>
+          <span v-else-if="report" class="jv-note mb-0">Empty boxes use the report's defaults</span>
+          <button v-if="out.loading" type="button" class="btn btn-outline-danger btn-sm" @click="stopRun" title="Stop running the report">
+            <i class="fas fa-stop"></i> Stop <small>{{ elapsed }} s</small>
+          </button>
+          <button v-else type="button" class="btn btn-primary btn-sm" @click="run" :disabled="!report" title="Run the report with these parameters (Enter in a box)">
+            <i class="fas fa-play"></i> Run report
+          </button>
+        </div>
+      </section>
+
+      <!-- Recent reports, under the parameters -->
+      <section class="jv-card jv-recent">
+        <div class="jv-card-head">
+          <h2 title="Click a report to open it again with the values used (kept in this browser, up to 15)"><i class="fas fa-history"></i> Recent <small v-if="recent.length">{{ recent.length }}</small></h2>
+          <button v-if="recent.length" type="button" class="btn btn-link btn-sm text-danger" @click="clearRecent">Clear</button>
+        </div>
+        <ul class="jv-list jv-recent-list">
+          <li v-for="r in recent" :key="r.sid + r.uri">
+            <button type="button" @click="openRecent(r)" :class="{ 'is-on': report && report.sid === r.sid && report.uri === r.uri }" :title="recentTitle(r)">
+              <i class="fas fa-file-alt"></i>
+              <span class="jv-recent-text">
+                <span class="jv-recent-name">{{ r.label }}<small v-if="servers.length > 1"> · {{ r.server }}</small></span>
+                <small v-if="r.at" class="jv-recent-meta"><i class="far fa-clock"></i> {{ when(r.at) }}<template v-if="r.by"> · <i class="far fa-user"></i> {{ r.by }}</template></small>
+              </span>
+            </button>
+          </li>
+          <li v-if="!recent.length" class="jv-empty">Reports you view are listed here.</li>
+        </ul>
+      </section>
+    </aside>
+  </div>
+
+  <qs-basic-data :open="basicOpen" base="/reports/viewer/basic-data" @close="basicOpen = false"></qs-basic-data>
+</div>
+</div>
+
 <style>
-  :root {
-    --primary-color: #2563eb;
-    --primary-hover: #1d4ed8;
-    --success-color: #10b981;
-    --warning-color: #f59e0b;
-    --danger-color: #ef4444;
-    --slate-50: #f8fafc;
-    --slate-100: #f1f5f9;
-    --slate-200: #e2e8f0;
-    --slate-300: #cbd5e1;
-    --slate-700: #334155;
-    --slate-800: #1e293b;
-    --border-radius: 12px;
+  .jv { --jv-gap: 14px; display: flex; flex-direction: column; gap: var(--jv-gap); padding-bottom: 16px; }
+  /* Full screen: the browser's mode, or the window (fallback) */
+  .jv.is-full, .jv:fullscreen { position: fixed; inset: 0; z-index: 1040; margin: 0; padding: 12px 16px; overflow-y: auto; background: var(--bg, var(--surface-2, #f5f7fb)); }
+  .jv:fullscreen { width: 100vw; height: 100vh; }
+  .jv.is-full .jv-view, .jv:fullscreen .jv-view, .jv.is-full .jv-side, .jv:fullscreen .jv-side { height: calc(100vh - 110px); }
+  .jv.is-full .jv-params, .jv:fullscreen .jv-params { max-height: calc(100vh - 110px); }
+  .jv-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .jv-top-icon { width: 40px; height: 40px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; background: var(--primary-soft); color: var(--primary); font-size: 1.1rem; }
+  .jv-top-title { flex: 1 1 260px; min-width: 0; }
+  .jv-top-title h1 { font-size: 1.15rem; font-weight: 700; margin: 0; }
+  .jv-top-title p { margin: 0; font-size: .8rem; color: var(--text-2); }
+  .jv-conn { display: inline-flex; align-items: center; gap: 6px; font-size: .76rem; color: var(--text-2); }
+  .jv-conn i { font-size: .45rem; }
+  .jv-conn.is-ok i { color: var(--success); } .jv-conn.is-bad i { color: var(--danger); }
+  .jv-msg { display: flex; gap: 8px; align-items: flex-start; font-size: .8rem; padding: 8px 10px; border-radius: 8px; margin: 0 0 8px; }
+  .jv-msg.is-warn { background: var(--warning-soft); color: var(--warning); }
+  .jv-msg.is-error { background: var(--danger-soft); color: var(--danger); }
+  .jv-layout { display: grid; grid-template-columns: minmax(280px, 340px) minmax(0, 1fr) minmax(260px, 320px); gap: var(--jv-gap); align-items: start; }
+  .jv-layout.no-side { grid-template-columns: minmax(0, 1fr) minmax(260px, 320px); }
+  .jv-layout.no-params { grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); }
+  .jv-layout.no-side.no-params { grid-template-columns: minmax(0, 1fr); }
+  .jv-params { min-width: 0; position: sticky; top: 12px; max-height: calc(100vh - 150px); overflow-y: auto; border-radius: 12px; }
+  /* Recent: a vertical list in the right panel, under Input Parameters */
+  .jv-params { display: flex; flex-direction: column; gap: var(--jv-gap); }
+  .jv-recent-list { display: flex; flex-direction: column; gap: 2px; max-height: 320px; border: 0; padding: 6px; }
+  .jv-recent-list li { min-width: 0; }
+  .jv-recent-list button { display: flex; align-items: flex-start; gap: 8px; width: 100%; padding: 6px 8px; border: 1px solid transparent; border-radius: 8px; background: none; font-size: .78rem; text-align: left; }
+  .jv-recent-list button:hover, .jv-recent-list button:focus-visible { border-color: var(--border); background: var(--surface-2); color: inherit; }
+  .jv-recent-list button.is-on { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
+  .jv-recent-list button > i { margin-top: 3px; width: 14px; font-size: .74rem; }
+  .jv-recent-text { display: flex; flex-direction: column; min-width: 0; flex: 1; line-height: 1.3; }
+  .jv-recent-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .jv-recent-list .jv-recent-meta { display: block; margin: 1px 0 0; font-size: .7rem; font-weight: 400; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .jv-recent-meta i { width: auto !important; margin: 0 2px 0 0 !important; font-size: .64rem; color: var(--muted) !important; }
+  .jv-recent .jv-card-head h2 small { font-weight: 600; font-size: .68rem; color: var(--text-2); background: var(--surface-2); border-radius: 999px; padding: 0 7px; }
+  .jv-recent-list .jv-empty { padding: 6px; }
+  .jv-params-card { display: flex; flex-direction: column; }
+  .jv-params-foot { position: sticky; bottom: 0; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--border); background: var(--surface); border-radius: 0 0 12px 12px; }
+  .jv-params-foot .jv-note { flex: 1; min-width: 0; }
+  .jv-params-foot .btn { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; }
+  .jv-toggle { position: relative; flex: none; }
+  .jv-toggle.is-on { color: var(--primary); }
+  .jv-badge { position: absolute; top: -2px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: var(--primary); color: #fff; font-size: .62rem; font-weight: 700; line-height: 16px; }
+  .jv-side { display: flex; flex-direction: column; gap: var(--jv-gap); min-width: 0; height: calc(100vh - 150px); min-height: 560px; position: sticky; top: 12px; }
+  /* Open report fills the column; on the JasperServer tab the HIS templates list takes the room left, down to the report's bottom */
+  .jv-open { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .jv-open > .jv-card-body { min-height: 0; overflow-y: auto; }
+  /* visible: the type dropdown opens over the list below it (the lists scroll on their own) */
+  .jv-open-body { flex: 1; display: flex; flex-direction: column; overflow: visible !important; }
+  .jv-open-body > .jv-list { flex: 1 1 0; min-height: 120px; max-height: none; }
+  .jv-tpl { flex: 1 1 0; min-height: 160px; display: flex; flex-direction: column; }
+  .jv-tpl-list { flex: 1; min-height: 0; max-height: none; border: 0; }
+  /* In these columns only the lists grow: the search boxes, rows and headings keep their normal height */
+  .jv-open-body > .jv-row, .jv-open-body > .jv-crumbs, .jv-tpl > .jv-sub, .jv-tpl > .jv-search { flex: none; }
+  /* The type dropdown on its own full-width row, the name / code filter full width under it */
+  .jv-tpl-filter { flex: none; display: flex; flex-direction: column; gap: 6px; }
+  .jv-tpl-filter .jv-search { flex: none; width: 100%; min-width: 0; }
+  .jv-tpl-type { order: -1; flex: none; width: 100%; }
+  .jv-combo { position: relative; }
+  .jv-combo-btn { display: flex; align-items: center; gap: 6px; width: 100%; height: 31px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: .78rem; cursor: pointer; }
+  .jv-combo-btn span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+  .jv-combo-btn i { font-size: .62rem; color: var(--muted); }
+  .jv-combo-btn.is-set { border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  .jv-combo-btn:focus-visible { outline: 2px solid var(--primary-ring, var(--primary)); outline-offset: 1px; }
+  .jv-combo-backdrop { position: fixed; inset: 0; z-index: 30; }
+  .jv-combo-pop { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 31; padding: 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow-lg, 0 8px 24px rgba(15, 23, 42, .18)); }
+  .jv-combo-pop .jv-search { flex: none; margin-bottom: 4px; }
+  .jv-combo-list { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow-y: auto; }
+  .jv-combo-list li { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 6px; font-size: .78rem; cursor: pointer; }
+  .jv-combo-list li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .jv-combo-list li small { color: var(--muted); font-size: .7rem; }
+  .jv-combo-list li.is-at { background: var(--surface-2); }
+  .jv-combo-list li.is-on { color: var(--primary); font-weight: 600; }
+  .jv-combo-list li.is-on::after { content: '\2713'; color: var(--primary); }
+  .jv-tpl-pt { font-weight: 600; color: var(--text-2); }
+  .jv-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-sm, none); min-width: 0; }
+  .jv-card-head { display: flex; align-items: center; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  .jv-card-head h2 { flex: 1; font-size: .85rem; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 6px; }
+  .jv-card-head h2 i { color: var(--primary); }
+  .jv-card-body { padding: 10px 12px; }
+  .jv-seg { display: flex; border: 1px solid var(--border-strong, var(--border)); border-radius: 6px; overflow: hidden; }
+  .jv-seg button { border: 0; background: var(--surface); color: var(--text-2); font-size: .74rem; font-weight: 600; padding: 4px 10px; cursor: pointer; }
+  .jv-seg button + button { border-left: 1px solid var(--border-strong, var(--border)); }
+  .jv-seg button.is-on { background: var(--primary); color: #fff; }
+  /* JasperServer on its own full-width row, the report search full width under it */
+  .jv-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px; }
+  .jv-server { flex: none; width: 100%; }
+  .jv-row > .jv-search { flex: none; width: 100%; }
+  /* The JasperServer / type dropdowns and the search boxes under them: one height and one look (the site styles selects 38 px) */
+  .jv .jv-row > .jv-server, .jv .jv-row > .jv-search, .jv .jv-tpl-filter > .jv-search, .jv .jv-tpl-filter .jv-combo-btn {
+    height: 32px; min-height: 32px; box-sizing: border-box; border: 1px solid var(--border-strong, var(--border)); border-radius: 6px; box-shadow: var(--shadow-sm, none); }
+  .jv .jv-row > .jv-server { padding: 0 28px 0 10px; line-height: 30px; font-size: .8rem; background-position: right 10px center; }
+  .jv .jv-row > .jv-search, .jv .jv-tpl-filter > .jv-search { padding: 0 10px; }
+  .jv .jv-row > .jv-search:focus-within, .jv .jv-tpl-filter > .jv-search:focus-within, .jv .jv-row > .jv-server:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-ring, transparent); }
+  .jv .jv-tpl-filter .jv-combo-btn { padding: 0 10px; font-size: .8rem; }
+  .jv .jv-tpl-filter .jv-combo-btn.is-set { border-color: var(--primary); }
+  .jv-search { flex: 1; display: flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 6px; padding: 0 8px; height: 31px; background: var(--surface); }
+  .jv-search i { color: var(--muted); font-size: .75rem; }
+  .jv-search input { flex: 1; min-width: 0; border: 0; outline: none; font-size: .8rem; background: transparent; color: var(--text); }
+  .jv-search:focus-within { border-color: var(--primary); }
+  .jv-x { border: 0; background: none; color: var(--muted); font-size: 1.1rem; line-height: 1; cursor: pointer; padding: 0 2px; }
+  .jv-crumbs { display: flex; flex-wrap: wrap; gap: 2px 4px; font-size: .74rem; color: var(--muted); margin-bottom: 4px; }
+  .jv-crumbs button { border: 0; background: none; padding: 0 2px; color: var(--primary); font-weight: 600; font-size: .74rem; cursor: pointer; }
+  .jv-crumbs button.is-here { color: var(--text); cursor: default; }
+  .jv-list { list-style: none; margin: 0; padding: 2px 0; max-height: 300px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+  .jv-list.is-short { max-height: 200px; border: 0; }
+  .jv-list button { display: flex; align-items: flex-start; gap: 8px; width: 100%; border: 0; background: none; padding: 5px 10px; text-align: left; font-size: .8rem; color: var(--text); cursor: pointer; }
+  .jv-list button:hover, .jv-list button:focus-visible { background: var(--surface-2); outline: none; }
+  .jv-list button.is-on { background: var(--primary-soft); color: var(--primary); }
+  .jv-list button i { width: 14px; margin-top: 3px; color: var(--text-2); }
+  .jv-list button i.fa-folder { color: #d97706; }
+  .jv-list button span { min-width: 0; overflow-wrap: anywhere; }
+  .jv-list small { display: block; font-size: .7rem; color: var(--muted); }
+  .jv-empty { padding: 10px; font-size: .78rem; color: var(--muted); }
+  .jv-sub { display: flex; align-items: center; gap: 6px; font-size: .68rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin: 12px 0 6px; padding-top: 10px; border-top: 1px solid var(--border); }
+  .jv-sub small { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; }
+  .jv-label { display: flex; flex-direction: column; gap: 2px; font-size: .72rem; font-weight: 600; color: var(--text-2); margin: 0 0 8px; }
+  .jv-label input, .jv-extra input, .jv-card-body textarea { width: 100%; min-width: 0; height: 30px; border: 1px solid var(--border); border-radius: 6px; padding: 0 8px; font-size: .8rem; font-weight: 400; color: var(--text); background: var(--surface); }
+  .jv-card-body textarea { height: auto; padding: 6px 8px; resize: vertical; }
+  .jv-label input:focus, .jv-extra input:focus, .jv-card-body textarea:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 2px var(--primary-ring, transparent); }
+  .jv-label.is-hidden { opacity: .8; }
+  .jv-desc { display: block; font-weight: 400; color: var(--muted); }
+  .jv-mono { font-family: var(--font-mono, monospace); font-size: .76rem !important; }
+  .jv-check { display: flex; align-items: center; gap: 6px; font-size: .78rem; font-weight: 600; color: var(--text-2); margin: 0 0 8px; }
+  .jv-note { font-size: .74rem; color: var(--muted); margin: 4px 0 8px; }
+  .jv-icon { border: 0; background: none; color: var(--text-2); width: 28px; height: 28px; border-radius: 6px; cursor: pointer; }
+  .jv-icon:hover { background: var(--surface-2); color: var(--primary); }
+  .jv-extra { display: grid; grid-template-columns: 1fr 1.4fr auto; gap: 6px; margin-bottom: 6px; align-items: center; }
+  .jv-view { display: flex; flex-direction: column; height: calc(100vh - 150px); min-height: 560px; position: sticky; top: 12px; }
+  .jv-view-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  .jv-view-bar .custom-select { width: auto; }
+  /* The locale list: 20 px wider than its text needs (room after "Server locale") */
+  .jv-view-bar > .custom-select.jv-locale { padding-right: calc(1.75rem + 20px); }
+  /* Every control in the bar the same height, centred on one line */
+  .jv-view-bar { --jv-bar-h: 32px; }
+  .jv-view-bar > .btn, .jv-view-bar > .custom-select, .jv-view-bar > .jv-icon { height: var(--jv-bar-h); min-height: var(--jv-bar-h); box-sizing: border-box; margin: 0; }
+  .jv-view-bar > .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 12px; line-height: 1; }
+  .jv-view-bar > a.btn { min-width: var(--jv-bar-h); padding: 0 10px; }
+  .jv-view-bar > .custom-select { padding-top: 0; padding-bottom: 0; line-height: calc(var(--jv-bar-h) - 2px); }
+  .jv-view-bar > .jv-icon { width: var(--jv-bar-h); display: inline-flex; align-items: center; justify-content: center; }
+  .jv-view-title { flex: 1 1 200px; min-width: 0; }
+  .jv-view-title b { display: block; font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .jv-view-title small { display: block; font-size: .72rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .jv-view-body { flex: 1; position: relative; min-height: 0; background: var(--surface-2); border-radius: 0 0 12px 12px; overflow: hidden; }
+  .jv-view-body iframe { width: 100%; height: 100%; border: 0; background: #fff; }
+  .jv-view-msg { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; height: 100%; padding: 24px; text-align: center; font-size: .85rem; color: var(--text-2); }
+  .jv-view-msg.is-empty i { font-size: 2.6rem; color: var(--muted); margin-bottom: 6px; }
+  .jv-view-msg.is-empty span { font-size: .8rem; color: var(--muted); max-width: 380px; }
+  @media (max-width: 991px) {
+    .jv-layout, .jv-layout.no-side, .jv-layout.no-params { grid-template-columns: 1fr; }
+    .jv-params { position: static; max-height: none; }
+    .jv-view { position: static; height: 75vh; }
+    .jv-side { position: static; height: auto; min-height: 0; }
+    .jv-tpl-list { max-height: 260px; }
   }
-
-  .jasper-card {
-    border: none;
-    border-radius: var(--border-radius);
-    box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05), 0 2px 8px -1px rgba(0, 0, 0, 0.03);
-    background: #ffffff;
-    overflow: hidden;
-    margin-bottom: 24px;
-  }
-
-  .jasper-card-header {
-    background: #ffffff;
-    border-bottom: 1px solid var(--slate-100);
-    padding: 18px 24px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .jasper-card-header h3 {
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: var(--slate-800);
-    margin: 0;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .jasper-card-body {
-    padding: 24px;
-  }
-
-  .form-group label {
-    font-size: 0.82rem;
-    font-weight: 600;
-    color: var(--slate-700);
-    margin-bottom: 6px;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-  }
-
-  .form-control-custom {
-    display: block;
-    width: 100%;
-    padding: 10px 14px;
-    font-size: 0.9rem;
-    font-weight: 400;
-    line-height: 1.5;
-    color: var(--slate-800);
-    background-color: #fff;
-    background-clip: padding-box;
-    border: 1px solid var(--slate-200);
-    border-radius: 8px;
-    transition: border-color .15s ease-in-out, box-shadow .15s ease-in-out;
-  }
-
-  .form-control-custom:focus {
-    border-color: var(--primary-color);
-    outline: 0;
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
-  }
-
-  .btn-custom {
-    padding: 10px 16px;
-    font-size: 0.88rem;
-    font-weight: 600;
-    border-radius: 8px;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    transition: all 0.15s ease-in-out;
-    cursor: pointer;
-    border: 1px solid transparent;
-  }
-
-  .btn-custom-primary {
-    background-color: var(--primary-color);
-    color: #fff;
-  }
-
-  .btn-custom-primary:hover {
-    background-color: var(--primary-hover);
-    color: #fff;
-  }
-
-  .btn-custom-secondary {
-    background-color: #fff;
-    border-color: var(--slate-200);
-    color: var(--slate-700);
-  }
-
-  .btn-custom-secondary:hover {
-    background-color: var(--slate-50);
-    color: var(--slate-800);
-    border-color: var(--slate-300);
-  }
-
-  .btn-custom-danger {
-    background-color: #fee2e2;
-    color: var(--danger-color);
-  }
-
-  .btn-custom-danger:hover {
-    background-color: #fecaca;
-  }
-
-  .param-badge {
-    background: var(--slate-100);
-    color: var(--slate-700);
-    font-size: 0.75rem;
-    font-weight: 600;
-    padding: 2px 6px;
-    border-radius: 4px;
-  }
-
-  .param-row {
-    background: var(--slate-50);
-    border-radius: 8px;
-    padding: 8px 12px;
-    margin-bottom: 8px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .param-row input {
-    border: 1px solid var(--slate-200);
-    border-radius: 6px;
-    padding: 6px 10px;
-    font-size: 0.85rem;
-    outline: none;
-  }
-
-  .param-row input:focus {
-    border-color: var(--primary-color);
-  }
-
-  .preset-item {
-    padding: 8px 12px;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: background 0.15s;
-    font-size: 0.85rem;
-    color: var(--slate-700);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .preset-item:hover {
-    background: var(--slate-50);
-    color: var(--primary-color);
-  }
-
-  .preview-placeholder {
-    height: 600px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    background: var(--slate-50);
-    color: var(--slate-700);
-    border: 2px dashed var(--slate-200);
-    border-radius: var(--border-radius);
-    padding: 40px;
-    text-align: center;
-  }
-
-  .preview-placeholder i {
-    font-size: 3rem;
-    color: var(--slate-300);
-    margin-bottom: 16px;
-  }
-
-  /* History list styling */
-  .history-item {
-    font-size: 0.82rem;
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--slate-100);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    cursor: pointer;
-  }
-
-  .history-item:hover {
-    background: var(--slate-50);
-  }
-
-  .history-item .url-text {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    max-width: 250px;
-    color: var(--slate-700);
-  }
-
-  /* Premium Searchable Dropdown widget styling */
-  .searchable-select-container {
-    position: relative;
-    z-index: 9999;
-  }
-
-  .searchable-select-trigger {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    width: 100%;
-    padding: 10px 14px;
-    font-size: 0.88rem;
-    font-weight: 500;
-    color: var(--slate-700);
-    background-color: #fff;
-    border: 1px solid var(--slate-200);
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.15s ease-in-out;
-    outline: none;
-    user-select: none;
-  }
-
-  .searchable-select-trigger:focus,
-  .searchable-select-container.active .searchable-select-trigger {
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
-  }
-
-  .searchable-select-dropdown {
-    display: none;
-    position: absolute;
-    top: calc(100% + 6px);
-    left: 0;
-    width: 100%;
-    background: #ffffff;
-    border: 1px solid var(--slate-200);
-    border-radius: 8px;
-    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 16px -6px rgba(0, 0, 0, 0.05);
-    z-index: 100;
-    overflow: hidden;
-    animation: dropdownFadeIn 0.2s ease-out;
-    z-index: 99999;
-  }
-
-  @keyframes dropdownFadeIn {
-    from {
-      opacity: 0;
-      transform: translateY(-5px);
-    }
-
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  .searchable-select-container.active .searchable-select-dropdown {
-    display: block;
-  }
-
-  .searchable-select-search-box {
-    padding: 8px 12px;
-    background: var(--slate-50);
-    border-bottom: 1px solid var(--slate-100);
-  }
-
-  .searchable-select-search-input {
-    width: 100%;
-    padding: 8px 12px;
-    font-size: 0.85rem;
-    border: 1px solid var(--slate-200);
-    border-radius: 6px;
-    outline: none;
-    background: #ffffff;
-    transition: border-color 0.15s;
-  }
-
-  .searchable-select-search-input:focus {
-    border-color: var(--primary-color);
-  }
-
-  .searchable-select-options-list {
-    max-height: 220px;
-    overflow-y: auto;
-  }
-
-  .searchable-select-option {
-    padding: 10px 14px;
-    font-size: 0.85rem;
-    color: var(--slate-700);
-    cursor: pointer;
-    transition: all 0.12s;
-    border-bottom: 1px solid var(--slate-50);
-  }
-
-  .searchable-select-option:last-child {
-    border-bottom: none;
-  }
-
-  .searchable-select-option:hover {
-    background-color: var(--slate-50);
-    color: var(--primary-color);
-  }
-
-  .searchable-select-option.selected {
-    background-color: #eff6ff;
-    color: var(--primary-color);
-    font-weight: 600;
-  }
-
-  .searchable-select-no-results {
-    padding: 16px;
-    text-align: center;
-    color: #94a3b8;
-    font-size: 0.82rem;
-  }
-
-  .jasper-left-panel {
-    overflow-y: auto;
-    overflow-x: visible;
-    max-height: calc(100vh - 100px);
-    position: relative;
-  }
-
-  .template-popup-item{
-  padding:14px 16px;
-  border:1px solid #e2e8f0;
-  border-radius:12px;
-  margin-bottom:10px;
-  cursor:pointer;
-  transition:all .15s ease;
-  background:#fff;
-}
-
-.template-popup-item:hover{
-  border-color:#2563eb;
-  background:#eff6ff;
-  transform:translateY(-1px);
-  box-shadow:0 2px 8px rgba(37,99,235,0.08);
-}
-
-.template-popup-title{
-  font-size:0.9rem;
-  font-weight:700;
-  color:#0f172a;
-}
-
-.template-popup-subtitle{
-  font-size:0.75rem;
-  color:#64748b;
-  margin-top:4px;
-  font-family:monospace;
-}
-
-.template-popup-selector .form-control{
-  border-radius:10px 0 0 10px;
-}
-
-.template-popup-selector .btn{
-  border-radius:0 10px 10px 0;
-}
-
-#templatePopupModal .modal-content{
-  box-shadow:0 10px 40px rgba(0,0,0,0.12);
-}
-
-#templatePopupSearch{
-  border-radius:12px;
-  height:44px;
-}
-
 </style>
 
-<div class="col-12">
-  <div class="row">
-    <!-- Left Column -->
-    <div class="col-lg-5 jasper-left-panel">
-
-      <!-- URL Card -->
-      <div class="card jasper-card">
-        <div class="jasper-card-header">
-          <h3><i class="fas fa-link text-primary"></i> Report URL</h3>
-          <button class="btn btn-xs btn-outline-secondary" onclick="toggleBuilder()" id="builderToggleBtn">
-            <i class="fas fa-tools"></i> Builder
-          </button>
-        </div>
-        <div class="jasper-card-body">
-          <!-- Popup Configured Template Selector -->
-          <div class="form-group mb-3">
-
-            <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">
-              <i class="fas fa-file-invoice text-info mr-1"></i>
-              SELECT CONFIGURED TEMPLATE
-            </label>
-
-            <div class="template-popup-selector">
-
-              <div class="input-group">
-
-                <input
-                  type="text"
-                  id="selectedTemplateLabel"
-                  class="form-control form-control-sm"
-                  placeholder="-- Choose a Configured Template --"
-                  readonly
-                  style="background:#fff;cursor:pointer;"
-                  onclick="openTemplatePopup()">
-
-                <div class="input-group-append">
-
-                  <button
-                    class="btn btn-outline-primary btn-sm"
-                    type="button"
-                    onclick="openTemplatePopup()">
-
-                    <i class="fas fa-search"></i>
-
-                  </button>
-
-                </div>
-
-              </div>
-
-            </div>
-
-          </div>
-
-          <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">FULL JASPER URL</label>
-          <textarea id="reportUrlInput" class="form-control-custom" rows="3"
-            placeholder="https://jasperserver.com:8443/jasperserver/flow.html?_flowId=viewReportFlow&output=pdf&reportUnit=%2Freports%2FMyReport&j_username=jasperadmin&j_password=jasperadmin&patientvisituid=..."
-            oninput="onUrlInputChanged()" style="resize:vertical;font-size:0.78rem;font-family:monospace;"></textarea>
-
-          <!-- URL Builder Panel -->
-          <div id="urlBuilderPanel"
-            style="display:none;border-top:1px solid var(--slate-100);padding-top:14px;margin-top:12px;">
-            <div
-              style="font-size:0.72rem;font-weight:700;color:var(--slate-700);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px;">
-              <i class="fas fa-hammer text-warning mr-1"></i> Build URL from Parts
-            </div>
-            <div class="row mb-2">
-              <div class="col-8">
-                <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">JASPER HOST</label>
-                <input type="text" id="builderHost" class="form-control-custom form-control-sm"
-                  placeholder="https://jasperserver.com:8443">
-              </div>
-              <div class="col-4">
-                <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">OUTPUT</label>
-                <select id="builderOutput" class="form-control form-control-sm"
-                  style="border-radius:8px;border-color:var(--slate-200);">
-                  <option value="pdf">PDF</option>
-                  <option value="xlsx">XLSX</option>
-                  <option value="xls">XLS</option>
-                  <option value="csv">CSV</option>
-                  <option value="html">HTML</option>
-                </select>
-              </div>
-            </div>
-            <div class="mb-2">
-              <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">REPORT UNIT PATH</label>
-              <input type="text" id="builderReportUnit" class="form-control-custom form-control-sm"
-                placeholder="/Medintreports/Lab/labsticker_w5.5_h2.2_visitslip" style="font-family:monospace;">
-            </div>
-            <div class="row mb-2">
-              <div class="col-6">
-                <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">LOCALE</label>
-                <select id="builderLocale" class="form-control form-control-sm"
-                  style="border-radius:8px;border-color:var(--slate-200);">
-                  <option value="th">Thai (th)</option>
-                  <option value="en">English (en)</option>
-                  <option value="en_US">English US</option>
-                </select>
-              </div>
-              <div class="col-6">
-                <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">DECORATE</label>
-                <select id="builderDecorate" class="form-control form-control-sm"
-                  style="border-radius:8px;border-color:var(--slate-200);">
-                  <option value="no">No</option>
-                  <option value="yes">Yes</option>
-                </select>
-              </div>
-            </div>
-            <button class="btn btn-sm btn-primary w-100" onclick="buildUrlFromParts()">
-              <i class="fas fa-magic mr-1"></i> Generate URL
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Auth Card -->
-      <div class="card jasper-card">
-        <div class="jasper-card-header">
-          <h3><i class="fas fa-shield-alt text-primary"></i> Auth &amp; Connection</h3>
-        </div>
-        <div class="jasper-card-body">
-          <div class="row mb-2">
-            <div class="col-6">
-              <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">USERNAME</label>
-              <input type="text" id="jasperUser" class="form-control-custom form-control-sm" value="jasperadmin">
-            </div>
-            <div class="col-6">
-              <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">PASSWORD</label>
-              <input type="password" id="jasperPassword" class="form-control-custom form-control-sm"
-                value="jasperadmin">
-            </div>
-          </div>
-          <div class="custom-control custom-switch mt-2">
-            <input type="checkbox" class="custom-control-input" id="useProxyToggle" checked>
-            <label class="custom-control-label" for="useProxyToggle"
-              style="font-size:0.82rem;font-weight:600;text-transform:none;">
-              Use Server Proxy (Bypass CORS &amp; Self-Signed SSL)
-            </label>
-          </div>
-          <div class="custom-control custom-switch mt-2">
-            <input type="checkbox" class="custom-control-input" id="embedCredToggle" checked>
-            <label class="custom-control-label" for="embedCredToggle"
-              style="font-size:0.82rem;font-weight:600;text-transform:none;">
-              Embed credentials as <code>j_username</code> / <code>j_password</code> in URL
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <!-- Quick-Fill Card -->
-      <div class="card jasper-card">
-        <div class="jasper-card-header">
-          <h3><i class="fas fa-user-tag text-success"></i> Clinical Quick-Fill</h3>
-          <button class="btn btn-xs btn-outline-success" onclick="syncQuickletiables()">
-            <i class="fas fa-sync-alt"></i> Sync
-          </button>
-        </div>
-        <div class="jasper-card-body">
-          <div style="font-size:0.75rem;color:#64748b;margin-bottom:10px;">
-            Auto-populates matching URL parameters: <code>patientuid</code>, <code>patientvisituid</code>,
-            <code>organisationuid</code>, <code>loginuid</code>, <code>parentorguid</code>, <code>hn</code>, etc.
-          </div>
-          <div class="row">
-            <div class="col-6 mb-2">
-              <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">PATIENT UID</label>
-              <input type="text" id="quickPatientUID" class="form-control-custom form-control-sm"
-                placeholder="MongoDB ObjectId" oninput="syncQuickletiables()">
-            </div>
-            <div class="col-6 mb-2">
-              <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">VISIT UID</label>
-              <input type="text" id="quickVN" class="form-control-custom form-control-sm" placeholder="patientvisituid"
-                oninput="syncQuickletiables()">
-            </div>
-            <div class="col-6 mb-2">
-              <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">PATIENT HN / MRN</label>
-              <input type="text" id="quickHN" class="form-control-custom form-control-sm" placeholder="HN000001"
-                oninput="syncQuickletiables()">
-            </div>
-            <div class="col-6 mb-2">
-              <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">LOGIN UID</label>
-              <input type="text" id="quickLoginUID" class="form-control-custom form-control-sm" placeholder="User UID"
-                oninput="syncQuickletiables()">
-            </div>
-            <div class="col-6 mb-2">
-              <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">ORGANISATION UID</label>
-              <input type="text" id="quickOrgUID" class="form-control-custom form-control-sm" placeholder="Org ID"
-                value="" oninput="syncQuickletiables()">
-            </div>
-            <div class="col-6 mb-2">
-              <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">PARENT ORG UID</label>
-              <input type="text" id="quickParentOrgUID" class="form-control-custom form-control-sm"
-                placeholder="Parent Org ID" oninput="syncQuickletiables()">
-            </div>
-            <div class="col-6 mb-2">
-              <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">BILL UID</label>
-              <input type="text" id="quickBillUID" class="form-control-custom form-control-sm" placeholder="Bill ID"
-                oninput="syncQuickletiables()">
-            </div>
-          </div>
-          <!-- Date Range -->
-          <div style="border-top:1px solid var(--slate-100);margin-top:10px;padding-top:10px;">
-            <div
-              style="font-size:0.72rem;font-weight:700;color:var(--slate-700);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">
-              <i class="fas fa-calendar-alt text-primary mr-1"></i> Date Range (fromdate / todate)
-            </div>
-            <div class="row">
-              <div class="col-6 mb-2">
-                <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">FROM DATE</label>
-                <input type="date" id="quickFromDate" class="form-control-custom form-control-sm"
-                  oninput="syncQuickletiables()">
-              </div>
-              <div class="col-6 mb-2">
-                <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">TO DATE</label>
-                <input type="date" id="quickToDate" class="form-control-custom form-control-sm"
-                  oninput="syncQuickletiables()">
-              </div>
-            </div>
-            <button class="btn btn-xs btn-outline-primary" onclick="setTodayDateRange()">
-              <i class="fas fa-calendar-day mr-1"></i> Set Today
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Parameters Card -->
-      <div class="card jasper-card">
-        <div class="jasper-card-header">
-          <h3><i class="fas fa-sliders-h text-primary"></i> URL Parameters</h3>
-          <button class="btn btn-sm btn-outline-primary" onclick="addParamRow()">
-            <i class="fas fa-plus"></i> Add
-          </button>
-        </div>
-        <div class="jasper-card-body">
-          <div id="parametersList"></div>
-          <div id="noParamsPlaceholder" style="font-size:0.85rem;color:#94a3b8;text-align:center;padding:20px 0;">
-            No parameters detected. Paste a URL above to parse its parameters.
-          </div>
-        </div>
-      </div>
-
-      <!-- History Card -->
-      <div class="card jasper-card">
-        <div class="jasper-card-header">
-          <h3><i class="fas fa-history text-secondary"></i> View History</h3>
-          <button class="btn btn-xs btn-link text-danger" onclick="clearHistory()">Clear</button>
-        </div>
-        <div class="jasper-card-body p-0" id="historyContainer" style="max-height:200px;overflow-y:auto;"></div>
-      </div>
-    </div>
-
-    <!-- Right Column: Interactive Live Report Viewer -->
-    <div class="col-lg-7">
-      <div class="card jasper-card" style="height: calc(100vh - 120px); min-height: 700px;">
-        <div class="jasper-card-header">
-          <h3><i class="fas fa-file-pdf text-danger"></i> Report Preview</h3>
-          <div style="display: flex; gap: 8px;">
-            <button class="btn-custom btn-custom-secondary btn-sm" onclick="openInNewTab()"><i
-                class="fas fa-external-link-alt"></i> External Open</button>
-            <button class="btn-custom btn-custom-primary btn-sm" onclick="generateReport()"><i class="fas fa-sync"></i>
-              Render Report</button>
-          </div>
-        </div>
-        <div class="jasper-card-body p-0" style="position: relative; height: 100%;">
-          <!-- Loading Overlay -->
-          <div id="loadingOverlay"
-            style="display: none; position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(255,255,255,0.85); z-index:10; flex-direction:column; align-items:center; justify-content:center;">
-            <div class="spinner-border text-primary mb-3" role="status"></div>
-            <div style="font-weight: 600; color: var(--slate-700);">Generating Jasper Report...</div>
-            <div style="font-size: 0.75rem; color: #64748b; margin-top: 4px;">Fetching compiled output from server</div>
-          </div>
-
-          <!-- Viewer Frame -->
-          <iframe id="reportFrame" style="display: none; width:100%; height:100%; border:none;" src=""></iframe>
-
-          <!-- Placeholder -->
-          <div id="previewPlaceholder" class="preview-placeholder" style="margin: 24px;">
-            <i class="far fa-file-pdf"></i>
-            <h4>No Report Rendered Yet</h4>
-            <p class="text-muted" style="max-width: 400px; font-size: 0.85rem;">
-              Paste a Jasper report URL, select a preset, or customize the parameters, then click <strong>Render
-                Report</strong> to preview the output.
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-<!-- ========================================= -->
-<!-- TEMPLATE POPUP MODAL -->
-<!-- ========================================= -->
-
-<div class="modal fade" id="templatePopupModal" tabindex="-1">
-
-  <div class="modal-dialog modal-lg modal-dialog-scrollable">
-
-    <div class="modal-content"
-      style="border-radius:16px;border:none;overflow:hidden;">
-
-      <!-- HEADER -->
-      <div class="modal-header">
-
-        <h5 class="modal-title">
-          <i class="fas fa-file-invoice text-primary mr-2"></i>
-          Select Jasper Template
-        </h5>
-
-        <button
-          type="button"
-          class="close"
-          data-dismiss="modal">
-
-          <span>&times;</span>
-
-        </button>
-
-      </div>
-
-      <!-- BODY -->
-      <div class="modal-body">
-
-        <!-- SEARCH -->
-        <div class="mb-3">
-
-          <input
-            type="text"
-            id="templatePopupSearch"
-            class="form-control"
-            placeholder="Search template name or code..."
-            oninput="filterTemplatePopup(this.value)">
-
-        </div>
-
-        <!-- LIST -->
-        <div id="templatePopupList"></div>
-
-      </div>
-
-    </div>
-
-  </div>
-
-</div>
-
-
+<script src="/reports/viewer/basic-data.js"></script>
 <script>
-  // --- Server Data (parsed from safe JSON block) ---
-  let _serverData = (function () {
-    let org = Page.data.org;
-    let centrixURL = Page.data.centrixURL;
-    return {
-      reporttemplates: (org && org.reporttemplates) ? org.reporttemplates.map(function (t) {
-        return { _id: String(t._id || ''), name: t.name || '', code: t.code || '', routepath: t.routepath || '', reportlocale: t.reportlocale || '' };
-      }) : [],
-      orgId: org ? String(org._id || '') : '',
-      centrixURL: centrixURL || ''
-    };
-  })();
+  (function () {
+    'use strict';
+    var BASE = '/reports/viewer';
+    var RECENT_KEY = 'jasper_viewer_recent';
+    var PANELS_KEY = 'jasper_viewer_panels';      // { side, params }: which side panels are shown
+    function readPanels() { try { var x = JSON.parse(localStorage.getItem(PANELS_KEY) || '{}'); return x && typeof x === 'object' ? x : {}; } catch (e) { return {}; } }
 
-  let paramsArray = [];
-  let baseUrl = '';
-
-  function selectSearchableOption(element) {
-    let val = element.getAttribute('data-value');
-    let labelText = element.textContent || element.innerText;
-
-    // Update active visual classes
-    let options = document.querySelectorAll('#searchableOptionsList .searchable-select-option');
-    options.forEach(function (opt) {
-      opt.classList.remove('selected');
-    });
-    element.classList.add('selected');
-
-    // Update trigger label
-    document.getElementById('selectedTemplateLabel').textContent = labelText;
-
-    // Close dropdown
-    document.getElementById('templateSearchableSelect').classList.remove('active');
-
-    // Invoke handler
-    onTemplateSelected(val);
-  }
-
-  // Document listener to close dropdowns when clicking outside
-  document.addEventListener('click', function (e) {
-    let select = document.getElementById('templateSearchableSelect');
-    if (select && !select.contains(e.target)) {
-      select.classList.remove('active');
-    }
-  });
-
-  document.addEventListener('DOMContentLoaded', function () {
-    // Set org ID from server data
-    if (_serverData.orgId) {
-      document.getElementById('quickOrgUID').value = _serverData.orgId;
-    }
-
-    // Render template options from server data
-    renderTemplateOptions(_serverData.reporttemplates || []);
-
-    // Pre-fill host builder from session centrix URL
-    let centrixHost = _serverData.centrixURL || '';
-    if (centrixHost) {
-      try {
-        let parsed = new URL(centrixHost);
-        let guessHost = parsed.protocol + '//' + parsed.hostname + ':8443';
-        document.getElementById('builderHost').value = guessHost;
-      } catch (e) { }
-    }
-    // Set today as default date range
-    setTodayDateRange();
-    loadHistoryList();
-  });
-
-  function renderTemplateOptions(templates) {
-    let list = document.getElementById('searchableOptionsList');
-    if (!list) return;
-    // Remove any old options except the placeholder
-    let existing = list.querySelectorAll('.searchable-select-option:not([data-value=""])');
-    existing.forEach(function (el) { el.remove(); });
-    templates.forEach(function (t) {
-      let div = document.createElement('div');
-      div.className = 'searchable-select-option';
-      div.setAttribute('data-value', encodeURIComponent(JSON.stringify(t)));
-      div.setAttribute('data-search', (t.name + ' ' + t.code).toLowerCase());
-      div.setAttribute('onclick', 'selectSearchableOption(this)');
-      div.textContent = t.name + ' (' + t.code + ')';
-      list.appendChild(div);
-    });
-  }
-
-  // --- URL Builder ---
-  function toggleBuilder() {
-    let panel = document.getElementById('urlBuilderPanel');
-    let btn = document.getElementById('builderToggleBtn');
-    if (panel.style.display === 'none') {
-      panel.style.display = 'block';
-      btn.innerHTML = '<i class="fas fa-times"></i> Close';
-    } else {
-      panel.style.display = 'none';
-      btn.innerHTML = '<i class="fas fa-tools"></i> Builder';
-    }
-  }
-
-  function onTemplateSelected(encodedVal) {
-    if (!encodedVal) return;
-    try {
-      let template = JSON.parse(decodeURIComponent(encodedVal));
-
-      // Update Builder Panel fields
-      if (template.routepath) {
-        document.getElementById('builderReportUnit').value = template.routepath;
-      }
-      if (template.reportlocale) {
-        document.getElementById('builderLocale').value = template.reportlocale;
-      }
-
-      // Open the builder panel so the user sees all configuration options
-      let panel = document.getElementById('urlBuilderPanel');
-      let btn = document.getElementById('builderToggleBtn');
-      panel.style.display = 'block';
-      btn.innerHTML = '<i class="fas fa-times"></i> Close';
-
-      // Automatically build the URL
-      buildUrlFromParts();
-    } catch (e) {
-      console.error('Error loading selected template:', e);
-    }
-  }
-
-  function buildUrlFromParts() {
-    let host = document.getElementById('builderHost').value.trim();
-    if (host.endsWith('/')) {
-      host = host.slice(0, -1);
-    }
-    let reportUnit = document.getElementById('builderReportUnit').value.trim();
-    let output = document.getElementById('builderOutput').value;
-    let locale = document.getElementById('builderLocale').value;
-    let decorate = document.getElementById('builderDecorate').value;
-    let user = document.getElementById('jasperUser').value.trim();
-    let pass = document.getElementById('jasperPassword').value.trim();
-
-    if (!host || !reportUnit) {
-      alert('Please fill in Jasper Host and Report Unit Path.');
-      return;
-    }
-
-    // Encode the report unit path
-    let encodedUnit = encodeURIComponent(reportUnit);
-
-    let url = host + '/jasperserver/flow.html' +
-      '?_flowId=viewReportFlow' +
-      '&output=' + output +
-      '&reportUnit=' + encodedUnit +
-      '&j_username=' + encodeURIComponent(user) +
-      '&j_password=' + encodeURIComponent(pass) +
-      '&decorate=' + decorate +
-      '&userLocale=' + locale;
-
-    // Append quick-fill clinical params if set
-    let patientUID = document.getElementById('quickPatientUID').value.trim();
-    let visitUID = document.getElementById('quickVN').value.trim();
-    let orgUID = document.getElementById('quickOrgUID').value.trim();
-    let parentOrgUID = document.getElementById('quickParentOrgUID').value.trim();
-    let loginUID = document.getElementById('quickLoginUID').value.trim();
-    let hn = document.getElementById('quickHN').value.trim();
-    let fromDate = getISODate(document.getElementById('quickFromDate').value, 'start');
-    let toDate = getISODate(document.getElementById('quickToDate').value, 'end');
-
-    if (patientUID) url += '&patientuid=' + encodeURIComponent(patientUID);
-    if (visitUID) url += '&patientvisituid=' + encodeURIComponent(visitUID);
-    if (hn) url += '&hn=' + encodeURIComponent(hn);
-    if (loginUID) url += '&loginuid=' + encodeURIComponent(loginUID);
-    if (orgUID) url += '&organisationuid=' + encodeURIComponent(orgUID);
-    if (parentOrgUID) url += '&parentorguid=' + encodeURIComponent(parentOrgUID);
-    if (fromDate) url += '&fromdate=' + encodeURIComponent(fromDate);
-    if (toDate) url += '&todate=' + encodeURIComponent(toDate);
-
-    document.getElementById('reportUrlInput').value = url;
-    onUrlInputChanged();
-    // Close builder panel
-    document.getElementById('urlBuilderPanel').style.display = 'none';
-    document.getElementById('builderToggleBtn').innerHTML = '<i class="fas fa-tools"></i> Builder';
-  }
-
-  // --- Date Helpers ---
-  function getISODate(dateVal, type) {
-    if (!dateVal) return '';
-    // dateVal is YYYY-MM-DD from date input
-    if (type === 'start') {
-      return dateVal + 'T17:00:00.000Z'; // Thai midnight = UTC-7 from previous day, use 17:00 UTC
-    } else {
-      return dateVal + 'T16:59:59.999Z';
-    }
-  }
-
-  function setTodayDateRange() {
-    let today = new Date();
-    let yyyy = today.getFullYear();
-    let mm = String(today.getMonth() + 1).padStart(2, '0');
-    let dd = String(today.getDate()).padStart(2, '0');
-    let todayStr = yyyy + '-' + mm + '-' + dd;
-    document.getElementById('quickFromDate').value = todayStr;
-    document.getElementById('quickToDate').value = todayStr;
-    syncQuickletiables();
-  }
-
-  // --- URL Parsing ---
-  function onUrlInputChanged() {
-    let inputVal = document.getElementById('reportUrlInput').value.trim();
-    if (!inputVal) {
-      baseUrl = '';
-      paramsArray = [];
-      renderParams();
-      return;
-    }
-
-    try {
-      let parsedUrl = new URL(inputVal);
-      baseUrl = parsedUrl.origin + parsedUrl.pathname;
-      paramsArray = [];
-      parsedUrl.searchParams.forEach(function (value, key) {
-        paramsArray.push({ key: key, value: value });
+    function getJson(url) {
+      return fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } }).then(function (r) {
+        return r.json().catch(function () { return { error: 'The server answered ' + r.status + '.' }; })
+          .then(function (d) { if (!r.ok || d.error) throw new Error(d.error || ('HTTP ' + r.status)); return d; });
       });
+    }
+    function readRecent() { try { var x = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); return Array.isArray(x) ? x : []; } catch (e) { return []; } }
+    // Parameters the site fills in by themselves: the connected organisation.
+    var ORG_PARAMS = /^(organisationuid|orguid|organizationuid)$/i;
 
-      // Auto-populate quick-fill from detected params
-      autoPopulateQuickFill();
-    } catch (e) {
-      baseUrl = inputVal.split('?')[0];
-      let queryStr = inputVal.split('?')[1] || '';
-      paramsArray = [];
-      if (queryStr) {
-        queryStr.split('&').forEach(function (pair) {
-          let eqIdx = pair.indexOf('=');
-          if (eqIdx > -1) {
-            let k = pair.substring(0, eqIdx);
-            let v = decodeURIComponent(pair.substring(eqIdx + 1));
-            if (k) paramsArray.push({ key: k, value: v });
-          }
-        });
-        autoPopulateQuickFill();
+    Page.setup({
+      data: function () {
+        var browsable = (Page.data.servers || []).filter(function (s) { return s.browse !== false; });
+        return {
+          source: browsable.length || !(Page.data.servers || []).length ? 'server' : 'url', sid: browsable.length ? browsable[0].id : '',
+          repo: { folder: '/', items: [], loading: false, error: '', q: '', lastQ: '', found: null },
+          tplQ: '', tplType: '', typeOpen: false, typeQ: '', typeAt: 0, urlText: '', urlError: '', urlInfo: '', urlBusy: false, sampleNote: '',
+          report: null, values: {}, extras: [], showHidden: false, sampling: false,
+          format: 'pdf', locale: '', out: { url: '', file: '', inline: true, loading: false, error: '', stopped: 0 }, elapsed: 0,
+          recent: readRecent(), basicOpen: false,
+          sideOpen: readPanels().side !== false, paramsOpen: readPanels().params !== false,
+          fullscreen: false
+        };
+      },
+      computed: {
+        // Servers whose folders the JasperServer tab shows (Reports > Settings: "Show its folders in Jasper Viewer").
+        browsable: function () { return (this.servers || []).filter(function (s) { return s.browse !== false; }); },
+        crumbs: function () {
+          var parts = this.repo.folder.split('/').filter(Boolean);
+          return [{ name: 'Root', path: '/' }].concat(parts.map(function (n, i) { return { name: n, path: '/' + parts.slice(0, i + 1).join('/') }; }));
+        },
+        repoItems: function () { return this.repo.found || this.repo.items; },
+        // The report parameter types the site's templates use (paramtype), most used first; '' = none set.
+        paramTypes: function () {
+          var count = {};
+          (this.templates || []).forEach(function (t) { var k = t.paramType || ''; count[k] = (count[k] || 0) + 1; });
+          return Object.keys(count).map(function (k) { return { value: k || '-', label: k || '(none)', count: count[k] }; })
+            .sort(function (a, b) { return b.count - a.count || a.label.localeCompare(b.label); });
+        },
+        // The type list of the search box: "All types" first, then the types matching what is typed.
+        typesShown: function () {
+          var q = this.typeQ.trim().toLowerCase();
+          var all = [{ value: '', label: 'All types', count: (this.templates || []).length }].concat(this.paramTypes);
+          return all.filter(function (pt) { return !q || pt.label.toLowerCase().indexOf(q) >= 0; });
+        },
+        typeLabel: function () {
+          var v = this.tplType, pt = this.paramTypes.filter(function (x) { return x.value === v; })[0];
+          return v && pt ? pt.label : 'All types';
+        },
+        templatesShown: function () {
+          var q = this.tplQ.trim().toLowerCase(), type = this.tplType;
+          return (this.templates || []).filter(function (t) {
+            if (type && (t.paramType || '-') !== type) return false;
+            return !q || (t.name + ' ' + t.code + ' ' + t.routepath + ' ' + (t.paramType || '')).toLowerCase().indexOf(q) >= 0;
+          }).slice(0, 200);
+        },
+        prompted: function () { return this.report ? this.report.params.filter(function (p) { return p.prompt; }) : []; },
+        hidden: function () { return this.report ? this.report.params.filter(function (p) { return !p.prompt; }) : []; },
+        // Parameters with a value (shown on the report bar's button while the panel is hidden).
+        filledCount: function () { var v = this.values; return Object.keys(v).filter(function (k) { return v[k] !== '' && v[k] != null; }).length + this.extras.filter(function (x) { return x.key && x.value !== ''; }).length; },
+        // Reports > Settings > Print & download: everything the browser's PDF toolbar offers is allowed.
+        fullToolbar: function () { var o = this.output || {}; return o.download !== false && o.print !== false && o.drive !== false; },
+        // A new tab shows the browser's full PDF viewer (download, print, Save to Drive): only when all are allowed.
+        openTabOk: function () { return this.fullToolbar; },
+        // The PDF without the browser's toolbar when one of its buttons is turned off (Chrome / Edge read #toolbar=0).
+        frameSrc: function () { return this.out.url && this.format === 'pdf' && !this.fullToolbar ? this.out.url + '#toolbar=0&navpanes=0' : this.out.url; },
+        serversTitle: function () { return (this.servers || []).map(function (s) { return s.name + ': ' + s.url; }).join('\n'); },
+        serverName: function () { var sid = this.sid; var s = (this.servers || []).filter(function (x) { return x.id === sid; })[0]; return s ? s.name : ''; }
+      },
+      watch: { typeQ: function () { this.typeAt = 0; } },
+      mounted: function () {
+        var vm = this;
+        if (vm.sid) vm.go('/');
+        // Full screen ends with Esc (the browser's mode reports it here; the fallback listens for the key).
+        vm._onFull = function () { vm.fullscreen = document.fullscreenElement === vm.$refs.root; };
+        vm._onKey = function (e) { if (e.key === 'Escape' && vm.fullscreen && !document.fullscreenElement && !vm.basicOpen) vm.toggleFullscreen(); };
+        document.addEventListener('fullscreenchange', vm._onFull);
+        document.addEventListener('keydown', vm._onKey);
+      },
+      beforeDestroy: function () {
+        if (this.out.url) URL.revokeObjectURL(this.out.url);
+        if (this._runStop) this._runStop.abort();
+        this.endTimer();
+        document.removeEventListener('fullscreenchange', this._onFull);
+        document.removeEventListener('keydown', this._onKey);
+        if (this.fullscreen && !document.fullscreenElement) document.body.style.overflow = '';
+      },
+      methods: {
+        // Full screen: the browser's Fullscreen API on the viewer, else the viewer fills the window.
+        toggleFullscreen: function () {
+          var vm = this, el = vm.$refs.root;
+          if (document.fullscreenElement) { document.exitFullscreen(); return; }
+          if (vm.fullscreen) { vm.fullscreen = false; document.body.style.overflow = ''; return; }
+          var fallback = function () { vm.fullscreen = true; document.body.style.overflow = 'hidden'; };
+          if (el && el.requestFullscreen) el.requestFullscreen().catch(fallback); else fallback();
+        },
+        // Show / hide a side panel: 'side' (Open report, Recent) or 'params' (Input Parameters).
+        togglePanel: function (which) {
+          if (which === 'side') this.sideOpen = !this.sideOpen; else this.paramsOpen = !this.paramsOpen;
+          try { localStorage.setItem(PANELS_KEY, JSON.stringify({ side: this.sideOpen, params: this.paramsOpen })); } catch (e) { /* storage off */ }
+        },
+        // ─── JasperServer repository ───────────────────────────────────
+        go: function (folder) {
+          var vm = this, r = vm.repo, sid = vm.sid;
+          r.loading = true; r.error = ''; r.found = null;
+          getJson(BASE + '/servers/' + encodeURIComponent(sid) + '/browse?folder=' + encodeURIComponent(folder))
+            .then(function (d) { if (vm.sid === sid) { r.folder = d.folder; r.items = d.items; } })
+            .catch(function (err) { if (vm.sid === sid) { r.error = err.message; r.items = []; } })
+            .then(function () { if (vm.sid === sid) r.loading = false; });
+        },
+        find: function () {
+          var vm = this, r = vm.repo, q = r.q.trim(), sid = vm.sid;
+          if (!q) { r.found = null; return; }
+          r.loading = true; r.error = '';
+          getJson(BASE + '/servers/' + encodeURIComponent(sid) + '/search?q=' + encodeURIComponent(q))
+            .then(function (d) { if (vm.sid === sid) { r.found = d.items; r.lastQ = q; } })
+            .catch(function (err) { if (vm.sid === sid) r.error = err.message; })
+            .then(function () { if (vm.sid === sid) r.loading = false; });
+        },
+        // Report parameter type dropdown.
+        toggleTypes: function () {
+          var vm = this;
+          vm.typeOpen = !vm.typeOpen;
+          if (!vm.typeOpen) return;
+          vm.typeQ = '';
+          var at = vm.typesShown.map(function (x) { return x.value; }).indexOf(vm.tplType);
+          vm.typeAt = at < 0 ? 0 : at;
+          vm.$nextTick(function () { if (vm.$refs.typeSearch) vm.$refs.typeSearch.focus(); });
+        },
+        moveType: function (by) {
+          var n = this.typesShown.length;
+          if (n) this.typeAt = (this.typeAt + by + n) % n;
+        },
+        pickType: function (value) {
+          if (value == null) return;
+          this.tplType = value;
+          this.typeOpen = false;
+        },
+        openTemplate: function (t) {
+          if (!this.sid) return;
+          if (t.locale) this.locale = /^th/i.test(t.locale) ? 'th' : /^en/i.test(t.locale) ? 'en' : this.locale;
+          this.openUnit(this.sid, t.routepath);
+        },
+
+        // ─── A report and its parameters ───────────────────────────────
+        // preset: { values: { name: value }, format, locale } from a link or Recent.
+        openUnit: function (sid, uri, preset) {
+          var vm = this, server = (vm.servers.filter(function (s) { return s.id === sid; })[0] || {}).name || sid;
+          preset = preset || {};
+          vm.clearOut();
+          vm.report = { sid: sid, uri: uri, label: uri.split('/').pop(), server: server, params: [], note: '', loading: true };
+          var rep = vm.report, given = Object.assign({}, preset.values || {});
+          vm.values = {}; vm.extras = []; vm.showHidden = false; vm.sampleNote = '';
+          // A format that only downloads (Excel, Word, CSV) falls back to PDF when Download is turned off.
+          if (preset.format) vm.format = vm.output.download || preset.format === 'pdf' || preset.format === 'html' ? preset.format : 'pdf';
+          if (preset.locale != null && preset.locale !== '') vm.locale = preset.locale;
+          getJson(BASE + '/servers/' + encodeURIComponent(sid) + '/report?uri=' + encodeURIComponent(uri))
+            .then(function (d) {
+              if (vm.report !== rep) return;
+              rep.label = d.label || rep.label; rep.uri = d.uri || uri; rep.params = d.params || []; rep.note = d.note || '';
+              var values = {};
+              rep.params.forEach(function (p) {
+                if (Object.prototype.hasOwnProperty.call(given, p.name)) { values[p.name] = String(given[p.name]); delete given[p.name]; }
+                else if (ORG_PARAMS.test(p.name) && vm.org && vm.org.id) values[p.name] = vm.org.id;
+                else values[p.name] = '';
+              });
+              vm.values = values;
+              // What the link has that the JRXML doesn't declare: sent as it is.
+              vm.extras = Object.keys(given).map(function (k) { return { key: k, value: String(given[k]) }; });
+              vm.remember();
+            })
+            .catch(function (err) { if (vm.report === rep) { rep.note = err.message; vm.extras = Object.keys(given).map(function (k) { return { key: k, value: String(given[k]) }; }); } })
+            .then(function () { if (vm.report === rep) rep.loading = false; });
+        },
+        openUrl: function () {
+          var vm = this;
+          if (!vm.urlText || vm.urlBusy) return;
+          vm.urlBusy = true; vm.urlError = ''; vm.urlInfo = '';
+          getJson(BASE + '/resolve?url=' + encodeURIComponent(vm.urlText))
+            .then(function (d) {
+              var canBrowse = vm.browsable.some(function (s) { return s.id === d.sid; });
+              if (canBrowse) vm.sid = d.sid;
+              vm.openUnit(d.sid, d.uri, { values: d.params, format: d.format, locale: d.locale });
+              vm.urlInfo = 'Opened ' + d.uri + ' on ' + d.server + '.' + (d.credentials ? ' The user name and password in the link were ignored: the login saved in Reports > Settings is used.' : '');
+              if (canBrowse) vm.go(d.uri.split('/').slice(0, -1).join('/') || '/');
+            })
+            .catch(function (err) { vm.urlError = err.message; })
+            .then(function () { vm.urlBusy = false; });
+        },
+        boolOn: function (prm) {
+          var v = this.values[prm.name];
+          return v === 'true' || (!v && /^\s*(Boolean\.TRUE|true|new\s+(java\.lang\.)?Boolean\(\s*true\s*\))\s*$/.test(prm.def || ''));
+        },
+        // Empty ID parameters from the connected site (the first visit and user), and the organisation.
+        fillSamples: function () {
+          var vm = this;
+          vm.sampling = true;
+          getJson(BASE + '/sample-params')
+            .then(function (d) {
+              var got = d.values || {}, filled = [];
+              (vm.report ? vm.report.params : []).forEach(function (p) {
+                if (vm.values[p.name]) return;
+                var k = p.name.toLowerCase(), v = got[p.name] || (k === 'patientvisituid' ? got.patientvisitsuid : '') || (ORG_PARAMS.test(p.name) && vm.org ? vm.org.id : '');
+                if (v) { vm.$set(vm.values, p.name, v); filled.push(p.name); }
+              });
+              vm.sampleNote = filled.length ? 'Filled ' + filled.join(', ') + ' from the connected site.' : 'No empty parameter could be filled from the connected site.';
+            })
+            .catch(function (err) { vm.sampleNote = 'Sample values: ' + err.message; })
+            .then(function () { vm.sampling = false; });
+        },
+        resetValues: function () {
+          var vm = this, v = {};
+          (vm.report ? vm.report.params : []).forEach(function (p) { v[p.name] = ''; });
+          vm.values = v;
+        },
+
+        // ─── Run ────────────────────────────────────────────────────────
+        // Print the report shown (Reports > Settings may turn it off).
+        printOut: function () {
+          var frame = this.$refs.outFrame;
+          if (!this.output.print || !frame) return;
+          try { frame.contentWindow.focus(); frame.contentWindow.print(); }
+          catch (e) { this.out.error = 'The browser did not let the page print the report: ' + e.message; }
+        },
+        clearOut: function () {
+          if (this.out.url) URL.revokeObjectURL(this.out.url);
+          this.endTimer();
+          this.out = { url: '', file: '', inline: true, loading: false, error: '', stopped: 0 };
+        },
+        // Seconds since Run, while it runs.
+        startTimer: function () {
+          var vm = this, t0 = Date.now();
+          vm.endTimer();
+          vm.elapsed = 0;
+          vm._timer = setInterval(function () { vm.elapsed = Math.round((Date.now() - t0) / 1000); }, 500);
+        },
+        endTimer: function () { clearInterval(this._timer); this._timer = null; },
+        // Stop: the request is dropped; the server then stops waiting for JasperServer.
+        stopRun: function () {
+          if (!this.out.loading || !this._runStop) return;
+          this.out.stopped = Math.max(1, this.elapsed);
+          this._runStop.abort();
+        },
+        run: function () {
+          var vm = this, rep = vm.report;
+          if (!rep) return;
+          if (vm.out.loading) vm.stopRun();      // Run again while running: the earlier run is stopped
+          var params = {};
+          Object.keys(vm.values).forEach(function (k) { if (vm.values[k] !== '' && vm.values[k] != null) params[k] = vm.values[k]; });
+          vm.extras.forEach(function (x) { if (x.key && x.value !== '') params[x.key] = x.value; });
+          vm.clearOut();
+          var out = vm.out, format = vm.format;
+          out.loading = true;
+          var stop = vm._runStop = window.AbortController ? new AbortController() : { abort: function () {}, signal: undefined };
+          vm.startTimer();
+          var q = 'sid=' + encodeURIComponent(rep.sid) + '&uri=' + encodeURIComponent(rep.uri) + '&format=' + format +
+            '&params=' + encodeURIComponent(JSON.stringify(params)) + (vm.locale ? '&locale=' + encodeURIComponent(vm.locale) : '');
+          fetch(BASE + '/run?' + q, { credentials: 'same-origin', signal: stop.signal })
+            .then(function (r) {
+              if (!r.ok) {
+                return r.json().catch(function () { return { error: 'The server answered ' + r.status + '.' }; })
+                  .then(function (d) { throw new Error(d.error || ('HTTP ' + r.status)); });
+              }
+              return r.blob();
+            })
+            .then(function (blob) {
+              if (vm.out !== out) return;
+              out.url = URL.createObjectURL(blob);
+              out.file = rep.label + '.' + format;
+              out.inline = format === 'pdf' || format === 'html';
+              if (!out.inline && vm.output.download) {
+                var a = document.createElement('a');
+                a.href = out.url; a.download = out.file;
+                document.body.appendChild(a); a.click(); a.remove();
+              }
+              vm.remember(params);
+            })
+            .catch(function (err) { if (vm.out === out && err.name !== 'AbortError') { out.error = err.message; out.stopped = 0; } })
+            .then(function () { if (vm.out === out) { out.loading = false; vm.endTimer(); } if (vm._runStop === stop) vm._runStop = null; });
+        },
+
+        // ─── Recent ─────────────────────────────────────────────────────
+        remember: function (params) {
+          var rep = this.report;
+          if (!rep) return;
+          var me = this.me || {};
+          var item = { sid: rep.sid, uri: rep.uri, label: rep.label, server: rep.server, values: params || null, format: this.format, locale: this.locale,
+            at: new Date().toISOString(), by: me.username || '', byName: me.name || me.username || '' };
+          var old = this.recent.filter(function (r) { return r.sid === rep.sid && r.uri === rep.uri; })[0];
+          if (!params && old) item.values = old.values;
+          var list = [item].concat(this.recent.filter(function (r) { return !(r.sid === rep.sid && r.uri === rep.uri); })).slice(0, 15);
+          this.recent = list;
+          try { localStorage.setItem(RECENT_KEY, JSON.stringify(list)); } catch (e) { /* storage full or off */ }
+        },
+        // Opened date and time, as 15 Oct 2026 09:41 (in this computer's time zone).
+        when: function (iso) {
+          var d = new Date(iso);
+          if (isNaN(d)) return '';
+          var p = {};
+          new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
+            .formatToParts(d).forEach(function (x) { p[x.type] = x.value; });
+          return p.day + ' ' + p.month + ' ' + p.year + ' ' + p.hour + ':' + p.minute;
+        },
+        recentTitle: function (r) {
+          return r.label + '\n' + r.server + ' · ' + r.uri + (r.at ? '\nOpened ' + this.when(r.at) + (r.by ? ' by ' + (r.byName && r.byName !== r.by ? r.byName + ' (' + r.by + ')' : r.by) : '') : '');
+        },
+        openRecent: function (r) {
+          if (!this.servers.some(function (s) { return s.id === r.sid; })) { this.out.error = r.server + ' is no longer in Reports > Settings.'; return; }
+          if (this.browsable.some(function (s) { return s.id === r.sid; })) this.sid = r.sid;
+          this.openUnit(r.sid, r.uri, { values: r.values || {}, format: r.format, locale: r.locale });
+        },
+        clearRecent: function () {
+          this.recent = [];
+          try { localStorage.removeItem(RECENT_KEY); } catch (e) { /* storage off */ }
+        }
       }
-    }
-
-    renderParams();
-  }
-
-  // Auto-populate quick-fill fields when URL is pasted
-  function autoPopulateQuickFill() {
-    paramsArray.forEach(function (p) {
-      let k = p.key.toLowerCase();
-      if (k === 'patientuid') document.getElementById('quickPatientUID').value = p.value;
-      if (k === 'patientvisituid') document.getElementById('quickVN').value = p.value;
-      if (k === 'hn' || k === 'mrn') document.getElementById('quickHN').value = p.value;
-      if (k === 'loginuid') document.getElementById('quickLoginUID').value = p.value;
-      if (k === 'organisationuid' || k === 'orguid') document.getElementById('quickOrgUID').value = p.value;
-      if (k === 'parentorguid') document.getElementById('quickParentOrgUID').value = p.value;
-      if (k === 'billuid' || k === 'billid') document.getElementById('quickBillUID').value = p.value;
-      if (k === 'j_username') document.getElementById('jasperUser').value = p.value;
-      if (k === 'j_password') document.getElementById('jasperPassword').value = p.value;
     });
-  }
-
-  // --- Parameter Rendering ---
-  function renderParams() {
-    let container = document.getElementById('parametersList');
-    let placeholder = document.getElementById('noParamsPlaceholder');
-    container.innerHTML = '';
-
-    if (paramsArray.length === 0) {
-      placeholder.style.display = 'block';
-      return;
-    }
-    placeholder.style.display = 'none';
-
-    paramsArray.forEach(function (param, index) {
-      let isCredential = (param.key === 'j_username' || param.key === 'j_password');
-      let row = document.createElement('div');
-      row.className = 'param-row';
-      if (isCredential) row.style.background = '#fef3c7';
-      row.innerHTML =
-        '<input type="text" class="form-control form-control-sm" style="flex:2;font-weight:600;font-family:monospace;" value="' + param.key + '" placeholder="Key" oninput="updateParamKey(' + index + ', this.value)">' +
-        '<input type="' + (isCredential && param.key === 'j_password' ? 'password' : 'text') + '" class="form-control form-control-sm" style="flex:3;font-family:monospace;" value="' + param.value + '" placeholder="Value" oninput="updateParamValue(' + index + ', this.value)">' +
-        '<button class="btn btn-sm btn-custom-danger" style="padding:4px 8px;flex-shrink:0;" onclick="removeParam(' + index + ')"><i class="fas fa-trash"></i></button>';
-      container.appendChild(row);
-    });
-  }
-
-  function updateParamKey(index, val) {
-    paramsArray[index].key = val.trim();
-    rebuildUrlFromParams();
-  }
-
-  function updateParamValue(index, val) {
-    paramsArray[index].value = val;
-    rebuildUrlFromParams();
-  }
-
-  function addParamRow() {
-    paramsArray.push({ key: '', value: '' });
-    renderParams();
-  }
-
-  function removeParam(index) {
-    paramsArray.splice(index, 1);
-    renderParams();
-    rebuildUrlFromParams();
-  }
-
-  // --- Quick Fill Sync ---
-  function syncQuickletiables() {
-    let qPatient = document.getElementById('quickPatientUID').value.trim();
-    let qVN = document.getElementById('quickVN').value.trim();
-    let qHN = document.getElementById('quickHN').value.trim();
-    let qLogin = document.getElementById('quickLoginUID').value.trim();
-    let qOrg = document.getElementById('quickOrgUID').value.trim();
-    let qParent = document.getElementById('quickParentOrgUID').value.trim();
-    let qBill = document.getElementById('quickBillUID').value.trim();
-    let fromDate = getISODate(document.getElementById('quickFromDate').value, 'start');
-    let toDate = getISODate(document.getElementById('quickToDate').value, 'end');
-
-    paramsArray.forEach(function (p) {
-      let k = p.key.toLowerCase();
-      if (qPatient && k === 'patientuid') p.value = qPatient;
-      if (qVN && k === 'patientvisituid') p.value = qVN;
-      if (qHN && (k === 'hn' || k === 'mrn')) p.value = qHN;
-      if (qLogin && k === 'loginuid') p.value = qLogin;
-      if (qOrg && (k === 'organisationuid' || k === 'orguid')) p.value = qOrg;
-      if (qParent && k === 'parentorguid') p.value = qParent;
-      if (qBill && (k === 'billuid' || k === 'billid')) p.value = qBill;
-      if (fromDate && k === 'fromdate') p.value = fromDate;
-      if (toDate && k === 'todate') p.value = toDate;
-    });
-
-    renderParams();
-    rebuildUrlFromParams();
-  }
-
-  // --- URL Reconstruction ---
-  function rebuildUrlFromParams() {
-    if (!baseUrl) return;
-    let queryParts = [];
-    paramsArray.forEach(function (p) {
-      if (p.key) queryParts.push(p.key + '=' + encodeURIComponent(p.value));
-    });
-    let fullUrl = baseUrl + (queryParts.length > 0 ? '?' + queryParts.join('&') : '');
-    document.getElementById('reportUrlInput').value = fullUrl;
-  }
-
-  function getConstructedUrl() {
-    let url = document.getElementById('reportUrlInput').value.trim();
-    // If embed credentials is checked, ensure j_username/j_password are in the URL params
-    let embedCred = document.getElementById('embedCredToggle').checked;
-    if (embedCred && url) {
-      let user = document.getElementById('jasperUser').value.trim();
-      let pass = document.getElementById('jasperPassword').value.trim();
-      if (user && pass && paramsArray.length > 0) {
-        // Update existing j_username / j_password params, or append them
-        let hasUser = paramsArray.some(function (p) { return p.key === 'j_username'; });
-        let hasPass = paramsArray.some(function (p) { return p.key === 'j_password'; });
-        if (!hasUser) paramsArray.push({ key: 'j_username', value: user });
-        if (!hasPass) paramsArray.push({ key: 'j_password', value: pass });
-        paramsArray.forEach(function (p) {
-          if (p.key === 'j_username') p.value = user;
-          if (p.key === 'j_password') p.value = pass;
-        });
-        rebuildUrlFromParams();
-        url = document.getElementById('reportUrlInput').value.trim();
-      }
-    }
-    return url;
-  }
-
-  // --- Report Rendering ---
-  function generateReport() {
-    let finalUrl = getConstructedUrl();
-    if (!finalUrl) {
-      alert('Please enter a Jasper Report URL.');
-      return;
-    }
-    saveToHistory(finalUrl);
-
-    document.getElementById('loadingOverlay').style.display = 'flex';
-    document.getElementById('previewPlaceholder').style.display = 'none';
-
-    let frame = document.getElementById('reportFrame');
-    let useProxy = document.getElementById('useProxyToggle').checked;
-    let targetSrc = finalUrl;
-
-    if (useProxy) {
-      let user = document.getElementById('jasperUser').value.trim();
-      let pass = document.getElementById('jasperPassword').value.trim();
-      targetSrc = '/reports/viewer/proxy?url=' + encodeURIComponent(finalUrl);
-      if (user && pass) {
-        targetSrc += '&username=' + encodeURIComponent(user) + '&password=' + encodeURIComponent(pass);
-      }
-    }
-
-    frame.src = targetSrc;
-    frame.style.display = 'block';
-    frame.onload = function () {
-      document.getElementById('loadingOverlay').style.display = 'none';
-    };
-  }
-
-  function openInNewTab() {
-    let finalUrl = getConstructedUrl();
-    if (!finalUrl) {
-      alert('Please enter a Jasper Report URL.');
-      return;
-    }
-    let useProxy = document.getElementById('useProxyToggle').checked;
-    if (useProxy) {
-      let user = document.getElementById('jasperUser').value.trim();
-      let pass = document.getElementById('jasperPassword').value.trim();
-      let targetSrc = '/reports/viewer/proxy?url=' + encodeURIComponent(finalUrl);
-      if (user && pass) {
-        targetSrc += '&username=' + encodeURIComponent(user) + '&password=' + encodeURIComponent(pass);
-      }
-      window.open(targetSrc, '_blank');
-    } else {
-      window.open(finalUrl, '_blank');
-    }
-  }
-
-  // --- History ---
-  function saveToHistory(url) {
-    let history = [];
-    try { history = JSON.parse(localStorage.getItem('jasper_viewer_history') || '[]'); } catch (e) { }
-    history = history.filter(function (item) { return item !== url; });
-    history.unshift(url);
-    if (history.length > 15) history.pop();
-    localStorage.setItem('jasper_viewer_history', JSON.stringify(history));
-    loadHistoryList();
-  }
-
-  function loadHistoryList() {
-    let container = document.getElementById('historyContainer');
-    container.innerHTML = '';
-    let history = [];
-    try { history = JSON.parse(localStorage.getItem('jasper_viewer_history') || '[]'); } catch (e) { }
-    if (history.length === 0) {
-      container.innerHTML = '<div style="font-size:0.78rem;color:#94a3b8;text-align:center;padding:16px;">No recent history.</div>';
-      return;
-    }
-    history.forEach(function (url) {
-      let item = document.createElement('div');
-      item.className = 'history-item';
-      item.onclick = function () {
-        document.getElementById('reportUrlInput').value = url;
-        onUrlInputChanged();
-      };
-      item.innerHTML =
-        '<div class="url-text" title="' + url + '"><i class="fas fa-link mr-1 text-muted"></i> ' + url + '</div>' +
-        '<i class="fas fa-chevron-right text-muted" style="font-size:0.7rem;"></i>';
-      container.appendChild(item);
-    });
-  }
-
-  function clearHistory() {
-    localStorage.removeItem('jasper_viewer_history');
-    loadHistoryList();
-  }
-
-  // =========================================
-  // TEMPLATE POPUP FUNCTIONS
-  // =========================================
-
-  function openTemplatePopup() {
-
-    renderTemplatePopup('');
-
-    $('#templatePopupModal').modal('show');
-
-    setTimeout(function () {
-
-      let input = document.getElementById('templatePopupSearch');
-
-      if (input) {
-        input.focus();
-      }
-
-    }, 300);
-  }
-
-  function filterTemplatePopup(query) {
-
-    renderTemplatePopup(query);
-  }
-
-  function renderTemplatePopup(query) {
-
-    query = (query || '').toLowerCase().trim();
-
-    let container = document.getElementById('templatePopupList');
-
-    if (!container) return;
-
-    container.innerHTML = '';
-
-    let templates = _serverData.reporttemplates || [];
-
-    let filtered = templates.filter(function (t) {
-
-      return (
-        (t.name || '').toLowerCase().includes(query) ||
-        (t.code || '').toLowerCase().includes(query)
-      );
-
-    });
-
-    // NO RESULT
-    if (filtered.length === 0) {
-
-      container.innerHTML =
-        '<div class="text-center text-muted py-4">' +
-        'No matching templates found.' +
-        '</div>';
-
-      return;
-    }
-
-    // RENDER ITEMS
-    filtered.forEach(function (t) {
-
-      let item = document.createElement('div');
-
-      item.className = 'template-popup-item';
-
-      item.innerHTML =
-
-        '<div class="template-popup-title">' +
-          escapeHtml(t.name || '-') +
-        '</div>' +
-
-        '<div class="template-popup-subtitle">' +
-          escapeHtml(t.code || '') +
-        '</div>';
-
-      item.onclick = function () {
-
-        // UPDATE LABEL
-        document.getElementById('selectedTemplateLabel').value =
-          (t.name || '') + ' (' + (t.code || '') + ')';
-
-        // CLOSE MODAL
-        $('#templatePopupModal').modal('hide');
-
-        // SELECT TEMPLATE
-        onTemplateSelected(
-          encodeURIComponent(JSON.stringify(t))
-        );
-      };
-
-      container.appendChild(item);
-
-    });
-  }
-
-  // =========================================
-  // ESCAPE HTML
-  // =========================================
-
-  function escapeHtml(str) {
-
-    return String(str || '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  }
+  })();
 </script>

@@ -31,6 +31,18 @@ exports.save = json(async (req, res) => {
   res.json({ ok: true, settings: saved });
 });
 
+// Settings > a JasperServer > Show its folders in > Only these folders: the folders of a saved server,
+// to pick from (every folder; the allowed-folders list does not apply here).
+exports.browse = json(async (req, res) => {
+  const stored = await settingsModel.get();
+  const sv = stored.servers.find((x) => x.id === String(req.params.sid || ''));
+  if (!sv) throw bad('Save this JasperServer first, then browse its folders.', 404);
+  const folder = '/' + String(req.query.folder || '').split('/').map((s) => s.trim()).filter(Boolean).join('/');
+  if (/(^|\/)\.\.(\/|$)|[\u0000-\u001f]/.test(folder) || folder.length > 500) throw bad('That folder path is not valid.');
+  const items = await jasper.browse(settingsModel.connection(sv), folder);
+  res.json({ folder, items: items.filter((x) => x.type === 'folder') });
+});
+
 // Tests one server's form values: { id, url, user, password, clearPassword, allowSelfSigned }
 // (the stored password of that server when the field is left blank).
 exports.test = json(async (req, res) => {

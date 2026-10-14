@@ -40,7 +40,7 @@ exports.get = json(async (req, res) => {
     // Prompted parameters without a usable default (none, null or ""): left empty, the report fails or comes out empty.
     paramRequired: design.params.filter((p) => p.prompt && ['', 'null', '""'].includes(String(p.def || '').trim())).map((p) => p.name),
     fields: design.fields.length,
-    query: !!design.query.trim(), problems: JD.problems(design), loops: JD.loops(design), missingImages: missing
+    query: JD.hasQuery(design), problems: JD.problems(design), loops: JD.loops(design), missingImages: missing
   });
 });
 

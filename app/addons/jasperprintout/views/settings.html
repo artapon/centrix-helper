@@ -86,6 +86,42 @@
                 <label class="custom-control-label" :for="'rs-self-' + sv.key">Allow a self-signed HTTPS certificate</label>
               </div>
             </div>
+            <div class="rs-server-switches">
+              <span class="rs-switch-head">Show its folders in</span>
+              <div class="custom-control custom-checkbox">
+                <input type="checkbox" class="custom-control-input" :id="'rs-bd-' + sv.key" v-model="sv.browseDesigner">
+                <label class="custom-control-label" :for="'rs-bd-' + sv.key" title="The JasperServer tab of Jasper Designer > Open a design: browse, search and open its reports">Jasper Designer › Open a design</label>
+              </div>
+              <div class="custom-control custom-checkbox">
+                <input type="checkbox" class="custom-control-input" :id="'rs-bv-' + sv.key" v-model="sv.browseViewer">
+                <label class="custom-control-label" :for="'rs-bv-' + sv.key" title="The JasperServer tab of the Jasper Viewer: browse and search its reports. Links to it (URL tab) still open">Jasper Viewer</label>
+              </div>
+              <div v-if="sv.browseDesigner || sv.browseViewer" class="rs-folders">
+                <div class="rs-radio">
+                  <div class="custom-control custom-radio">
+                    <input type="radio" class="custom-control-input" :id="'rs-fa-' + sv.key" value="all" v-model="sv.foldersMode">
+                    <label class="custom-control-label" :for="'rs-fa-' + sv.key">All folders</label>
+                  </div>
+                  <div class="custom-control custom-radio">
+                    <input type="radio" class="custom-control-input" :id="'rs-fs-' + sv.key" value="some" v-model="sv.foldersMode">
+                    <label class="custom-control-label" :for="'rs-fs-' + sv.key">Only these folders</label>
+                  </div>
+                </div>
+                <template v-if="sv.foldersMode === 'some'">
+                  <ul class="rs-folder-list">
+                    <li v-for="(p, fi) in sv.browseFolders" :key="p"><i class="fas fa-folder"></i> <code>{{ p }}</code>
+                      <button type="button" class="rs-folder-x" @click="sv.browseFolders.splice(fi, 1)" :aria-label="'Remove ' + p" title="Remove">&times;</button></li>
+                    <li v-if="!sv.browseFolders.length" class="rs-folder-empty">No folder yet: add one below.</li>
+                  </ul>
+                  <div class="rs-folder-add">
+                    <jr-folder-pick :value="sv.addFolder" @input="sv.addFolder = $event" :ctx="pickCtx" :servers="sv.id ? [sv.id] : []" browse-url="/reports/settings/servers/{sid}/browse"
+                                    :disabled="!sv.id" :placeholder="sv.id ? 'Centrixreports/Lab, or Browse…' : 'Save this JasperServer first'"></jr-folder-pick>
+                    <button type="button" class="btn btn-sm btn-light" @click="addFolder(sv)" :disabled="!String(sv.addFolder || '').trim()"><i class="fas fa-plus"></i> Add</button>
+                  </div>
+                  <small class="rs-note">Each folder is shown with everything in it; the folders above it only as the way down to it. Reports elsewhere are left out of the lists and search.</small>
+                </template>
+              </div>
+            </div>
             <div class="rs-test">
               <button type="button" class="btn btn-secondary btn-sm" @click="test(sv)" :disabled="sv.testing || !sv.url">
                 <i class="fas" :class="sv.testing ? 'fa-spinner fa-spin' : 'fa-plug'"></i> Test connection
@@ -120,6 +156,45 @@
             Off: the <b>Publish</b> buttons of the Print-Out Builder and Jasper Designer and Publish Report's <b>Direct publish</b> are hidden, and the server refuses direct publishing.
             Reports reach JasperServer only through Publish Report's <b>Deploy workflow</b>: UAT, check, then Production<template v-if="!zonesReady">. Put servers in the UAT and Production zones above, or nothing can be published</template>.
             Saving designs, JRXML downloads and the designer's preview on JasperServer still work.
+          </p>
+        </div>
+      </section>
+
+      <!-- Print & download -->
+      <section class="card" id="rs-output">
+        <div class="card-header">
+          <i class="fas fa-print"></i><span>Print &amp; download</span>
+          <span class="badge" :class="outputOff ? 'badge-warning' : 'badge-success'">{{ outputOff ? outputOff + ' turned off' : 'All allowed' }}</span>
+        </div>
+        <div class="card-body">
+          <p class="rs-used">Used by <span class="rs-chip">Jasper Designer</span><span class="rs-chip">Jasper Viewer</span>. Applies to everyone.</p>
+          <div class="rs-out-group">
+            <b><i class="fas fa-drafting-compass"></i> Jasper Designer</b>
+            <div class="custom-control custom-switch">
+              <input type="checkbox" class="custom-control-input" id="rs-o-dprint" v-model="f.allowDesignerPrint">
+              <label class="custom-control-label" for="rs-o-dprint">Save PDF / Print <small class="text-muted">(Live Preview)</small></label>
+            </div>
+          </div>
+          <div class="rs-out-group">
+            <b><i class="fas fa-file-alt"></i> Jasper Viewer</b>
+            <div class="custom-control custom-switch">
+              <input type="checkbox" class="custom-control-input" id="rs-o-vdl" v-model="f.allowViewerDownload">
+              <label class="custom-control-label" for="rs-o-vdl">Download <small class="text-muted">(PDF, and the Excel, Word and CSV formats, which only download)</small></label>
+            </div>
+            <div class="custom-control custom-switch">
+              <input type="checkbox" class="custom-control-input" id="rs-o-vprint" v-model="f.allowViewerPrint">
+              <label class="custom-control-label" for="rs-o-vprint">Print</label>
+            </div>
+            <div class="custom-control custom-switch">
+              <input type="checkbox" class="custom-control-input" id="rs-o-vdrive" v-model="f.allowViewerDrive">
+              <label class="custom-control-label" for="rs-o-vdrive">Save to Google Drive <small class="text-muted">(the browser's PDF viewer)</small></label>
+            </div>
+          </div>
+          <p v-if="outputOff" class="rs-note mb-0">
+            <i class="fas fa-info-circle"></i>
+            Off: the buttons are hidden, and the server refuses what it can (Excel, Word and CSV when Download is off).
+            <template v-if="!f.allowViewerDownload || !f.allowViewerPrint || !f.allowViewerDrive">The Jasper Viewer then shows the PDF without the browser's own PDF toolbar, which has Download, Print and Save to Google Drive buttons.</template>
+            This stops casual copies only: the browser's own menu and keyboard shortcuts (Ctrl+S, Ctrl+P) and screenshots can't be blocked from a web page.
           </p>
         </div>
       </section>
@@ -201,6 +276,45 @@
               </div>
             </div>
             <textarea v-if="f.designerInputControlsMode === 'custom'" class="form-control rs-mono mt-2" rows="2" v-model="designerControlsText" aria-label="Jasper Designer input controls" placeholder="One repository path per line. Empty = no input controls."></textarea>
+          </div>
+
+          <!-- The watermark new Jasper Designer reports start with -->
+          <div class="rs-wm">
+            <div class="custom-control custom-switch">
+              <input type="checkbox" class="custom-control-input" id="rs-wm-on" v-model="wm.on">
+              <label class="custom-control-label" for="rs-wm-on">Default watermark for new reports</label>
+            </div>
+            <p class="rs-used mb-2">New Jasper Designer reports start with it; a report can still change or turn off its own (Report properties &gt; Watermark, which also has <i>Use the default watermark</i>). Reports already saved keep theirs.</p>
+            <div v-if="wm.on" class="rs-wm-grid">
+              <div class="rs-wm-form">
+                <div class="form-group">
+                  <label for="rs-wm-text">Text <small class="text-muted">Enter for a new line</small></label>
+                  <textarea id="rs-wm-text" class="form-control" rows="2" v-model="wm.text" maxlength="500" placeholder="e.g. CONFIDENTIAL, สำเนา, DRAFT"></textarea>
+                </div>
+                <div class="form-row">
+                  <div class="form-group col-4"><label for="rs-wm-angle">Angle (°)</label><input id="rs-wm-angle" type="number" class="form-control" min="-180" max="180" step="5" v-model.number="wm.angle"></div>
+                  <div class="form-group col-4"><label for="rs-wm-size">Size (pt)</label><input id="rs-wm-size" type="number" class="form-control" min="6" max="400" v-model.number="wm.size"></div>
+                  <div class="form-group col-4"><label for="rs-wm-color">Color</label><input id="rs-wm-color" type="color" class="form-control rs-color" v-model="wm.color"></div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group col-6"><label for="rs-wm-op">Opacity {{ Math.round(wm.opacity * 100) }}%</label><input id="rs-wm-op" type="range" class="custom-range" min="0.03" max="1" step="0.01" v-model.number="wm.opacity"></div>
+                  <div class="form-group col-6"><label for="rs-wm-font">Font</label><select id="rs-wm-font" class="custom-select" v-model="wm.font"><option v-for="fn in wmFonts" :key="fn">{{ fn }}</option></select></div>
+                </div>
+                <div class="rs-wm-checks">
+                  <div class="custom-control custom-checkbox"><input type="checkbox" class="custom-control-input" id="rs-wm-bold" v-model="wm.bold"><label class="custom-control-label" for="rs-wm-bold">Bold</label></div>
+                  <div class="custom-control custom-checkbox"><input type="checkbox" class="custom-control-input" id="rs-wm-tiled" v-model="wm.tiled"><label class="custom-control-label" for="rs-wm-tiled">Repeat across the page</label></div>
+                  <div v-if="wm.tiled" class="rs-wm-gap"><label for="rs-wm-gap">Space between (px)</label><input id="rs-wm-gap" type="number" class="form-control form-control-sm" min="0" max="1000" v-model.number="wm.gap"></div>
+                </div>
+                <p v-if="!wm.text.trim()" class="small text-warning mb-0">Type the watermark text: an empty watermark is not printed.</p>
+              </div>
+              <!-- A rough preview on an A4 page (the Designer draws the exact one) -->
+              <div class="rs-wm-paper" aria-hidden="true">
+                <div class="rs-wm-lines"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+                <div class="rs-wm-stamp" :class="{ 'is-tiled': wm.tiled }">
+                  <span v-for="n in (wm.tiled ? 9 : 1)" :key="n" :style="wmStyle">{{ wm.text }}</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -285,6 +399,37 @@
   .rs-server-tools .btn { padding: 2px 6px; height: auto; color: var(--muted); }
   .rs-server-tools .btn.text-danger { color: var(--danger) !important; }
   .rs-server-switches { display: flex; flex-wrap: wrap; gap: 6px 24px; margin-bottom: 10px; }
+  .rs-wm { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+  .rs-wm-grid { display: grid; grid-template-columns: minmax(0, 1fr) 170px; gap: 16px; align-items: start; }
+  .rs-wm-checks { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 20px; margin-bottom: 8px; }
+  .rs-wm-gap { display: flex; align-items: center; gap: 6px; font-size: .78rem; }
+  .rs-wm-gap label { margin: 0; white-space: nowrap; }
+  .rs-wm-gap input { width: 80px; }
+  .rs-color { padding: 2px 4px; }
+  .rs-wm-paper { position: relative; width: 150px; height: 212px; margin: 0 auto; background: #fff; border: 1px solid var(--border); border-radius: 4px; box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,.12)); overflow: hidden; }
+  .rs-wm-lines { position: absolute; inset: 16px 14px; display: flex; flex-direction: column; gap: 14px; }
+  .rs-wm-lines span { height: 6px; border-radius: 3px; background: #e5e7eb; }
+  .rs-wm-lines span:nth-child(odd) { width: 70%; }
+  .rs-wm-stamp { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  .rs-wm-stamp.is-tiled { flex-wrap: wrap; align-content: space-around; justify-content: space-around; }
+  .rs-wm-stamp span { white-space: pre; line-height: 1.1; text-align: center; }
+  @media (max-width: 767px) { .rs-wm-grid { grid-template-columns: 1fr; } }
+  .rs-out-group { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-top: 1px solid var(--border); }
+  .rs-out-group:first-of-type { border-top: 0; padding-top: 0; }
+  .rs-out-group > b { font-size: .8rem; display: flex; align-items: center; gap: 6px; }
+  .rs-out-group > b i { color: var(--primary); }
+  .rs-switch-head { flex-basis: 100%; font-size: .72rem; font-weight: 600; color: var(--text-2); margin-bottom: -2px; }
+  .rs-folders { flex-basis: 100%; display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); }
+  .rs-folder-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+  .rs-folder-list li { display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px 2px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); font-size: .76rem; }
+  .rs-folder-list li i { color: #d97706; }
+  .rs-folder-list li.rs-folder-empty { border-style: dashed; color: var(--muted); padding-right: 10px; }
+  .rs-folder-x { border: 0; background: none; color: var(--muted); font-size: 1rem; line-height: 1; padding: 0 4px; cursor: pointer; }
+  .rs-folder-x:hover { color: var(--danger); }
+  .rs-folder-add { display: flex; gap: 6px; align-items: flex-start; }
+  .rs-folder-add .jrfp { flex: 1; min-width: 0; }
+  .rs-folder-add > .btn { height: 32px; }
+  .rs-note { font-size: .72rem; color: var(--muted); }
   .rs-radio { display: flex; gap: 20px; flex-wrap: wrap; }
   .rs-test { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .rs-test-result { font-size: .84rem; font-weight: 600; }
@@ -303,6 +448,8 @@
   }
 </style>
 
+<script src="/reports/print-out-builder/assets/publish-panel.js"></script>
+<script src="/reports/print-out-builder/assets/jrxml-design.js"></script>
 <script>
   Page.setup({
     data: function () {
@@ -313,6 +460,7 @@
         return [
           { id: 'rs-connection', name: 'JasperServers', icon: 'fas fa-server' },
           { id: 'rs-policy', name: 'Publishing', icon: 'fas fa-shield-alt' },
+          { id: 'rs-output', name: 'Print & download', icon: 'fas fa-print' },
           { id: 'rs-his', name: 'Centrix HIS', icon: 'fas fa-hospital' },
           { id: 'rs-builder', name: 'Print-Out Builder', icon: 'fas fa-file-pdf' },
           { id: 'rs-designer', name: 'Designer & Publish', icon: 'fas fa-drafting-compass' },
@@ -320,6 +468,17 @@
         ];
       },
       maxServers: function () { return 10; },
+      // How many Print & download switches are off.
+      outputOff: function () { var f = this.f; return [f.allowDesignerPrint, f.allowViewerDownload, f.allowViewerPrint, f.allowViewerDrive].filter(function (x) { return x === false; }).length; },
+      wmFonts: function () { return window.JrxmlDesign ? JrxmlDesign.FONTS : ['TH SarabunPSK']; },
+      // The preview's text: its look, scaled from points on A4 (595 px wide) to the 150 px paper.
+      wmStyle: function () {
+        var w = this.wm, k = 150 / 595;
+        return { color: w.color, opacity: w.opacity, fontWeight: w.bold ? 700 : 400, fontSize: Math.max(4, w.size * k) + 'px',
+          fontFamily: '"' + w.font + '", sans-serif', transform: 'rotate(' + (-w.angle) + 'deg)', margin: w.tiled ? Math.max(2, w.gap * k / 2) + 'px' : 0 };
+      },
+      // For the folder picker: the saved servers it can browse (with the login stored in Settings).
+      pickCtx: function () { return { defaults: {}, jasper: { servers: (this.s.servers || []).map(function (sv) { return { id: sv.id, name: sv.name, configured: sv.configured }; }) } }; },
       readyCount: function () { return (this.s.servers || []).filter(function (sv) { return sv.configured; }).length; },
       // Saved servers each tool publishes to unless the user picks others.
       defaultNames: function () {
@@ -346,9 +505,12 @@
       body: function () {
         return Object.assign({}, this.f, {
           servers: this.f.servers.map(function (sv) {
-            return { id: sv.id, name: sv.name, url: sv.url, user: sv.user, password: sv.password, clearPassword: sv.clearPassword, allowSelfSigned: sv.allowSelfSigned, publishByDefault: sv.publishByDefault, zone: sv.zone };
+            return { id: sv.id, name: sv.name, url: sv.url, user: sv.user, password: sv.password, clearPassword: sv.clearPassword, allowSelfSigned: sv.allowSelfSigned, publishByDefault: sv.publishByDefault, zone: sv.zone,
+              browseDesigner: sv.browseDesigner, browseViewer: sv.browseViewer, browseFolders: sv.foldersMode === 'some' ? sv.browseFolders.slice() : [] };
           }),
-          inputControls: this.inputControlsText, designerInputControls: this.designerControlsText
+          inputControls: this.inputControlsText, designerInputControls: this.designerControlsText,
+          designerWatermark: this.wm.on ? { text: this.wm.text, angle: this.wm.angle, size: this.wm.size, color: this.wm.color, opacity: this.wm.opacity,
+            bold: this.wm.bold, font: this.wm.font, tiled: this.wm.tiled, gap: this.wm.gap } : null
         });
       },
       dirty: function () {
@@ -385,8 +547,12 @@
             reportUnit: s.reportUnit, defaultVisitUid: s.defaultVisitUid, defaultOrgUid: s.defaultOrgUid,
             designerFolder: s.designerFolder || '', designerDataSource: s.designerDataSource || '',
             designerInputControlsMode: s.designerInputControlsMode === 'custom' ? 'custom' : 'same',
-            allowDirectPublish: s.allowDirectPublish !== false
+            allowDirectPublish: s.allowDirectPublish !== false,
+            allowDesignerPrint: s.allowDesignerPrint !== false, allowViewerDownload: s.allowViewerDownload !== false,
+            allowViewerPrint: s.allowViewerPrint !== false, allowViewerDrive: s.allowViewerDrive !== false
           },
+          // The default watermark: the stored one, or the Designer's defaults to start from when there is none.
+          wm: Object.assign({ on: !!s.designerWatermark }, window.JrxmlDesign ? JrxmlDesign.defaultWatermark() : {}, s.designerWatermark || {}),
           inputControlsText: (s.inputControls || []).join('\n'),
           designerControlsText: (s.designerInputControls || []).join('\n')
         };
@@ -396,7 +562,9 @@
           key: sv.id || ('n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)),
           id: sv.id || '', name: sv.name || '', url: sv.url || '', user: sv.user || '', password: '', clearPassword: false,
           hasPassword: !!sv.hasPassword, allowSelfSigned: sv.allowSelfSigned !== false, publishByDefault: !!sv.publishByDefault,
-          zone: sv.zone || '', testing: false, testResult: null
+          zone: sv.zone || '', browseDesigner: sv.browseDesigner !== false, browseViewer: sv.browseViewer !== false,
+          browseFolders: (sv.browseFolders || []).slice(), foldersMode: sv.browseFolders && sv.browseFolders.length ? 'some' : 'all', addFolder: '',
+          testing: false, testResult: null
         };
       },
       addServer: function () {
@@ -430,9 +598,17 @@
             .then(function (d) { if (!r.ok || d.error) throw new Error(d.error || ('HTTP ' + r.status)); return d; });
         });
       },
+      // Only these folders: a path typed or picked, as /A/B.
+      addFolder: function (sv) {
+        var p = '/' + String(sv.addFolder || '').split('/').map(function (x) { return x.trim(); }).filter(Boolean).join('/');
+        if (p !== '/' && sv.browseFolders.indexOf(p) < 0) sv.browseFolders.push(p);
+        sv.addFolder = '';
+      },
       save: function () {
         var vm = this;
         if (vm.saving) return;
+        var empty = vm.f.servers.filter(function (sv) { return sv.foldersMode === 'some' && !sv.browseFolders.length && (sv.browseDesigner || sv.browseViewer); });
+        if (empty.length) { vm.error = (empty[0].name || 'A JasperServer') + ': add at least one folder to "Only these folders", or choose All folders.'; window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
         vm.saving = true; vm.saved = false; vm.error = '';
         vm.post('/reports/settings', vm.body)
           .then(function (d) {

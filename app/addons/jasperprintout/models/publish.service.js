@@ -31,9 +31,11 @@ exports.pageContext = async function (req, tool) {
   const [settings, org] = await Promise.all([settingsModel.forPage(tool), his.siteOrg(req.session)]);
   const isAdmin = !!req.user && req.user.role === permissions.ADMIN_ROLE;
   return {
-    defaults: { folder: settings.defaultFolder, dataSource: settings.defaultDataSource },
+    defaults: { folder: settings.defaultFolder, dataSource: settings.defaultDataSource, watermark: settings.designerWatermark || null },
     // false: Reports > Settings turned direct publishing off (Publish Report's deploy workflow only).
     directPublish: settings.allowDirectPublish !== false,
+    // false: Reports > Settings turned Jasper Designer's Save PDF / Print off.
+    designerPrint: settings.allowDesignerPrint !== false,
     // What the user's role may do on each page (addon.json "actions"; administrators: everything).
     can: {
       builder: permissions.actionsFor(req.user, '/reports/print-out-builder'),
@@ -42,7 +44,8 @@ exports.pageContext = async function (req, tool) {
     },
     jasper: {
       configured: settings.configured,
-      servers: settings.servers.map((sv) => ({ id: sv.id, name: sv.name, url: sv.url, configured: sv.configured, publishByDefault: sv.publishByDefault, zone: sv.zone || '' }))
+      servers: settings.servers.map((sv) => ({ id: sv.id, name: sv.name, url: sv.url, configured: sv.configured, publishByDefault: sv.publishByDefault, zone: sv.zone || '',
+        browseDesigner: settingsModel.canBrowse(sv, 'designer') }))
     },
     his: {
       connected: !!org,

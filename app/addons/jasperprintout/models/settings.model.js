@@ -1,7 +1,11 @@
 // Reports > Settings, shared by the Print-Out Builder, Jasper Designer and Publish Report: the
 // JasperServers they publish to, Centrix HIS registration and each tool's report defaults.
 // One JSON row in SQLite app_meta; JasperServer passwords are stored encrypted.
-// servers: [{ id, name, url, user, password, allowSelfSigned, publishByDefault, zone }]. A report can be
+// servers: [{ id, name, url, user, password, allowSelfSigned, publishByDefault, zone, browseDesigner, browseViewer }].
+// browseDesigner / browseViewer: its folders are shown in Jasper Designer > Open a design / in the Jasper
+// Viewer (on unless turned off; servers saved before these settings show everywhere). browseFolders: the
+// folders those lists may show ([] = all), e.g. ['/Centrixreports/Lab']: each with everything in it; the
+// folders above them only as the way down to them (see listFolder). A report can be
 // published to several at once; those marked publishByDefault are ticked first. zone ('uat', 'prod'
 // or '') puts a server in a stage of the UAT -> Production deploy workflow on Publish Report. Settings saved
 // before there were several servers (jasperUrl, jasperUser, …) become the server "Main".
@@ -9,6 +13,7 @@
 // Print-Out Builder", so get('designer') resolves them before use.
 const { run, get } = require('../../../core/config/sqlite');
 const { medintEncrypt: encrypt, medintDecrypt: decrypt } = require('../../../core/helpers/encryption');
+const JD = require('../public/jrxml-design');      // the watermark's settings, as a design keeps them
 
 const KEY = 'jasperprintout.settings';
 const OBJECT_ID = /^[0-9a-f]{24}$/i;
@@ -27,9 +32,18 @@ const DEFAULTS = Object.freeze({
   // false: reports reach JasperServer only through Publish Report's deploy workflow (UAT, then
   // Production); the Print-Out Builder, Jasper Designer and Publish Report hide direct publishing.
   allowDirectPublish: true,
+  // Print & download (on unless turned off): Jasper Designer's Save PDF / Print (Live Preview), and the
+  // Jasper Viewer's Download, Print and Save to Google Drive (the browser's PDF toolbar).
+  allowDesignerPrint: true,
+  allowViewerDownload: true,
+  allowViewerPrint: true,
+  allowViewerDrive: true,
   // Jasper Designer and Publish Report ('' / 'same' = the Print-Out Builder's value)
   designerFolder: '',
   designerDataSource: '',
+  // The watermark new Jasper Designer reports start with ({ text, angle, size, color, opacity, bold, font,
+  // tiled, gap }, as a design keeps it), or null: none.
+  designerWatermark: null,
   designerInputControlsMode: 'same',   // 'same' | 'custom' (custom with no paths = none)
   designerInputControls: [],
   interfaceUserUid: '',          // Centrix user written as createdby/modifiedby when registering in HIS
@@ -48,6 +62,23 @@ const newId = () => Math.random().toString(36).slice(2, 10);
 
 // The servers list from the form. A blank password keeps the stored one (matched by id);
 // clearPassword removes it.
+// The folders a server's lists may show: repository paths such as /Centrixreports/Lab (no duplicates,
+// none inside another one of the list).
+const MAX_FOLDERS = 50;
+const folderPath = (f) => '/' + String(f || '').split('/').map((s) => s.trim()).filter(Boolean).join('/');
+function cleanFolders(list, label, errors) {
+  const out = [];
+  (Array.isArray(list) ? list : []).slice(0, MAX_FOLDERS + 1).forEach((f) => {
+    const p = folderPath(f);
+    if (p === '/') return;
+    if (!REPO_PATH.test(p) || p.includes('..') || p.length > 300) { errors.push(`${label}: "${String(f).slice(0, 80)}" is not a folder path such as /Centrixreports/Lab.`); return; }
+    if (!out.includes(p)) out.push(p);
+  });
+  if (out.length > MAX_FOLDERS) errors.push(`${label}: at most ${MAX_FOLDERS} folders can be listed.`);
+  // A folder inside another listed one adds nothing.
+  return out.slice(0, MAX_FOLDERS).filter((p) => !out.some((q) => q !== p && p.startsWith(q + '/')));
+}
+
 function cleanServers(input, stored, errors) {
   const old = new Map((stored || []).map((sv) => [sv.id, sv]));
   const list = Array.isArray(input) ? input.slice(0, MAX_SERVERS + 1) : [];
@@ -67,7 +98,10 @@ function cleanServers(input, stored, errors) {
       password: yes(raw.clearPassword) ? '' : raw.password ? encrypt(String(raw.password)) : (prev.password || ''),
       allowSelfSigned: yes(raw.allowSelfSigned),
       publishByDefault: yes(raw.publishByDefault),
-      zone: ZONES[raw.zone] ? raw.zone : ''
+      zone: ZONES[raw.zone] ? raw.zone : '',
+      browseDesigner: raw.browseDesigner == null ? true : yes(raw.browseDesigner),
+      browseViewer: raw.browseViewer == null ? true : yes(raw.browseViewer),
+      browseFolders: cleanFolders(raw.browseFolders, str(raw.name, 60) || 'A JasperServer', errors)
     };
     const label = sv.name || sv.url || 'A JasperServer';
     if (!sv.name) errors.push('Give every JasperServer a name.');
@@ -89,7 +123,13 @@ function clean(input, stored) {
       .map((v) => str(v)).filter(Boolean),
     headerSubreport: str(input.headerSubreport),
     allowDirectPublish: input.allowDirectPublish === undefined ? s.allowDirectPublish !== false : yes(input.allowDirectPublish),
+    allowDesignerPrint: input.allowDesignerPrint === undefined ? s.allowDesignerPrint !== false : yes(input.allowDesignerPrint),
+    allowViewerDownload: input.allowViewerDownload === undefined ? s.allowViewerDownload !== false : yes(input.allowViewerDownload),
+    allowViewerPrint: input.allowViewerPrint === undefined ? s.allowViewerPrint !== false : yes(input.allowViewerPrint),
+    allowViewerDrive: input.allowViewerDrive === undefined ? s.allowViewerDrive !== false : yes(input.allowViewerDrive),
     designerFolder: str(input.designerFolder).replace(/^\/+|\/+$/g, ''),
+    designerWatermark: input.designerWatermark && typeof input.designerWatermark === 'object'
+      ? Object.assign(JD.sanitizeWatermark(input.designerWatermark), { enabled: true }) : null,
     designerDataSource: str(input.designerDataSource),
     designerInputControlsMode: input.designerInputControlsMode === 'custom' ? 'custom' : 'same',
     designerInputControls: (Array.isArray(input.designerInputControls) ? input.designerInputControls : String(input.designerInputControls || '').split(/\r?\n|,/))
@@ -106,6 +146,7 @@ function clean(input, stored) {
   out.inputControls.forEach((ic) => { if (!REPO_PATH.test(ic) || ic.includes('..')) errors.push(`Input control "${ic}" must be a repository path.`); });
   if (out.headerSubreport && !REPO_PATH.test(out.headerSubreport)) errors.push('Header subreport must be a repository path, or empty for no header.');
   if (out.designerFolder && (!/^[A-Za-z0-9_\-/ ]+$/.test(out.designerFolder) || out.designerFolder.includes('..'))) errors.push('Jasper Designer folder may contain letters, numbers, _ - and /.');
+  if (out.designerWatermark && !out.designerWatermark.text.trim()) errors.push('Type the default watermark text, or turn the default watermark off.');
   if (out.designerDataSource && (!REPO_PATH.test(out.designerDataSource) || out.designerDataSource.includes('..'))) errors.push('Jasper Designer data source must be a repository path such as /Centrixreports/ArcusDB.');
   if (out.designerInputControlsMode === 'custom') out.designerInputControls.forEach((ic) => { if (!REPO_PATH.test(ic) || ic.includes('..')) errors.push(`Jasper Designer input control "${ic}" must be a repository path.`); });
   else out.designerInputControls = [];
@@ -136,6 +177,32 @@ async function readStored() {
 }
 
 const isSetUp = (sv) => !!(sv.url && sv.user && sv.password);
+
+// Whether a server's repository folders may be shown in 'designer' (Open a design) or 'viewer' (Jasper Viewer).
+exports.canBrowse = (sv, where) => !!sv && (where === 'viewer' ? sv.browseViewer : sv.browseDesigner) !== false;
+
+// Whether a report or folder uri is in the folders a server's lists may show (all when it has none).
+const inFolders = (sv, uri) => {
+  const list = (sv && sv.browseFolders) || [];
+  const u = folderPath(uri);
+  return !list.length || list.some((p) => u === p || u.startsWith(p + '/'));
+};
+exports.inFolders = inFolders;
+
+/**
+ * What a list of a folder (items from JasperServer: { uri, type }) may show of it: everything in a
+ * listed folder (or in any folder when none are listed); above them, only the folders on the way down
+ * to them; null when the folder is outside them all.
+ */
+exports.listFolder = function (sv, folder, items) {
+  const list = (sv && sv.browseFolders) || [];
+  const f = folderPath(folder);
+  if (inFolders(sv, f)) return items;
+  const below = list.filter((p) => f === '/' || p.startsWith(f + '/'));
+  if (!below.length) return null;
+  const next = new Set(below.map((p) => (f === '/' ? '' : f) + '/' + p.slice(f === '/' ? 1 : f.length + 1).split('/')[0]));
+  return items.filter((x) => x.type === 'folder' && next.has(folderPath(x.uri)));
+};
 
 // The defaults one tool works with: 'designer' (Jasper Designer, Publish Report) falls back to the
 // Print-Out Builder's folder, data source and input controls where it has none of its own.

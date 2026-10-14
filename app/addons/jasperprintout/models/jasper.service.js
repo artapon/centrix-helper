@@ -32,6 +32,14 @@ function describe(err) {
     const detail = typeof d === 'string' ? d.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
       : d && (d.message || d.errorCode) ? [d.errorCode, d.message].filter(Boolean).join(': ') : JSON.stringify(d);
     if (err.response.status === 401) return 'JasperServer rejected the user name or password (401).';
+    // JasperServer stops a report at its page limit ("Report "X" exceeded the limit of 600 maximum pages").
+    const pages = /exceeded the limit of (\d+) maximum pages/i.exec(detail || '');
+    if (pages) {
+      return `The report has more than ${pages[1]} pages, the most JasperServer prints, so it was stopped. ` +
+        'Its query most likely reads far more records than intended: filter it by the report parameters ' +
+        '(e.g. $match on patientvisituid) or add a $limit, and check the parameter values it was run with. ' +
+        `(JasperServer answered ${err.response.status}: ${detail.slice(0, 300)})`;
+    }
     return `JasperServer answered ${err.response.status}${detail ? ': ' + detail.slice(0, 400) : ''}`;
   }
   if (err.code === 'ECONNABORTED') return 'JasperServer did not answer in time.';
@@ -99,17 +107,20 @@ exports.publish = async function (settings, { folder, reportName, dataSource, jr
 /**
  * Runs a published report unit and returns the file (Buffer). params: { name: value }.
  * JasperServer compiles the JRXML here, so JRXML mistakes come back as its error message.
+ * opts.signal (AbortSignal): stops waiting for JasperServer (the Jasper Viewer's Stop).
  */
-exports.run = async function (settings, unitUri, format, params) {
+exports.run = async function (settings, unitUri, format, params, opts) {
   const http = client(settings);
   try {
     const r = await http.get('/reports' + unitUri.split('/').map((s) => (s ? encodeURIComponent(decodeURIComponent(s)) : s)).join('/') + '.' + format, {
       params: params || {},
       responseType: 'arraybuffer',
-      timeout: 120000
+      timeout: 120000,
+      signal: opts && opts.signal
     });
     return Buffer.from(r.data);
   } catch (err) {
+    if (axios.isCancel(err) || (opts && opts.signal && opts.signal.aborted)) throw Object.assign(new Error('The report was stopped.'), { status: 499, expose: true, stopped: true });
     if (err.response && err.response.data && !(typeof err.response.data === 'string')) {
       err.response.data = Buffer.from(err.response.data).toString('utf8');
       try { err.response.data = JSON.parse(err.response.data); } catch (e) { /* XML or text */ }

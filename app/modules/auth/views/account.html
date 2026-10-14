@@ -1,0 +1,68 @@
+<div class="col-12">
+  <div v-if="success" class="alert alert-success" role="alert"><i class="fas fa-check-circle mr-2"></i>{{ success }}</div>
+  <div v-if="error" class="alert alert-danger" role="alert"><i class="fas fa-exclamation-triangle mr-2"></i>{{ error }}</div>
+</div>
+
+<div class="col-lg-5">
+  <div class="card">
+    <div class="card-header"><i class="fas fa-id-badge"></i><span>Profile</span></div>
+    <div class="card-body">
+      <form method="post" action="/account/profile">
+        <div class="form-group">
+          <label>Username</label>
+          <input type="text" class="form-control" :value="profile.username" readonly>
+        </div>
+        <div class="form-group">
+          <label for="a_name">Full name</label>
+          <input id="a_name" type="text" class="form-control" name="name" :value="profile.name" autocomplete="name">
+        </div>
+        <div class="form-group">
+          <label>Role</label>
+          <div><span :class="profile.role === 'admin' ? 'badge badge-primary' : 'badge badge-secondary'">
+            {{ profile.roleName }}</span></div>
+        </div>
+        <button type="submit" class="btn btn-primary">Save profile</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="col-lg-7">
+  <div class="card">
+    <div class="card-header"><i class="fas fa-key"></i><span>Change password</span></div>
+    <div class="card-body">
+      <form method="post" action="/account/password" id="passwordForm">
+        <div class="form-group">
+          <label for="a_current">Current password</label>
+          <input id="a_current" type="password" class="form-control" name="current_password" autocomplete="current-password" required>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-sm-6">
+            <label for="a_password">New password</label>
+            <input id="a_password" type="password" class="form-control" name="password" :minlength="minLength" autocomplete="new-password" required>
+            <small class="form-text">At least {{ minLength }} characters.</small>
+          </div>
+          <div class="form-group col-sm-6">
+            <label for="a_confirm">Confirm new password</label>
+            <input id="a_confirm" type="password" class="form-control" name="password_confirm" :minlength="minLength" autocomplete="new-password" required>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary">Change password</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  Page.setup({
+    mounted: function () {
+      var password = document.getElementById('a_password');
+      var confirm = document.getElementById('a_confirm');
+      var check = function () {
+        confirm.setCustomValidity(confirm.value && confirm.value !== password.value ? 'Passwords do not match.' : '');
+      };
+      password.addEventListener('input', check);
+      confirm.addEventListener('input', check);
+    }
+  });
+</script>

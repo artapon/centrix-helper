@@ -1,0 +1,72 @@
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-search" style="color:#2563eb;"></i>
+      <span>Filter</span>
+    </div>
+    <div class="card-body">
+      <form method="get" action="/inventory/goods-receipts">
+        <div class="form-row align-items-end">
+          <div class="form-group col-sm-3">
+            <label>GRN Number</label>
+            <input type="text" class="form-control" name="grn">
+          </div>
+          <div class="form-group col-sm-3">
+            <input type="submit" class="btn btn-success" value="กรองข้อมูล">
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-truck-loading" style="color:#2563eb;"></i>
+      <span>Goods Receipt</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>GR NUMBER</th>
+              <th>INVOICE NUMBER</th>
+              <th>INVOICE DATE</th>
+              <th class="text-center">GRN TYPE</th>
+              <th class="text-center">STORE CODE</th>
+              <th class="text-center">STORE NAME</th>
+              <th class="text-center">VENDOR CODE</th>
+              <th class="text-center">VENDOR NAME</th>
+              <th>NETAMOUT</th>
+              <th>ITEMS</th>
+              <th class="text-center">STATUS</th>
+              <th>COMMENTS</th>
+              <th class="text-center">Approvedby</th>
+              <th class="text-center">Approved Date</th>
+              <th>Create At</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in results">
+              <td :style="item.grnnumber == '' ? 'background-color: red; color : white;' : ''">{{ item.grnnumber }}</td>
+              <td :style="item.invoicenumber == '' ? 'background-color: red; color : white;' : ''">{{ item.invoicenumber }}</td>
+              <td class="text-center" :style="item.invoicedate == '' ? 'background-color: red; color : white;' : ''">{{ item.invoicedate }}</td>
+              <td :style="item.grntype == '' ? 'background-color: red; color : white;' : ''">{{ item.grntype }}</td>
+              <td :style="item.storecode == '' ? 'background-color: red; color : white;' : ''" class="text-center">{{ item.storecode }}</td>
+              <td :style="item.storename == '' ? 'background-color: red; color : white;' : ''">{{ item.storename }}</td>
+              <td :style="item.vendorcode == '' ? 'background-color: red; color : white;' : ''" class="text-center">{{ item.vendorcode }}</td>
+              <td :style="item.vendorname == '' ? 'background-color: red; color : white;' : ''">{{ item.vendorname }}</td>
+              <td class="text-right" :style="item.netamount == '0' || item.netamount == '' ? 'background-color: red; color : white;' : ''">{{ item.netamount }}</td>
+              <td class="text-center"><a :href="`/inventory/goods-receipt-items/${item._id}`">{{ item.items }}</a></td>
+              <td class="text-center" :style="item.status == 'Approval Required' || item.status == '' ? 'background-color: red; color : white;' : ''">{{ item.status }}</td>
+              <td>{{ item.comments }}</td>
+              <td class="text-center">{{ item.approvedby || "" }}</td>
+              <td class="text-center">{{ item.approvaldate || "" }}</td>
+              <td>{{ item.createdat }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

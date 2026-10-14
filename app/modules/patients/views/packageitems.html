@@ -1,0 +1,45 @@
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-boxes" style="color:#2563eb;"></i>
+      <span>Package Items</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>OrderCode</th>
+              <th>OrderName</th>
+              <th class="text-center">Quantity</th>
+              <th class="text-right">Packageitemprice</th>
+              <th class="text-right">Doctoritemshare</th>
+              <th class="text-center">Activefrom</th>
+              <th class="text-center">ActiveTo</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in packageitems">
+              <td>{{ item.code }}</td>
+              <td>{{ item.name }}</td>
+              <td class="text-center">{{ item.quantity }}</td>
+              <td class="text-right">{{ item.packageitemprice }}</td>
+              <td :style="item.doctoritemshare != 0 ? 'background-color: green; color : white;' : ''" class="text-right">{{ item.doctoritemshare || 0 }}</td>
+              <td class="text-center">{{ item.activefrom }}</td>
+              <td class="text-center">{{ item.activeto || '' }}</td>
+            </tr>
+            <tr>
+              <td></td>
+              <td></td>
+              <td></td>
+              <td class="text-right" style="font-size: 20px;"><b>{{ totalprices.toFixed(2) }}</b></td>
+              <td class="text-right" style="font-size: 20px;"><b>{{ totaldfshare.toFixed(2) }}</b></td>
+              <td></td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

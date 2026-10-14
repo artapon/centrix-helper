@@ -1,0 +1,329 @@
+
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-building" style="color:#2563eb;"></i>
+      <span>Centrix Organisations</span>
+    </div>
+    <div class="card-body">
+      <div class="form-row">
+        <div class="form-group col-sm-4">
+          <label>Orguid</label>
+          <input autocomplete="off" type="text" class="form-control" :value="org._id" readonly>
+        </div>
+        <div class="form-group col-sm-4">
+          <label>Code</label>
+          <input autocomplete="off" type="text" class="form-control" :value="org.code || ''" readonly>
+        </div>
+        <div class="form-group col-sm-4">
+          <label>Name</label>
+          <input autocomplete="off" type="text" class="form-control" :value="org.name" readonly>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-user-cog" style="color:#2563eb;"></i>
+      <span>Interface User</span>
+    </div>
+    <div class="card-body">
+      <div class="form-row">
+        <div class="form-group col-sm-4">
+          <label>Interface User Code</label>
+          <input autocomplete="off" type="text" class="form-control" :value="interfaceUser.code || ''" readonly>
+        </div>
+        <div class="form-group col-sm-4">
+          <label>Interface User name</label>
+          <input autocomplete="off" type="text" class="form-control" :value="interfaceUser.name" readonly>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-x-ray" style="color:#2563eb;"></i>
+      <span>Radiology Setting</span>
+    </div>
+    <div class="card-body">
+      <div class="form-row">
+        <div class="form-group col-sm-4">
+          <label>ACCESSION No. Format</label>
+          <input autocomplete="off" type="text" class="form-control" :value="risSequence.displayformat" readonly>
+        </div>
+        <div class="form-group col-sm-4">
+          <label>Interface Server (Mirth)</label>
+          <input autocomplete="off" type="text" class="form-control" :value="radiologySetting ? radiologySetting.interfaceserver : ''" readonly>
+        </div>
+        <div class="form-group col-sm-4">
+          <label>Interface Server Port (Mirth)</label>
+          <input autocomplete="off" type="text" class="form-control" :value="radiologySetting ? radiologySetting.interfaceport  : ''" readonly>
+        </div>
+        <div class="form-group col-sm-12">
+          <label>PACS HN Level URL</label>
+          <input autocomplete="off" type="text" class="form-control" :value="emrSetting.pacsviewerurl" readonly>
+        </div>
+        <div class="form-group col-sm-12">
+          <label>PACS Accession No. Level URL</label>
+          <input autocomplete="off" type="text" class="form-control" :value="emrSetting.pacsvieweracclvurl" readonly>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-flask" style="color:#2563eb;"></i>
+      <span>Laboratory Setting</span>
+    </div>
+    <div class="card-body">
+      <div class="form-row">
+        <div class="form-group col-sm-4">
+          <label>LAB No. Format</label>
+          <input autocomplete="off" type="text" class="form-control" :value="labSequence.displayformat" readonly>
+        </div>
+        <div class="form-group col-sm-4">
+          <label>Reference Domain Code</label>
+          <input autocomplete="off" type="text" class="form-control" :value="lisSetting[0] ? lisSetting[0].code : ''" readonly>
+        </div>
+        <div class="form-group col-sm-4">
+          <label>Reference Domain Name</label>
+          <input autocomplete="off" type="text" class="form-control" :value="lisSetting[0] ? lisSetting[0].name : ''" readonly>
+        </div>
+        <div class="form-group col-sm-4">
+          <label>Reference Value Code</label>
+          <input autocomplete="off" type="text" class="form-control" :value="lisSetting[0] ? lisSetting[0].valuecode : ''" readonly>
+        </div>
+        <div class="form-group col-sm-4">
+          <label>Reference Value Name</label>
+          <input autocomplete="off" type="text" class="form-control" :value="lisSetting[0] ? lisSetting[0].valuedescription : ''" readonly>
+        </div>
+        <div class="form-group col-sm-4">
+          <label>Related Value</label>
+          <input autocomplete="off" type="text" class="form-control" :value="lisSetting[0] ? lisSetting[0].relatedvalue : ''" readonly>
+        </div>
+        <div class="form-group col-sm-4">
+          <label>Reference Value Code</label>
+          <input autocomplete="off" type="text" class="form-control" :value="lisSetting[1] ? lisSetting[1].valuecode : ''" readonly>
+        </div>
+        <div class="form-group col-sm-4">
+          <label>Reference Value Name</label>
+          <input autocomplete="off" type="text" class="form-control" :value="lisSetting[1] ? lisSetting[1].valuedescription : ''" readonly>
+        </div>
+        <div class="form-group col-sm-4">
+          <label>Related Value</label>
+          <input autocomplete="off" type="text" class="form-control" :value="lisSetting[1] ? lisSetting[1].relatedvalue : ''" readonly>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-id-card" style="color:#2563eb;"></i>
+      <span>RTMESVRURL (Settup IDCARD)</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th class="text-center">Code</th>
+              <th class="text-center">Description</th>
+              <th class="text-center">Locallanguagedesc</th>
+              <th class="text-center">Related Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in smartcards">
+              <td class="text-center">{{ item.code || '' }}</td>
+              <td class="text-center">{{ item.valuedescription }}</td>
+              <td class="text-center">{{ item.locallanguagedesc }}</td>
+              <td class="text-center">{{ item.relatedvalue }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-plug" style="color:#2563eb;"></i>
+      <span>Active Thirdparty Setting</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>Module Name</th>
+              <th>API Name</th>
+              <th>URL</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in thirdpartySettings">
+              <td>{{ item.modulename }}</td>
+              <td>{{ item.apiname }}</td>
+              <td>{{ item.url }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-file-invoice-dollar" style="color:#2563eb;"></i>
+      <span>DF Setting For Interface Revenue</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Name</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in dfs">
+              <td>{{ item.code || '' }}</td>
+              <td>{{ item.name || '' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-university" style="color:#2563eb;"></i>
+      <span>Bank Setting For Interface Revenue</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th class="text-center">Code</th>
+              <th class="text-center">Description</th>
+              <th class="text-center">Locallanguagedesc</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in bankcodes">
+              <td class="text-center">{{ item.code ? item.code : '' }}</td>
+              <td class="text-center">{{ item.valuedescription }}</td>
+              <td class="text-center">{{ item.locallanguagedesc }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-link" style="color:#2563eb;"></i>
+      <span>Active External URL Setting</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Name</th>
+              <th>Valuecode</th>
+              <th>Valuedescription</th>
+              <th>Relatedvalue</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in externalurls">
+              <td>{{ item.code ? item.code : '' }}</td>
+              <td>{{ item.name }}</td>
+              <td>{{ item.valuecode }}</td>
+              <td>{{ item.valuedescription }}</td>
+              <td>{{ item.relatedvalue }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-server" style="color:#2563eb;"></i>
+      <span>FILESERVERCONFIG สำหรับ File Server ถ้าไม่มีจะ SAVE ลง DB</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th class="text-center">Code</th>
+              <th class="text-center">Description</th>
+              <th class="text-center">Locallanguagedesc</th>
+              <th class="text-center">Related Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in fileServers">
+              <td class="text-center">{{ item.code || '' }}</td>
+              <td class="text-center">{{ item.valuedescription }}</td>
+              <td class="text-center">{{ item.locallanguagedesc }}</td>
+              <td class="text-center">{{ item.relatedvalue }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-credit-card" style="color:#2563eb;"></i>
+      <span>EDC Configs</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>Bank Name</th>
+              <th>Name</th>
+              <th>Domain Code</th>
+              <th>Valuecode Code</th>
+              <th>Related Value</th>
+              <th>Sale Api</th>
+              <th>Void Api</th>
+              <th>Proxy URL</th>
+              <th>Serial Port</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in edcconfigs">
+              <td>{{ item.bankname }}</td>
+              <td>{{ item.name }}</td>
+              <td>{{ item.domaincode || "" }}</td>
+              <td>{{ item.valuecode || "" }}</td>
+              <td>{{ item.relatedvalue || "" }}</td>
+              <td>{{ item.saleapi || "" }}</td>
+              <td>{{ item.voidapi || "" }}</td>
+              <td>{{ item.proxyurl || "" }}</td>
+              <td>{{ item.serialport || "" }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

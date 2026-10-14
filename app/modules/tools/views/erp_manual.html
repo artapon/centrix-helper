@@ -1,0 +1,94 @@
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-calendar-alt" style="color:#2563eb;"></i>
+      <span>เลือกวันที่</span>
+    </div>
+    <div class="card-body">
+      <form method="get" action="/tools/erp-manual">
+        <div class="form-row align-items-end">
+          <div class="form-group col-sm-3">
+            <label>วันที่</label>
+            <input type="text" class="datetimepicker2 form-control" name="date">
+          </div>
+          <div class="form-group col-sm-3">
+            <input type="submit" class="btn btn-success" value="เลือกวันที่">
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="col-sm-12 mt-2">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-sync" style="color:#2563eb;"></i>
+      <span>ERP Manual Services</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>Service Name</th>
+              <th>ข้อมูล ณ วันที่</th>
+              <th>Action</th>
+              <th>Action Generate Files Only</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>All Services</td>
+              <td><b>{{ selectedDate }}</b></td>
+              <td><a target="_blank" onclick="return confirm('คุณต้องการรัน ERP Services ทั้งหมด manual ?')" :href="`${outbound}/generate_file/?dateat=${dateat}&checkfile=false&useapi=true`" class="btn btn-success"><i class="fas fa-play-circle"></i> Manual ส่งข้อมูลให้ ERP</a></td>
+              <td><a target="_blank" onclick="return confirm('คุณต้องการรัน Generate Files ERP Services ทั้งหมด ?')" :href="`${outbound}/generate_file/?dateat=${dateat}&checkfile=false&useapi=false`" class="btn btn-primary"><i class="fas fa-play-circle"></i> Generate Files (เท่านั้น)</a></td>
+            </tr>
+            <tr>
+              <td>Inventory</td>
+              <td><b>{{ selectedDate }}</b></td>
+              <td><a target="_blank" onclick="return confirm('คุณต้องการรัน ERP Service Inventory manual ?')" :href="`${outbound}/generate_file/inventory?dateat=${dateat}&checkfile=false&useapi=true`" class="btn btn-success"><i class="fas fa-play-circle"></i> Manual ส่งข้อมูลให้ ERP</a></td>
+              <td><a target="_blank" onclick="return confirm('คุณต้องการรัน Generate Files ERP Service Inventory ?')" :href="`${outbound}/generate_file/inventory?dateat=${dateat}&checkfile=false&useapi=false`" class="btn btn-primary"><i class="fas fa-play-circle"></i> Generate Files (เท่านั้น)</a></td>
+            </tr>
+            <tr>
+              <td>Customer</td>
+              <td><b>{{ selectedDate }}</b></td>
+              <td><a target="_blank" onclick="return confirm('คุณต้องการรัน ERP Service Customer manual ?')" :href="`${outbound}/generate_file/customer?dateat=${dateat}&checkfile=false&useapi=true`" class="btn btn-success"><i class="fas fa-play-circle"></i> Manual ส่งข้อมูลให้ ERP</a></td>
+              <td><a target="_blank" onclick="return confirm('คุณต้องการรัน Generate Files ERP Service Customer ?')" :href="`${outbound}/generate_file/customer?dateat=${dateat}&checkfile=false&useapi=false`" class="btn btn-primary"><i class="fas fa-play-circle"></i> Generate Files (เท่านั้น)</a></td>
+            </tr>
+            <tr>
+              <td>Revenue Header & Details</td>
+              <td><b>{{ selectedDate }}</b></td>
+              <td><a target="_blank" onclick="return confirm('คุณต้องการรัน ERP Service Revenue Header & Details manual ?')" :href="`${outbound}/generate_file/revenueheader?dateat=${dateat}&checkfile=false&useapi=true`" class="btn btn-success"><i class="fas fa-play-circle"></i> Manual ส่งข้อมูลให้ ERP</a></td>
+              <td><a target="_blank" onclick="return confirm('คุณต้องการรัน Generate Files ERP Service Revenue Header & Details ?')" :href="`${outbound}/generate_file/revenueheader?dateat=${dateat}&checkfile=false&useapi=false`" class="btn btn-primary"><i class="fas fa-play-circle"></i> Generate Files (เท่านั้น)</a></td>
+            </tr>
+            <tr>
+              <td>DF Billed</td>
+              <td><b>{{ selectedDate }}</b></td>
+              <td><a target="_blank" onclick="return confirm('คุณต้องการรัน ERP Service DF Billed manual ?')" :href="`${outbound}/generate_file/dfbilled?dateat=${dateat}&checkfile=false&useapi=true`" class="btn btn-success"><i class="fas fa-play-circle"></i> Manual ส่งข้อมูลให้ ERP</a></td>
+              <td><a target="_blank" onclick="return confirm('คุณต้องการรัน Generate Files ERP Service DF Billed ?')" :href="`${outbound}/generate_file/dfbilled?dateat=${dateat}&checkfile=false&useapi=false`" class="btn btn-primary"><i class="fas fa-play-circle"></i> Generate Files (เท่านั้น)</a></td>
+            </tr>
+            <tr>
+              <td>DF Xray Billed</td>
+              <td><b>{{ selectedDate }}</b></td>
+              <td><a target="_blank" onclick="return confirm('คุณต้องการรัน ERP Service DFXRAY Billed manual ?')" :href="`${outbound}/generate_file/dfxraybilled?dateat=${dateat}&checkfile=false&useapi=true`" class="btn btn-success"><i class="fas fa-play-circle"></i> Manual ส่งข้อมูลให้ ERP</a></td>
+              <td><a target="_blank" onclick="return confirm('คุณต้องการรัน Generate Files ERP Service DFXRAY Billed ?')" :href="`${outbound}/generate_file/dfxraybilled?dateat=${dateat}&checkfile=false&useapi=false`" class="btn btn-primary"><i class="fas fa-play-circle"></i> Generate Files (เท่านั้น)</a></td>
+            </tr>
+            <tr>
+              <td>On Ward</td>
+              <td><b>{{ selectedDate }}</b></td>
+              <td><a target="_blank" onclick="return confirm('คุณต้องการรัน ERP Service Oward manual ?')" :href="`${outbound}/generate_file/onward?dateat=${dateat}&checkfile=false&useapi=true`" class="btn btn-success"><i class="fas fa-play-circle"></i> Manual ส่งข้อมูลให้ ERP</a></td>
+              <td><a target="_blank" onclick="return confirm('คุณต้องการรัน Generate Files ERP Service Oward ?')" :href="`${outbound}/generate_file/onward?dateat=${dateat}&checkfile=false&useapi=false`" class="btn btn-primary"><i class="fas fa-play-circle"></i> Generate Files (เท่านั้น)</a></td>
+            </tr>
+            <tr>
+              <td>Doctor Schedule</td>
+              <td><b>{{ selectedDate }}</b></td>
+              <td><a target="_blank" onclick="return confirm('คุณต้องการรัน Doctor Schedule manual ?')" :href="`${outbound}/generate_file/schedule?dateat=${dateat}&checkfile=false&useapi=true`" class="btn btn-success"><i class="fas fa-play-circle"></i> Manual ส่งข้อมูลให้ ERP</a></td>
+              <td><a target="_blank" onclick="return confirm('คุณต้องการรัน Generate Files Doctor Schedule ?')" :href="`${outbound}/generate_file/schedule?dateat=${dateat}&checkfile=false&useapi=false`" class="btn btn-primary"><i class="fas fa-play-circle"></i> Generate Files (เท่านั้น)</a></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

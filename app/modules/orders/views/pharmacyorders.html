@@ -1,0 +1,123 @@
+<style>
+  /* Status and warnings as badges, so rows keep their normal background */
+  .ph-badge { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 1.6; white-space: nowrap; border: 1px solid #e2e8f0; background: #f8fafc; color: #475569; }
+  .ph-badge.is-good { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
+  .ph-badge.is-bad { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+  .ph-badge.is-warn { background: #fff7ed; color: #c2410c; border-color: #fed7aa; }
+</style>
+<script>
+  Page.setup({
+    methods: {
+      statusTone: function (status) {
+        if (status === 'Dispensed') return 'is-good';
+        if (status === 'Cancelled' || status === 'Closed' || status === 'Discontinued') return 'is-bad';
+        return '';
+      }
+    }
+  });
+</script>
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-search" style="color:#2563eb;"></i>
+      <span>Search Pharmacy Orders</span>
+    </div>
+    <div class="card-body">
+      <form method="get" action="/pharmacy/orders" class="form-group">
+        <div class="form-row">
+          <div class="form-group col-sm-3">
+            <label>VN / AN : &nbsp;</label>
+            <input type="text" class="form-control" name="vn">
+          </div>
+          <div class="form-group col-sm-3">
+            <label>HN : &nbsp;</label>
+            <input type="text" class="form-control" name="mrn">
+          </div>
+          <div class="form-group col-sm-3">
+            <label>ITEM CODE : &nbsp;</label>
+            <input type="text" class="form-control" name="itemcode">
+          </div>
+        </div>
+        <div class="form-group col-sm-6">
+          <input type="submit" value="กรองข้อมูล" class="btn btn-success">
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<div class="col-sm-12 mt-2">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-pills" style="color:#2563eb;"></i>
+      <span>Pharmacy Orders</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th class="text-center">HN</th>
+              <th class="text-center">VN</th>
+              <th>Order Date</th>
+              <th>Start Date</th>
+              <th>End Date</th>
+              <th>Ordernumber</th>
+              <th>Itemcode</th>
+              <th>Itemname</th>
+              <th class="text-center">Quantity</th>
+              <th class="text-center">QuantityUOM</th>
+              <th class="text-center">Status</th>
+              <th class="text-center">Dispense No</th>
+              <th class="text-center">Entype</th>
+              <th>Wardcode</th>
+              <th>Wardname</th>
+              <th>Bedcode</th>
+              <th>Bedname</th>
+              <th class="text-center">From Department</th>
+              <th class="text-center">To Department</th>
+              <th class="text-center">Is Active</th>
+              <th class="text-center">Is Continuousorder</th>
+              <th class="text-center">Is Ipfillallowed</th>
+              <th class="text-center">Is taperingdose</th>
+              <th class="text-center">Is Cosigned Required</th>
+              <th class="text-center">Is Cosigned</th>
+              <th>Modifiedat</th>
+              <th>Modifiedby</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in orders">
+              <td class="text-center" ><a target="_blank" :href="`/patients/summary?hn=${ item.HN }`" >{{ item.HN }}</a></td>
+              <td class="text-center" ><a target="_blank" :href="`/patients/summary?vn=${ item.VN }`" >{{ item.VN }}</a></td>
+              <td>{{ item.orderdate }}</td>
+              <td>{{ item.startdate || "" }}</td>
+              <td><span v-if="item.enddate">{{ item.enddate }}</span><span v-else class="ph-badge is-warn" title="No end date">No end date</span></td>
+              <td>{{ item.ordernumber || "" }}</td>
+              <td>{{ item.itemcode || "" }}</td>
+              <td>{{ item.itemname || "" }}</td>
+              <td class="text-center"><span class="ph-badge" :class="item.quantity < 0 ? 'is-bad' : 'is-good'">{{ item.quantity }}</span></td>
+              <td class="text-center" >{{ item.quantityUOM || "" }}</td>
+              <td class="text-center"><span v-if="item.status" class="ph-badge" :class="statusTone(item.status)">{{ item.status }}</span></td>
+              <td class="text-center" :style="item.stockdispensenumber != '' ? 'background-color: green; color : white;' : ''" >{{ item.stockdispensenumber || "" }}</td>
+              <td class="text-center" >{{ item.entype }}</td>
+              <td class="text-center" >{{ item.wardcode || "" }}</td>
+              <td class="text-center" >{{ item.wardname || "" }}</td>
+              <td class="text-center" >{{ item.bedcode || "" }}</td>
+              <td class="text-center" >{{ item.bedname || "" }}</td>
+              <td class="text-center" >{{ item.depname }}</td>
+              <td class="text-center" >{{ item.todepname }}</td>
+              <td class="text-center" :style="item.isactive ? 'background-color: green; color : white;' : ''" >{{ item.isactive }}</td>
+              <td class="text-center"  :style="item.iscontinuousorder ? 'background-color: green; color : white;' : ''" >{{ item.iscontinuousorder || "" }}</td>
+              <td class="text-center" :style="item.isipfillallowed ? 'background-color: green; color : white;' : ''" >{{ item.isipfillallowed || "" }}</td>
+              <td class="text-center" :style="item.istaperingdose ? 'background-color: green; color : white;' : ''" >{{ item.istaperingdose || "" }}</td>
+              <td class="text-center" :style="item.iscosignrequired ? 'background-color: green; color : white;' : ''" >{{ item.iscosignrequired || "" }}</td>
+              <td class="text-center" :style="item.iscosigned ? 'background-color: green; color : white;' : ''" >{{ item.iscosigned || "" }}</td>
+              <td class="text-center" >{{ item.modifiedat }}</td>
+              <td class="text-center" >{{ item.modifiedby }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

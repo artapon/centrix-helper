@@ -1,0 +1,111 @@
+<style>
+  .Dispensed {
+    background-color: green;
+    color:white;
+  }
+  .Cancelled,.Closed {
+    background-color: red;
+    color:white;
+  }
+  /* Dispensed with no linked order item: the cells carry the colour so the table's own cell background cannot hide the text */
+  #ipfilltable tr.ipf-error > td { background-color: #CD5C5C !important; color: #fff !important; }
+  #ipfilltable tr.ipf-error a { color: #fff !important; text-decoration: underline; }
+  #ipfilltable td.ipf-cancelled { background-color: red !important; color: #fff !important; }
+</style>
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-search" style="color:#2563eb;"></i>
+      <span>Search IP Fill Orders</span>
+    </div>
+    <div class="card-body">
+      <form method="get" action="/pharmacy/ip-fill-orders" class="form-group">
+        <div class="form-row">
+          <div class="form-group col-sm-3">
+            <label>VN / AN : &nbsp;</label>
+            <input type="text" class="form-control" name="vn">
+          </div>
+          <div class="form-group col-sm-3">
+            <label>HN : &nbsp;</label>
+            <input type="text" class="form-control" name="hn">
+          </div>
+        </div>
+        <div class="form-group col-sm-6">
+          <input type="submit" value="กรองข้อมูล" class="btn btn-success">
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<div class="col-sm-12 mt-2">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-pills" style="color:#2563eb;"></i>
+      <span>IP Fill Orders</span>
+    </div>
+    <div class="card-body">
+      <button class="btn btn-success" onclick="filterRowsByColor()">Show Errors Rows</button>
+      <button class="btn btn-success" onclick="showAllRows()">Show All Rows</button>
+    </div>
+    <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+      <table class="table mb-0" id="ipfilltable">
+        <thead>
+          <tr>
+            <th class="text-center">HN</th>
+            <th class="text-center">VN</th>
+            <th class="text-center">Order Date</th>
+            <th class="text-center">IP Fill Number</th>
+            <th class="text-center">IP Fill QTY</th>
+            <th class="text-center">IP Fill Cut Of Time</th>
+            <th class="text-center">Order Number</th>
+            <th>Order Code</th>
+            <th>Order Name</th>
+            <th class="text-center">Link Order Item Number</th>
+            <th class="text-center">Order Status</th>
+            <th class="text-center">Store</th>
+            <th class="text-center">Multi Freq</th>
+            <th class="text-center">Created By</th>
+            <th class="text-center">Created At</th>
+            <th class="text-center">Modified By</th>
+            <th class="text-center">Modified At</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="item in ipfillorders" :class="{ 'ipf-error': item.status === 'Dispensed' && !item.linkorderitemnumber }">
+            <td class="text-center"><a v-if="item.hn" target="_blank" :href="`/patients/summary?hn=${ item.hn }`">{{ item.hn }}</a><span v-else class="text-muted">—</span></td>
+            <td class="text-center"><a v-if="item.vn" target="_blank" :href="`/patients/summary?vn=${ item.vn }`">{{ item.vn }}</a><span v-else class="text-muted">—</span></td>
+            <td class="text-center">{{ item.orderdate }}</td>
+            <td class="text-center" ><a target="_blank"  >{{ item.ipfillnumber }}</a></td>
+            <td class="text-center" >{{ item.ipfillquantity }}</td>
+            <td class="text-center">{{ item.cutofftime }}</td>
+            <td class="text-center">{{ item.ordernumber }}</td>
+            <td >{{ item.ordercode }}</td>
+            <td >{{ item.ordername }}</td>
+            <td class="text-center" >{{ item.linkorderitemnumber }}</td>
+            <td class="text-center" :class="{ 'ipf-cancelled': item.status === 'Cancelled' }">{{ item.status }}</td>
+            <td class="text-center"  >{{ item.inventorystore }}</td>
+            <td class="text-center" >{{ item.ismultiplefreq || "" }}</td>
+            <td class="text-center"  >{{ item.createdby }}</td>
+            <td class="text-center"  >{{ item.createdat }}</td>
+            <td class="text-center"  >{{ item.modifiedby }}</td>
+            <td class="text-center"  >{{ item.modifiedat }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+
+  // Error rows: Dispensed without a linked order item (marked with .ipf-error)
+  function filterRowsByColor() {
+    const rows = document.querySelectorAll('#ipfilltable tbody tr');
+    rows.forEach(row => { row.style.display = row.classList.contains('ipf-error') ? '' : 'none'; });
+}
+
+function showAllRows() {
+    const rows = document.querySelectorAll('#ipfilltable tbody tr');
+    rows.forEach(row => row.style.display = '');
+}
+</script>

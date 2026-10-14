@@ -1,0 +1,32 @@
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-history" style="color:#2563eb;"></i>
+      <span>Auditlogs Last 30 Days</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th class="text-left">Auditdate</th>
+              <th class="text-left">Dataset</th>
+              <th class="text-left">URL</th>
+              <th class="text-center">Action By</th>
+              <th class="text-center">POST DATA</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in auditlogs">
+              <td class="text-left" >{{ item.auditdate }}</td>
+              <td class="text-left" >{{ item.dataset }}</td>
+              <td class="text-left" >{{ item.url || "" }}</td>
+              <td class="text-center" >{{ item.useruid || "" }}</td>
+              <td class="text-center" ><a :href="`/patients/audit-detail?loguid=${item._id}`" class="btn btn-success" > ดูรายละเอียด</a></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

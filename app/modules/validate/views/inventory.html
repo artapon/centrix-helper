@@ -1,0 +1,32 @@
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-file-import" style="color:#2563eb;"></i>
+      <span>Compare Inventory Files</span>
+    </div>
+    <div class="card-body p-0">
+      <form method="post" action="/inventory/tracking/compare" enctype="multipart/form-data">
+        <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+          <table class="table mb-0">
+            <thead>
+              <tr>
+                <th>ไฟล์</th>
+                <th>เลือกไฟล์ 1</th>
+                <th>เลือกไฟล์ 2</th>
+                <th>เปรียบเทียบข้อมูล</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><b>Inventory</b></td>
+                <td><input type="file" name="file_name1"></td>
+                <td><input type="file" name="file_name2"></td>
+                <td class="text-center"><input type="submit" name="type" value="เปรียบเทียบข้อมูล" class="btn btn-success text-uppercase"></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

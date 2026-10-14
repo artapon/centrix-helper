@@ -1,0 +1,249 @@
+
+<div class="col-sm-12">
+  <!-- The connection is chosen on Manage Connections; this page shows the connected site. -->
+  <div v-if="dberror == 'F'" class="alert alert-success" role="alert">
+    <i class="fas fa-check-circle mr-2"></i>
+    <strong>{{ sitename }}</strong> — Database connected successfully.
+  </div>
+
+  <div v-if="!connectionCount" class="card">
+    <div class="card-body empty-state">
+      <div class="empty-state-icon"><i class="fas fa-database"></i></div>
+      <h6>No database connections yet</h6>
+      <p>Add a Centrix site connection to start using the tools.</p>
+      <a v-if="canManageConnections" href="/database/connections" class="btn btn-primary"><i class="fas fa-plus mr-1"></i> Add connection</a>
+      <p v-else class="text-muted mb-0">Ask an administrator to add one.</p>
+    </div>
+  </div>
+
+  <div v-else-if="site_index === null || site_index === undefined" class="alert alert-danger d-flex align-items-center flex-wrap" role="alert" style="gap:10px;">
+    <i class="fas fa-exclamation-triangle"></i>
+    <span class="flex-grow-1">
+      <strong>Not connected.</strong>
+      <template v-if="connectError">Automatic connection failed: {{ connectError }}</template>
+      <template v-else>The database could not be reached.</template>
+    </span>
+    <a v-if="canManageConnections" href="/database/connections" class="btn btn-sm btn-danger"><i class="fas fa-plug mr-1"></i> Manage Connections</a>
+    <span v-else>Ask an administrator to check the connection.</span>
+  </div>
+</div>
+
+<template v-if="site_index !== null && site_index !== undefined">
+  <!-- At a glance -->
+  <div class="col-sm-12">
+    <div class="dbi-kpis">
+      <div class="dbi-kpi">
+        <span class="dbi-kpi-label"><i class="fas fa-leaf"></i> MongoDB</span>
+        <span class="dbi-kpi-value">{{ stats.db_version || '—' }}</span>
+        <span class="dbi-kpi-sub">Database <b>{{ stats.db || '—' }}</b></span>
+      </div>
+      <div class="dbi-kpi">
+        <span class="dbi-kpi-label"><i class="fas fa-layer-group"></i> Collections</span>
+        <span class="dbi-kpi-value">{{ stats.collections != null ? Number(stats.collections).toLocaleString() : '—' }}</span>
+        <span class="dbi-kpi-sub">{{ stats.objects != null ? Number(stats.objects).toLocaleString() : '—' }} objects</span>
+      </div>
+      <div class="dbi-kpi">
+        <span class="dbi-kpi-label"><i class="fas fa-hdd"></i> Data size</span>
+        <span class="dbi-kpi-value">{{ stats.dataSize || '—' }}</span>
+        <span class="dbi-kpi-sub">Total with indexes <b>{{ stats.totalSize || '—' }}</b></span>
+      </div>
+      <div class="dbi-kpi">
+        <span class="dbi-kpi-label"><i class="fas fa-server"></i> Disk used</span>
+        <span class="dbi-kpi-value">{{ stats.fsUsedPct != null ? stats.fsUsedPct + '%' : '—' }}</span>
+        <span class="dbi-bar" v-if="stats.fsUsedPct != null" role="img" :aria-label="'Disk ' + stats.fsUsedPct + '% used'">
+          <span :class="{ 'is-warn': stats.fsUsedPct >= 75, 'is-bad': stats.fsUsedPct >= 90 }" :style="{ width: Math.min(stats.fsUsedPct, 100) + '%' }"></span>
+        </span>
+        <span class="dbi-kpi-sub">{{ stats.fsUsedSize || '—' }} of {{ stats.fsTotalSize || '—' }}</span>
+      </div>
+      <div class="dbi-kpi">
+        <span class="dbi-kpi-label"><i class="fas fa-network-wired"></i> Connections left</span>
+        <span class="dbi-kpi-value" :class="{ 'is-bad': connectionStatus.remainingF && connectionStatus.remaining < 50 }">{{ connectionStatus.remainingF || '—' }}</span>
+        <span class="dbi-kpi-sub"><b>{{ connectionStatus.current || '—' }}</b> in use · {{ connectionStatus.active || '—' }} active</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Details: three cards of the same shape -->
+  <div class="col-sm-12 col-lg-4 dbi-col">
+    <div class="card dbi-card">
+      <div class="card-header dbi-head"><i class="fas fa-info-circle"></i> Centrix HIS</div>
+      <dl class="dbi-list">
+        <div><dt>Centrix version</dt><dd><b>{{ versionData && versionData.CENTRIX_VERSION || '—' }}</b></dd></div>
+        <div><dt>Jasper base URL</dt><dd class="dbi-url">{{ versionData && versionData.JASPER_BASE_URL || '—' }}</dd></div>
+        <div><dt>Jasper stat URL</dt><dd class="dbi-url">{{ versionData && versionData.JASPER_STAT_URL || '—' }}</dd></div>
+        <div><dt>Jasper REST URL</dt><dd class="dbi-url">{{ versionData && versionData.JASPER_BASEURL_RESTFUL || '—' }}</dd></div>
+        <div><dt>MIMS host</dt><dd class="dbi-url">{{ versionData && versionData.MIMS_HOST || '—' }}</dd></div>
+        <div><dt>MIMS port</dt><dd>{{ versionData && versionData.MIMS_PORT || '—' }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="col-sm-12 col-md-6 col-lg-4 dbi-col">
+    <div class="card dbi-card">
+      <div class="card-header dbi-head"><i class="fas fa-database"></i> Database</div>
+      <dl class="dbi-list">
+        <div><dt>MongoDB version</dt><dd><b>{{ stats.db_version || '—' }}</b> <span class="dbi-muted">Community</span></dd></div>
+        <div><dt>Database</dt><dd>{{ stats.db || '—' }}</dd></div>
+        <div><dt>Collections</dt><dd>{{ stats.collections != null ? Number(stats.collections).toLocaleString() : '—' }}</dd></div>
+        <div><dt>Views</dt><dd>{{ stats.views != null ? Number(stats.views).toLocaleString() : '—' }}</dd></div>
+        <div><dt>Objects</dt><dd>{{ stats.objects != null ? Number(stats.objects).toLocaleString() : '—' }}</dd></div>
+        <div><dt>Indexes</dt><dd>{{ stats.indexes != null ? Number(stats.indexes).toLocaleString() : '—' }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="col-sm-12 col-md-6 col-lg-4 dbi-col">
+    <div class="card dbi-card">
+      <div class="card-header dbi-head"><i class="fas fa-hdd"></i> Storage</div>
+      <dl class="dbi-list">
+        <div><dt>Data size</dt><dd>{{ stats.dataSize || '—' }}</dd></div>
+        <div><dt>Storage size</dt><dd>{{ stats.storageSize || '—' }}</dd></div>
+        <div><dt>Index size</dt><dd>{{ stats.indexSize || '—' }}</dd></div>
+        <div><dt>Total size</dt><dd><b>{{ stats.totalSize || '—' }}</b></dd></div>
+        <div><dt>Avg object size</dt><dd>{{ stats.avgObjSize || '—' }}</dd></div>
+        <div><dt>Disk</dt><dd>{{ stats.fsUsedSize || '—' }} <span class="dbi-muted">of {{ stats.fsTotalSize || '—' }}</span></dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <!-- Connections and replica set -->
+  <div class="col-sm-12 col-lg-5 dbi-col">
+    <div class="card dbi-card">
+      <div class="card-header dbi-head"><i class="fas fa-network-wired"></i> Connection Pool</div>
+      <dl v-if="connectionStatus && connectionStatus.current" class="dbi-list">
+        <div><dt>Current pool size</dt><dd><b>{{ connectionStatus.current }}</b></dd></div>
+        <div><dt>Available pool size</dt><dd>{{ connectionStatus.available || '—' }}</dd></div>
+        <div><dt>Remaining pool size</dt><dd><span class="dbi-pill" :class="parseInt(connectionStatus.remaining) < 50 ? 'is-bad' : 'is-good'">{{ connectionStatus.remainingF || '—' }}</span></dd></div>
+        <div><dt>Active connections</dt><dd>{{ connectionStatus.active || '—' }}</dd></div>
+      </dl>
+      <p v-else class="dbi-empty">No data, or the database user is not authorized to read it.</p>
+    </div>
+  </div>
+
+  <div class="col-sm-12 col-lg-7 dbi-col">
+    <div class="card dbi-card">
+      <div class="card-header dbi-head"><i class="fas fa-sitemap"></i> Replica Set Members
+        <span v-if="replicaStatusMembers && replicaStatusMembers.length" class="dbi-count">{{ replicaStatusMembers.length }}</span>
+      </div>
+      <div v-if="replicaStatusMembers && replicaStatusMembers.length" class="table-responsive dbi-table">
+        <table class="table mb-0">
+          <thead>
+            <tr><th>Member</th><th>Health</th><th>State</th><th>Optime date</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in replicaStatusMembers">
+              <td class="dbi-mono">{{ item.name }}</td>
+              <td><span :class="item.health == 1 ? 'status-active' : 'status-inactive'">{{ item.health == 1 ? 'Active' : 'Inactive' }}</span></td>
+              <td>{{ item.stateStr }}</td>
+              <td class="dbi-nowrap">{{ item.optimeDate }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p v-else class="dbi-empty">No data, or the database user is not authorized to read it.</p>
+    </div>
+  </div>
+
+  <!-- Today's sessions -->
+  <div class="col-sm-12 dbi-col">
+    <div class="card dbi-card">
+      <div class="card-header dbi-head"><i class="fas fa-users"></i> Today's Login Sessions
+        <span class="dbi-count">{{ countLoginSessions }} active</span>
+        <a href="/database/info/sessions-export" class="btn btn-success btn-sm dbi-head-action"><i class="fas fa-file-excel mr-1"></i> Export to Excel</a>
+      </div>
+      <div v-if="activeLoginSessions && activeLoginSessions.length" class="table-responsive dbi-table dbi-scroll">
+        <table class="table mb-0">
+          <thead>
+            <tr><th>Login name</th><th>Full name</th><th>Department</th><th>IP address</th><th>Last activity</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in activeLoginSessions">
+              <td><strong>{{ item.loginname }}</strong></td>
+              <td>{{ item.name }}</td>
+              <td>{{ item.department_name }}</td>
+              <td class="dbi-mono">{{ item.ipaddress || '—' }}</td>
+              <td class="dbi-nowrap">{{ item.lastactivitydate }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p v-else class="dbi-empty">No one has signed in today.</p>
+    </div>
+  </div>
+
+  <!-- Slow queries -->
+  <div class="col-sm-12 dbi-col">
+    <div class="card dbi-card">
+      <div class="card-header dbi-head"><i class="fas fa-exclamation-triangle dbi-warn-icon"></i> Slow Queries <span class="dbi-muted">(&gt; 5 s)</span>
+        <span v-if="slowQueries && slowQueries.length" class="dbi-count is-warn">{{ slowQueries.length }}</span>
+      </div>
+      <div v-if="slowQueries && slowQueries.length" class="table-responsive dbi-table dbi-scroll">
+        <table class="table mb-0">
+          <thead>
+            <tr><th>Log type</th><th>Timestamp</th><th class="text-right">Duration</th><th>Client ID</th><th>App name</th><th>Remote IP</th><th>Attr type</th><th>Collection</th><th>Query</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in slowQueries">
+              <td>{{ item.message.msg }}</td>
+              <td class="dbi-nowrap">{{ item.timestamp }}</td>
+              <td class="text-right"><span class="badge badge-warning">{{ parseInt(item.message.attr.durationMillis) / 1000 }} s</span></td>
+              <td class="dbi-mono">{{ item.message.ctx }}</td>
+              <td>{{ item.message.attr.appName || '—' }}</td>
+              <td class="dbi-mono">{{ item.clientIP || 'N/A' }}</td>
+              <td>{{ item.message.attr.type }}</td>
+              <td><code>{{ item.message.attr.ns }}</code></td>
+              <td class="dbi-query"><code>{{ JSON.stringify(item.message.attr.command) }}</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p v-else class="dbi-empty">No slow queries detected.</p>
+    </div>
+  </div>
+</template>
+
+<style>
+  /* DB Info: one rhythm for every card — same header, same row height, same label column. */
+  .dbi-col { display: flex; margin-bottom: 20px; }
+  .dbi-card { flex: 1; min-width: 0; display: flex; flex-direction: column; margin-bottom: 0 !important; }
+  .dbi-head { display: flex; align-items: center; gap: 8px; min-height: 48px; }
+  .dbi-head > i { color: var(--primary); width: 16px; text-align: center; }
+  .card-header.dbi-head > i.dbi-warn-icon { color: var(--warning) !important; }   /* app.css paints header icons primary with !important */
+  .dbi-head-action { order: 1; margin-left: 8px; }   /* after the table filter the app adds to card headers */
+  .dbi-head .table-filter { margin-left: auto; }
+  .dbi-count { margin-left: 2px; background: var(--primary-soft); color: var(--primary); border-radius: 999px; padding: 2px 10px; font-size: .74rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .dbi-count.is-warn { background: var(--warning-soft); color: var(--warning); }
+  .dbi-muted { color: var(--muted); font-weight: 400; }
+
+  .dbi-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; margin-bottom: 20px; }
+  .dbi-kpi { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 16px 18px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); }
+  .dbi-kpi-label { font-size: .72rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .dbi-kpi-label i { color: var(--primary); font-size: .8rem; }
+  .dbi-kpi-value { font-size: 1.5rem; font-weight: 700; line-height: 1.2; color: var(--text); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dbi-kpi-value.is-bad { color: var(--danger); }
+  .dbi-kpi-sub { font-size: .78rem; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .dbi-kpi-sub b { color: var(--text); font-weight: 600; }
+  .dbi-bar { display: block; height: 6px; border-radius: 999px; background: var(--surface-3); overflow: hidden; margin: 2px 0; }
+  .dbi-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--success); }
+  .dbi-bar > span.is-warn { background: var(--warning); }
+  .dbi-bar > span.is-bad { background: var(--danger); }
+
+  .dbi-list { margin: 0; padding: 4px 0; flex: 1; }
+  .dbi-list > div { display: grid; grid-template-columns: minmax(120px, 42%) minmax(0, 1fr); gap: 12px; align-items: baseline; padding: 10px 20px; border-top: 1px solid var(--border); }
+  .dbi-list > div:first-child { border-top: 0; }
+  .dbi-list dt { font-weight: 500; font-size: .84rem; color: var(--muted); margin: 0; }
+  .dbi-list dd { margin: 0; font-size: .88rem; color: var(--text); font-variant-numeric: tabular-nums; min-width: 0; }
+  .dbi-url { overflow-wrap: anywhere; font-family: var(--font-mono); font-size: .8rem !important; }
+  .dbi-pill { display: inline-block; border-radius: 999px; padding: 1px 10px; font-weight: 700; font-size: .82rem; }
+  .dbi-pill.is-good { background: var(--success-soft); color: var(--success); }
+  .dbi-pill.is-bad { background: var(--danger-soft); color: var(--danger); }
+  .dbi-empty { margin: 0; padding: 18px 20px; color: var(--muted); font-size: .86rem; flex: 1; }
+
+  .dbi-table { border: 0 !important; border-radius: 0 0 var(--radius) var(--radius); }
+  .dbi-table th { white-space: nowrap; }
+  .dbi-scroll { max-height: 420px; overflow-y: auto; }
+  .dbi-scroll thead th { position: sticky; top: 0; z-index: 1; background: var(--surface-2); }
+  .dbi-mono { font-family: var(--font-mono); font-size: .82rem; }
+  .dbi-nowrap { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .dbi-query code { display: block; max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .78rem; }
+</style>

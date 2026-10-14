@@ -1,0 +1,11 @@
+<div v-for="item in visits" class="col-sm-3">
+  <div class="card">
+    <div class="card-header text-center">
+      <p class="text-center"><a :href="`/patients/doctor-visits/by-doctor/${item.careprovideruid}`"><b style="font-size: 16pt;" >{{ item.careprovidername }}</b></a></p>
+      <p class="text-center"><b style="font-size: 13pt;" >( {{ item.defaultdepartment }} )</b></p>
+    </div>
+    <div class="card-body text-center" :style="item.activevisits >= limit ? 'background-color: red; color : white;' : ''">
+      <h1><a :style="item.activevisits >= limit ? 'color : white;' : ''" :href="`/patients/doctor-visits/by-doctor/${item.careprovideruid}`"><u>{{ item.activevisits }} Visits</u></a></h1>
+    </div>
+  </div>
+</div>

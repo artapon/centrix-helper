@@ -1,0 +1,103 @@
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-filter" style="color:#2563eb;"></i>
+      <span>Filter</span>
+    </div>
+    <div class="card-body">
+      <form method="get" action="/lab/orders" class="form-group">
+        <div class="form-row">
+          <div class="form-group col-sm-3">
+            <label>HN : &nbsp;</label>
+            <input type="text" class="form-control" name="mrn" >
+          </div>
+          <div class="form-group col-sm-3">
+            <label>VN / AN : &nbsp;</label>
+            <input type="text" class="form-control" name="vn" >
+          </div>
+          <div class="form-group col-sm-3" style="display:flex;align-items:flex-end;">
+            <input type="submit" value="กรองข้อมูล" class="btn btn-success">
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<div class="col-sm-12 mt-2">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-vials" style="color:#2563eb;"></i>
+      <span>Lab Orders</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th class="text-center">Visitid</th>
+              <th class="text-center">HN</th>
+              <th>ID</th>
+              <th>StartDate</th>
+              <th>Ordernumber</th>
+              <th>Ordercode</th>
+              <th>Ordername</th>
+              <th>Order Department</th>
+              <th>Order To Department</th>
+              <th class="text-center">Order Status</th>
+              <th class="text-center">Collected Date</th>
+              <th class="text-center">Accepted Date</th>
+              <th class="text-center">Result Date</th>
+              <th class="text-center">Approval Date</th>
+              <th>Careprovider</th>
+              <th class="text-center">Visit Status</th>
+              <th>Createdat</th>
+              <th>Createdby</th>
+              <th>Modifiedat</th>
+              <th>Modifiedby</th>
+              <th v-if="env.IS_ALLOW_MOCK_DATA">Mock Result</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in labOrders">
+              <td class="text-center"><a target="_blank" :href="`/patients/summary?vn=${ item.visitid }`" >{{ item.visitid }}</a></td>
+              <td class="text-center"><a target="_blank" :href="`/patients/summary?hn=${ item.hn }`" >{{ item.hn }}</a></td>
+              <td>{{ item._id }}</td>
+              <td>{{ item.startdate }}</td>
+              <td>{{ item.ordernumber }}</td>
+              <td><a target="_blank" :href="`/lab/master?labcode=${item.orderitemcode}`">{{ item.orderitemcode }}</a></td>
+              <td><a target="_blank" :href="`/lab/master?labcode=${item.orderitemcode}`">{{ item.orderitemname }}</a></td>
+              <td class="text-center">{{ item.orderdepartment }}</td>
+              <td class="text-center">{{ item.ordertodepartment }}</td>
+              <td v-if="item.statusuid == 'Cancelled' || item.statusuid == 'Discontinued'" class="text-center" style='background-color: red; color : white;' >{{ item.statusuid }}</td><template v-else><td v-if="item.statusuid == 'Report Authorised'" class="text-center" style='background-color: green; color : white;' >{{ item.statusuid }}</td><td v-else class="text-center" >{{ item.statusuid }}</td></template>
+              <td class="text-center">{{ item.specimencollecteddate || '' }}</td>
+              <td class="text-center">{{ item.specimenaccepteddate || '' }}</td>
+              <td class="text-center">{{ item.resultdate || '' }}</td>
+              <td class="text-center">{{ item.approvaldate || '' }}</td>
+              <td>{{ item.careprovider || "" }}</td>
+              <td class="text-center" :style="item.visitstatusuid == 'Medical Discharge' || item.visitstatusuid == 'Financial Discharge' ? 'background-color: red; color : white;' : ''">{{ item.visitstatusuid || "" }}</td>
+              <td>{{ item.createdat }}</td>
+              <td>{{ item.createdby }}</td>
+              <td>{{ item.modifiedat }}</td>
+              <td>{{ item.modifiedby }}</td>
+              <td v-if="env.IS_ALLOW_MOCK_DATA && item.ordersubcat !== 'OUT LAB'">
+                <form method="post" action="/lab/hl7-result">
+                  <input name="labcode" type="hidden" class="form-control"  :value="item.orderitemcode">
+                  <input name="ordercode" type="hidden" class="form-control"  :value="item.ordernumber">
+                  <input name="departmentcode" type="hidden" class="form-control" value="MOCK">
+                  <input name="departmenttype" type="hidden" class="form-control" value="OPD">
+                  <input name="hn" type="hidden" class="form-control" :value="item.hn">
+                  <input name="redirect" type="hidden" class="form-control" value="laborders">
+                  <button type="submit" class="btn btn-success"><i class="fas fa-file-export"></i> <b>Generate ORU</b>
+                  </button>
+                </form>
+              </td>
+               <td v-if="env.IS_ALLOW_MOCK_DATA && item.ordersubcat === 'OUT LAB'">
+                <a target="_blank" :href="env.CENTRIX_MANUAL_UPLOAD_OUTLAB" class="btn btn-primary" ><b>Manual Upload Outlab</b></a>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

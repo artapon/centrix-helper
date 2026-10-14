@@ -1,0 +1,80 @@
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-filter" style="color:#2563eb;"></i>
+      <span>Filter</span>
+    </div>
+    <div class="card-body">
+      <form method="get" action="/lab/master" class="form-group">
+        <div class="form-row">
+          <div class="form-group col-sm-3">
+            <label>Lab Code : &nbsp;</label>
+            <input type="text" class="form-control" name="labcode">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-sm-6">
+            <input type="submit" value="กรองข้อมูล" class="btn btn-success">
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
+      <span style="display:flex;align-items:center;gap:8px;">
+        <i class="fas fa-flask" style="color:#2563eb;"></i>
+        Lab Master
+      </span>
+      <a href="/lab/master/export" class="btn btn-success btn-sm"><i class="fas fa-download mr-1"></i> ดาวน์โหลดทั้งหมด</a>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Name</th>
+              <th>Ordersubcat</th>
+              <th>ResultitemCode</th>
+              <th>ResultitemName</th>
+              <th>normalstart_male</th>
+              <th>normalend_male</th>
+              <th>normalstart_female</th>
+              <th>normalend_female</th>
+              <th>typeresultitem</th>
+              <th>specimens</th>
+              <th>uomname</th>
+              <th class="text-center">Createdby</th>
+              <th class="text-center">Createdat</th>
+              <th class="text-center">Modifiedby</th>
+              <th class="text-center">Modifiedat</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in labmasters">
+              <td>{{ item.code }}</td>
+              <td>{{ item.name }}</td>
+              <td>{{ item.ordersubcat }}</td>
+              <td>{{ item.resultitem }}</td>
+              <td>{{ item.resultitemname }}</td>
+              <td>{{ item.normalstart_male || '' }}</td>
+              <td>{{ item.normalend_male || '' }}</td>
+              <td>{{ item.normalstart_female || '' }}</td>
+              <td>{{ item.normalend_female || '' }}</td>
+              <td>{{ item.typeresultitem || '' }}</td>
+              <td :style="!item.specimens ? 'background-color: red; color : white;' : ''">{{ item.specimens || '' }}</td>
+              <td>{{ item.uomname || '' }}</td>
+              <td class="text-center">{{ item.createdby }}</td>
+              <td class="text-center">{{ item.createdat }}</td>
+              <td class="text-center">{{ item.modifiedby }}</td>
+              <td class="text-center">{{ item.modifiedat }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

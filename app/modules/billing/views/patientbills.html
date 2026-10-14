@@ -1,0 +1,134 @@
+<div class="col-sm-12">
+  <!-- Filter Card -->
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-filter" style="color:#2563eb;"></i>
+      <span>Filter Patient Bills</span>
+    </div>
+    <div class="card-body">
+      <form method="get" action="/billing/bills">
+        <div class="form-row align-items-end">
+          <div class="form-group col-sm-3 mb-3">
+            <label><i class="fas fa-calendar-alt mr-1" style="color:#94a3b8;"></i>Date</label>
+            <input type="text" class="datetimepicker2 form-control" name="date" placeholder="YYYY-MM-DD">
+          </div>
+          <div class="form-group col-sm-3 mb-3">
+            <label><i class="fas fa-hashtag mr-1" style="color:#94a3b8;"></i>Sequence No.</label>
+            <input type="text" class="form-control" name="sequencenumber" placeholder="e.g. B2024001">
+          </div>
+          <div class="form-group col-sm-2 mb-3">
+            <label><i class="fas fa-id-card mr-1" style="color:#94a3b8;"></i>HN</label>
+            <input type="text" class="form-control" name="hn" placeholder="HN">
+          </div>
+          <div class="form-group col-sm-2 mb-3">
+            <label><i class="fas fa-hospital-user mr-1" style="color:#94a3b8;"></i>VN / AN</label>
+            <input type="text" class="form-control" name="vn" placeholder="VN or AN">
+          </div>
+          <div class="form-group col-sm-2 mb-3" style="padding-top:4px;">
+            <label style="visibility:hidden;">Search</label>
+            <button type="submit" class="btn btn-primary w-100">
+              <i class="fas fa-search mr-1"></i> Search
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="col-sm-12">
+  <!-- Results Card -->
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
+      <span style="display:flex;align-items:center;gap:8px;">
+        <i class="fas fa-file-invoice-dollar" style="color:#2563eb;"></i>
+        Patient Bills
+      </span>
+      <span style="
+        background:#eff6ff;color:#2563eb;
+        border:1px solid #bfdbfe;border-radius:20px;
+        padding:3px 12px;font-size:0.78rem;font-weight:700;
+      ">{{ bills.length }} records</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border-radius:0 0 14px 14px;border:none;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>VN</th>
+              <th>HN</th>
+              <th>Sequence No.</th>
+              <th>Bill Date</th>
+              <th>Visit Status</th>
+              <th>Payor</th>
+              <th>Agreements</th>
+              <th>Items</th>
+              <th>Payments</th>
+              <th>DF</th>
+              <th class="text-right">Total Amount</th>
+              <th>User</th>
+              <th>Cancel Date</th>
+              <th>Cancel By</th>
+              <th class="text-center">Refund</th>
+              <th class="text-center">Cancelled</th>
+              <th class="text-center">IPD Bill</th>
+              <th class="text-center">Interim</th>
+              <th class="text-center">Receivable</th>
+              <th>Interim From</th>
+              <th>Interim To</th>
+              <th>Created By</th>
+              <th>Created At</th>
+              <th>Modified By</th>
+              <th>Modified At</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in bills">
+              <td><a target="_blank" :href="`/patients/summary?vn=${item.visitid}`">{{ item.visitid }}</a></td>
+              <td><a target="_blank" :href="`/patients/summary?hn=${item.mrn}`">{{ item.mrn }}</a></td>
+              <td><strong>{{ item.sequencenumber }}</strong></td>
+              <td>{{ item.billdate }}</td>
+              <td>
+                <span :class="item.visitstatus == 'Financial Discharge' ? 'status-inactive' : 'status-active'">
+                  {{ item.visitstatus || '' }}
+                </span>
+              </td>
+              <td>{{ item.payor || '' }}</td>
+              <td>{{ item.payoragreements || '' }}</td>
+              <td class="text-center"><a :href="`/billing/bill-items/${item.sequencenumber}`">{{ item.patientbilleditems }}</a></td>
+              <td class="text-center">
+                <a v-if="item.paymentdetails > 0" :href="`/billing/payment-items/${item.sequencenumber}`">{{ item.paymentdetails }}</a><span v-else style="color:#cbd5e1;">—</span>
+              </td>
+              <td class="text-center"><a :href="`/billing/bill-df-items/${item.sequencenumber}`">View</a></td>
+              <td class="text-right"><strong>{{ item.totalbillamount }}</strong></td>
+              <td>{{ item.user || '' }}</td>
+              <td>{{ item.canceldate || '' }}</td>
+              <td>{{ item.cancelrefundbyuser || '' }}</td>
+              <td class="text-center">
+                <span :class="item.isrefund == true ? 'badge badge-success' : 'badge badge-secondary'">{{ item.isrefund }}</span>
+              </td>
+              <td class="text-center">
+                <span :class="item.iscancelled == true ? 'badge badge-danger' : 'badge badge-secondary'">{{ item.iscancelled }}</span>
+              </td>
+              <td class="text-center">
+                <span :class="item.isipdbill == true ? 'badge badge-primary' : 'badge badge-secondary'">{{ item.isipdbill }}</span>
+              </td>
+              <td class="text-center">
+                <span :class="item.isinterim == true ? 'badge badge-primary' : 'badge badge-secondary'">{{ item.isinterim }}</span>
+              </td>
+              <td class="text-center">
+                <span :class="item.isreceivable == true ? 'badge badge-success' : 'badge badge-secondary'">{{ item.isreceivable }}</span>
+              </td>
+              <td>{{ item.interimfromdate || '' }}</td>
+              <td>{{ item.interimtodate || '' }}</td>
+              <td>{{ item.createdby }}</td>
+              <td>{{ item.createdat }}</td>
+              <td>{{ item.modifiedby }}</td>
+              <td>{{ item.modifiedat }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

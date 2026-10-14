@@ -1,0 +1,27 @@
+<aside class="app-sidebar" id="app-sidebar" aria-label="Main navigation">
+  <a href="/" class="sidebar-brand">
+    <span class="sidebar-brand-mark"><i class="fas fa-heartbeat"></i></span>
+    <span class="sidebar-brand-text">
+      <strong>Centrix</strong>
+      <small>HIS Helper Tools</small>
+    </span>
+  </a>
+
+  <div class="sidebar-search">
+    <i class="fas fa-search"></i>
+    <input type="search" id="nav-search" placeholder="Search menu…" autocomplete="off" aria-label="Search menu">
+    <kbd>/</kbd>
+  </div>
+
+  <nav class="sidebar-nav" id="sidebar-nav">
+    ${shell.sidebar}
+    <p class="sidebar-empty" hidden>No menu items match.</p>
+  </nav>
+
+  <div class="sidebar-footer">
+    <span>v${shell.version}</span>
+    <button type="button" class="sidebar-collapse-all" data-nav-collapse title="Collapse all groups">
+      <i class="fas fa-compress-alt"></i>
+    </button>
+  </div>
+</aside>

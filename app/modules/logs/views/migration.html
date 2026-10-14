@@ -1,0 +1,80 @@
+<div class="col-sm-3">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-hospital-user" style="color:#2563eb;"></i>
+      <span>Patients (รายการ)</span>
+    </div>
+    <div class="card-body text-center">
+      <h1>{{ patients.toLocaleString() }}</h1>
+    </div>
+  </div>
+</div>
+<div class="col-sm-3">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-x-ray" style="color:#2563eb;"></i>
+      <span>Patient Images (รายการ)</span>
+    </div>
+    <div class="card-body text-center">
+      <h1>{{ patientimage.toLocaleString() }}</h1>
+    </div>
+  </div>
+</div>
+<div class="col-sm-3">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-info-circle" style="color:#2563eb;"></i>
+      <span>Additionaldetails (รายการ)</span>
+    </div>
+    <div class="card-body text-center">
+      <h1>{{ additionaldetails.toLocaleString() }}</h1>
+    </div>
+  </div>
+</div>
+<div class="col-sm-3">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-allergies" style="color:#2563eb;"></i>
+      <span>Patient Allergy (รายการ)</span>
+    </div>
+    <div class="card-body text-center">
+      <h1>{{ patientallergy.toLocaleString() }}</h1>
+    </div>
+  </div>
+</div>
+<div class="col-sm-3">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-boxes" style="color:#2563eb;"></i>
+      <span>Opening Stock (รายการ)</span>
+    </div>
+    <div class="card-body text-center">
+      <h1>{{ openingstock.toLocaleString() }}</h1>
+    </div>
+  </div>
+</div>
+<div class="col-sm-3">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-folder-open" style="color:#2563eb;"></i>
+      <span>MRD Folders (รายการ)</span>
+    </div>
+    <div class="card-body text-center">
+      <h1>{{ mrdfolders.toLocaleString() }}</h1>
+    </div>
+  </div>
+</div>
+<div class="col-sm-3">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-hashtag" style="color:#2563eb;"></i>
+      <span>Patient Sequence Number</span>
+    </div>
+    <div class="card-body text-center" :style="SequenceNumber == 0 ? 'background-color: red; color : white;' : ''">
+      <h1>
+        {{ SequenceNumber.toLocaleString() }}
+      </h1>
+      <b>{{ SequenceNumber == 0 ? "(Patient Sequence Number น่าจะไม่ถูกต้อง)" : "" }}</b>
+    </div>
+  </div>
+</div>

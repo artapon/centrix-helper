@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign in · Centrix HIS Helper Tools</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <link href="/lib/bootstrap/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="/lib/@fortawesome/fontawesome-free/css/all.min.css" rel="stylesheet">
+  <link href="/css/app.css?v=${assetVersion}" rel="stylesheet">
+</head>
+<body class="auth-page">
+  <main class="auth-panel">
+    <div class="auth-brand">
+      <span class="sidebar-brand-mark"><i class="fas fa-heartbeat"></i></span>
+      <span class="auth-brand-text"><strong>Centrix</strong><small>HIS Helper Tools</small></span>
+    </div>
+
+    <div class="auth-card">
+      <h1>Sign in</h1>
+      <p class="auth-sub">Use your Centrix Helper Tools account.</p>
+
+      ${notice ? `<div class="alert alert-success"><i class="fas fa-check-circle mr-2"></i>${notice}</div>` : ''}
+      ${error ? `<div class="alert alert-danger" role="alert"><i class="fas fa-exclamation-triangle mr-2"></i>${error}</div>` : ''}
+
+      <form method="post" action="/login" class="auth-form">
+        <input type="hidden" name="next" value="${next}">
+        <div class="form-group">
+          <label for="username">Username</label>
+          <input type="text" class="form-control" id="username" name="username" value="${username}"
+                 autocomplete="username" autocapitalize="off" spellcheck="false" required ${username ? '' : 'autofocus'}>
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <div class="password-field">
+            <input type="password" class="form-control" id="password" name="password" autocomplete="current-password" required ${username ? 'autofocus' : ''}>
+            <button type="button" class="password-toggle" data-password-toggle="password" aria-label="Show password"><i class="far fa-eye"></i></button>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block btn-lg">Sign in</button>
+      </form>
+    </div>
+
+    <p class="auth-foot">Forgot your password? Ask an administrator to reset it. · v${version}</p>
+  </main>
+  <script src="/js/auth.js?v=${assetVersion}"></script>
+</body>
+</html>

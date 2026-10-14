@@ -1,0 +1,34 @@
+/public/api/v1/{name}Data:
+    get:
+      tags:
+        - "{name}"
+      summary: "{name} Data"
+      description: ""
+      parameters:
+        - name: {prop1}
+          in: query
+          schema:
+            type: {typep1}
+            default: ""
+        - name: {prop2}
+          in: query
+          schema:
+            type: {typep2}
+            default: ""
+        - name: {prop3}
+          in: query
+          schema:
+            type: {typep3}
+            default: ""
+        - name: {prop4}
+          in: query
+          schema:
+            type: {typep4}
+            default: ""
+      responses:
+        '200':    # status code
+          description: ""
+          content:
+             application/json:
+              schema: 
+                type: array

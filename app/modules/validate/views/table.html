@@ -1,0 +1,26 @@
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-table" style="color:#2563eb;"></i>
+      <span>Inactive Data Summary</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>Collection</th>
+              <th>Count Inactive Data</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in results">
+              <td>{{ item.collection }}</td>
+              <td>{{ item.countInactive }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

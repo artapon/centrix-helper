@@ -1,0 +1,52 @@
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-boxes" style="color:#2563eb;"></i>
+      <span>GR Items</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>GR NUMBER</th>
+              <th>ITEM CODE</th>
+              <th>ItEM NAME</th>
+              <th>QTY</th>
+              <th>BATCHID</th>
+              <th>UNIT PRICE</th>
+              <th>NETAMOUT</th>
+              <th>WAC</th>
+              <th>QTY UOM CODE</th>
+              <th>QTY UOM NAME</th>
+              <th>PUR UOM CODE</th>
+              <th>PUR UOM NAME</th>
+              <th>RECEIVETYPE CODE</th>
+              <th>RECEIVETYPE NAME</th>
+              <th>COMMENTS</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in results">
+              <td>{{ item.grnnumber }}</td>
+              <td>{{ item.itemmastercode }}</td>
+              <td>{{ item.itemname }}</td>
+              <td class="text-center" :style="item.quantity == '' ? 'background-color: red; color : white;' : ''">{{ item.quantity }}</td>
+              <td class="text-center" :style="item.batchid == '' ? 'background-color: red; color : white;' : ''">{{ item.batchid }}</td>
+              <td class="text-center" :style="item.unitprice == '' ? 'background-color: red; color : white;' : ''">{{ item.unitprice }}</td>
+              <td class="text-center" :style="item.netamount == '' ? 'background-color: red; color : white;' : ''">{{ item.netamount }}</td>
+              <td class="text-center" :style="item.wac == '' ? 'background-color: red; color : white;' : ''">{{ item.wac }}</td>
+              <td class="text-center" :style="item.quantityuomcode == '' ? 'background-color: red; color : white;' : ''">{{ item.quantityuomcode }}</td>
+              <td class="text-center" :style="item.quantityuomname == '' ? 'background-color: red; color : white;' : ''">{{ item.quantityuomname }}</td>
+              <td class="text-center" :style="item.purchasinguomcode == '' ? 'background-color: red; color : white;' : ''">{{ item.purchasinguomcode }}</td>
+              <td class="text-center" :style="item.purchasinguom == '' ? 'background-color: red; color : white;' : ''">{{ item.purchasinguom }}</td>
+              <td class="text-center" :style="item.receivetypecode == '' ? 'background-color: red; color : white;' : ''">{{ item.receivetypecode }}</td>
+              <td class="text-center" :style="item.receivetypename == '' ? 'background-color: red; color : white;' : ''">{{ item.receivetypename }}</td>
+              <td>{{ item.comments }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

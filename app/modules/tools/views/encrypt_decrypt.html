@@ -1,0 +1,98 @@
+<div class="col-sm-12" id="app">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-lock" style="color:#2563eb;"></i>
+      <span>Centrix DB Encrypt</span>
+    </div>
+    <div class="card-body">
+      <form method="post" action="/tools/encrypt-decrypt/centrix-encrypt">
+        <div class="form-group">
+          <label>Replace @ to %40</label>
+          <select name="removespvalue" class="form-control">
+            <option value="Y" selected>Yes</option>
+            <option value="N">No</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Value</label>
+          <input autocomplete="off" name="encryptvalue" type="text" class="form-control" required>
+        </div>
+        <div class="form-group mb-0">
+          <button type="submit" class="btn btn-success btn-block"><i class="fas fa-file-export"></i> <b>Encrypt</b></button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-unlock" style="color:#2563eb;"></i>
+      <span>Centrix DB Decrypt</span>
+    </div>
+    <div class="card-body">
+      <form method="post" action="/tools/encrypt-decrypt/centrix-decrypt">
+        <div class="form-group">
+          <label>Value</label>
+          <input autocomplete="off" name="decryptvalue" type="text" class="form-control" required>
+        </div>
+        <div class="form-group mb-0">
+          <button type="submit" class="btn btn-success btn-block"><i class="fas fa-file-export"></i> <b>Decrypt</b></button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-lock" style="color:#2563eb;"></i>
+      <span>Medint Encrypt</span>
+    </div>
+    <div class="card-body">
+      <form method="post" action="/tools/encrypt-decrypt/medint-encrypt">
+        <div class="form-group">
+          <label>Value</label>
+          <input autocomplete="off" name="encryptvalue" type="text" class="form-control" required>
+        </div>
+        <div class="form-group mb-0">
+          <button type="submit" class="btn btn-success btn-block"><i class="fas fa-file-export"></i> <b>Encrypt</b></button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-unlock" style="color:#2563eb;"></i>
+      <span>Medint Decrypt</span>
+    </div>
+    <div class="card-body">
+      <form method="post" action="/tools/encrypt-decrypt/medint-decrypt">
+        <div class="form-group">
+          <label>Value</label>
+          <input autocomplete="off" name="decryptvalue" type="text" class="form-control" required>
+        </div>
+        <div class="form-group mb-0">
+          <button type="submit" class="btn btn-success btn-block"><i class="fas fa-file-export"></i> <b>Decrypt</b></button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-info-circle" style="color:#2563eb;"></i>
+      <span>Result</span>
+    </div>
+    <div class="card-body">
+      <strong>{{ text }}</strong>
+    </div>
+  </div>
+</div>

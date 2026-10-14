@@ -1,0 +1,282 @@
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-filter" style="color:#2563eb;"></i>
+      <span>Filter</span>
+    </div>
+    <div class="card-body">
+      <form class="lb-filters" @submit.prevent="reload">
+        <div class="lb-field">
+          <label for="lb-dataset">Dataset</label>
+          <select id="lb-dataset" class="form-control" v-model="f.dataset">
+            <option value="">All datasets</option>
+            <option v-for="d in datasetList" :key="d" :value="d">{{ d }}</option>
+          </select>
+        </div>
+        <div class="lb-field">
+          <label for="lb-code">Dataset code</label>
+          <input id="lb-code" type="text" class="form-control" v-model.trim="f.datasetcode" :disabled="!f.dataset" :placeholder="f.dataset ? 'Any code' : 'Choose a dataset first'">
+        </div>
+        <div class="lb-field">
+          <label for="lb-from">From</label>
+          <input id="lb-from" type="date" class="form-control" v-model="f.from">
+        </div>
+        <div class="lb-field">
+          <label for="lb-to">To</label>
+          <input id="lb-to" type="date" class="form-control" v-model="f.to">
+        </div>
+        <div class="lb-field lb-narrow">
+          <label for="lb-size">Batch size</label>
+          <select id="lb-size" class="form-control" v-model.number="batchSize">
+            <option v-for="n in sizeOptions" :key="n" :value="n">{{ n }}</option>
+          </select>
+        </div>
+        <div class="lb-actions">
+          <button type="submit" class="btn btn-success"><i class="fas fa-search mr-1"></i>กรองข้อมูล</button>
+          <button type="button" class="btn btn-light" @click="resetFilters">Reset</button>
+        </div>
+      </form>
+      <div class="lb-hint">Rows load newest first in batches of {{ batchSize }}. The default range is the last 7 days; clear both dates for all dates.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header lb-head">
+      <span class="lb-title"><i class="fas fa-history" style="color:#2563eb;"></i> Auditlogs</span>
+      <span class="lb-status" aria-live="polite">{{ statusText }}</span>
+      <span class="lb-buttons">
+        <button type="button" class="btn btn-outline-primary btn-sm" v-if="hasMore && !loading" @click="loadNext()"><i class="fas fa-angle-double-down mr-1"></i>Next batch</button>
+        <button type="button" class="btn btn-outline-primary btn-sm" v-if="hasMore && !loadingAll" :disabled="rows.length >= rowCap" @click="loadAll"><i class="fas fa-layer-group mr-1"></i>Load all</button>
+        <button type="button" class="btn btn-outline-danger btn-sm" v-if="loading" @click="stop"><i class="fas fa-stop mr-1"></i>Stop</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" v-if="total === undefined && !counting && (rows.length || hasMore)" @click="count" title="Count every matching row. On a very large log this reads the whole date range."><i class="fas fa-calculator mr-1"></i>Count matches</button>
+        <span class="lb-counting" v-if="counting"><i class="fas fa-spinner fa-spin mr-1"></i>Counting…</span>
+      </span>
+    </div>
+    <div class="lb-progress" :class="{ 'is-indeterminate': loading && pct === null }" role="progressbar" :aria-valuenow="pct === null ? null : Math.round(pct)" aria-valuemin="0" aria-valuemax="100">
+      <span :style="{ width: (pct === null ? (loading ? 30 : 0) : pct) + '%' }"></span>
+    </div>
+    <div class="card-body p-0">
+      <div class="alert alert-danger m-3" v-if="error">
+        <i class="fas fa-exclamation-triangle mr-1"></i>{{ error }}
+        <button type="button" class="btn btn-sm btn-outline-danger ml-2" @click="loadNext(!batches)">Retry</button>
+      </div>
+      <div class="alert alert-info m-3" v-if="note">{{ note }}</div>
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0 lb-table">
+          <thead>
+            <tr>
+              <th class="text-left">Auditdate</th>
+              <th class="text-left">Dataset</th>
+              <th class="text-left">Dataset Code</th>
+              <th class="text-left">Dataset Name</th>
+              <th class="text-left">URL</th>
+              <th class="text-center">Action By</th>
+              <th class="text-center">POST DATA</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in shown" :key="item._id">
+              <td class="text-left lb-nowrap">{{ item.auditdate }}</td>
+              <td class="text-left">{{ item.dataset }}</td>
+              <td class="text-left">{{ item.datasetcode }}</td>
+              <td class="text-left">{{ item.datasetname }}</td>
+              <td class="text-left lb-url">{{ item.url }}</td>
+              <td class="text-center">{{ item.useruid }}</td>
+              <td class="text-center"><a :href="`/logs/audit-detail?loguid=${item._id}`" target="_blank" class="btn btn-success btn-sm">ดูรายละเอียด</a></td>
+            </tr>
+            <tr v-if="!rows.length && !loading && !error && !note">
+              <td colspan="7" class="text-center text-muted py-4">No audit logs match these filters.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="lb-more" ref="more">
+        <span v-if="loading"><i class="fas fa-spinner fa-spin mr-1"></i>Loading batch {{ batches + 1 }}…</span>
+        <button type="button" class="btn btn-link" v-else-if="hasMore && !error" @click="loadNext()">Load the next {{ batchSize }} rows</button>
+        <span v-else-if="rows.length && !hasMore">All {{ number(rows.length) }} rows loaded.</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .lb-filters { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: flex-end; }
+  .lb-field { display: flex; flex-direction: column; gap: 4px; min-width: 160px; flex: 1 1 160px; max-width: 240px; }
+  .lb-field.lb-narrow { min-width: 110px; flex: 0 1 120px; }
+  .lb-field label { margin: 0; font-size: 12px; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: .03em; }
+  .lb-actions { display: flex; gap: 8px; }
+  .lb-hint { margin-top: 10px; font-size: 12px; color: #64748b; }
+  .lb-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+  .lb-title { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  .lb-status { flex: 1 1 auto; font-size: 13px; color: #475569; font-variant-numeric: tabular-nums; }
+  .lb-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .lb-counting { font-size: 13px; color: #475569; }
+  .lb-progress { height: 4px; background: #e2e8f0; overflow: hidden; position: relative; }
+  .lb-progress > span { display: block; height: 100%; background: #2563eb; transition: width .25s ease; }
+  .lb-progress.is-indeterminate > span { position: absolute; animation: lb-slide 1.1s ease-in-out infinite; }
+  @keyframes lb-slide { from { left: -30%; } to { left: 100%; } }
+  .lb-table td { vertical-align: top; }
+  .lb-nowrap { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .lb-url { max-width: 420px; word-break: break-all; }
+  .lb-more { padding: 12px 16px; text-align: center; font-size: 13px; color: #64748b; min-height: 44px; }
+</style>
+
+<script>
+  (function () {
+    var ROW_CAP = 20000;   // rows kept in the page
+    var FIELDS = ['dataset', 'datasetcode', 'from', 'to'];
+    // Used only if the server did not send its list.
+    var DATASETS = ["ReferenceDomain","OrderItem","OrderSet","OrderRouteMap","OrderResultItem","ITEM_MASTER","DrugMaster","DrugGroup","TaskMaster","Department","Tariffs","FormTemplate","CertTemplate","REPORT TEMPLATE","RegistrationSetting","OrderSetting","DoctorWorkbenchSetting","EmergencySetting","EMRSetting","ANCSetting","BatchJobSetting","PharmacyWorklistSetting","PharmacySetting","InventorySetting","InpatientSetting","ThirdPartySetting","RadiologySetting","Billing Parameters","SequenceNumber","GenerateBedCharges","EDC Config"];
+    var nf = new Intl.NumberFormat('en-US');
+    var pad2 = function (n) { return String(n).padStart(2, '0'); };
+    // YYYY-MM-DD in Bangkok time, `days` from today.
+    function bkkDay(days) {
+      var d = new Date(Date.now() + 7 * 3600000 + (days || 0) * 86400000);
+      return d.getUTCFullYear() + '-' + pad2(d.getUTCMonth() + 1) + '-' + pad2(d.getUTCDate());
+    }
+
+    function api(url, signal) {
+      return fetch(url, { headers: { Accept: 'application/json' }, signal: signal }).then(function (res) {
+        return res.json().catch(function () { return { error: 'HTTP ' + res.status }; }).then(function (data) {
+          if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+          return data;
+        });
+      });
+    }
+
+    Page.setup({
+      data: function () {
+        // Server locals are not on `this` yet while data() runs, so read them from Page.data.
+        var batch = Page.data.batch || {};
+        var size = Number(batch.size) || 100, max = Number(batch.max) || 2000;
+        return {
+          f: Object.assign({ dataset: 'ReferenceDomain', datasetcode: '', from: bkkDay(-6), to: bkkDay(0) }, Page.data.filters), batchSize: size,
+          datasetList: (Page.data.datasets && Page.data.datasets.length) ? Page.data.datasets : DATASETS,
+          sizeOptions: [100, 200, 500, 1000, 2000].filter(function (n) { return n <= max; }),
+          rows: [], next: '', hasMore: false, batches: 0, elapsed: 0,
+          total: undefined, loading: false, loadingAll: false, error: '', scan: null, estimated: null, counting: false, halted: false, want: 0, note: '',
+          search: '', rowCap: ROW_CAP, run: 0
+        };
+      },
+      computed: {
+        // Every filter is sent, even when empty, so an empty date range means all dates.
+        query: function () {
+          var f = this.f, p = new URLSearchParams();
+          FIELDS.forEach(function (k) { p.set(k, (k === 'datasetcode' && !f.dataset) ? '' : (f[k] || '')); });
+          return p.toString();
+        },
+        pct: function () {
+          if (typeof this.total === 'number') return this.total ? Math.min(100, (this.rows.length / this.total) * 100) : 100;
+          var s = this.scan;
+          if (!s || !(s.to > s.from)) return null;
+          return Math.max(0, Math.min(100, ((s.to - s.at) / (s.to - s.from)) * 100));
+        },
+        scannedText: function () {
+          if (!this.scan || !this.hasMore) return '';
+          var d = new Date(this.scan.at + 7 * 3600000);
+          var pad = function (n) { return String(n).padStart(2, '0'); };
+          return pad(d.getUTCDate()) + '/' + pad(d.getUTCMonth() + 1) + '/' + d.getUTCFullYear() + ' ' + pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes());
+        },
+        statusText: function () {
+          var n = this.number;
+          var of = typeof this.total === 'number' ? ' of ' + n(this.total) : (this.total === null ? ' (too many to count)' : '');
+          var parts = ['Loaded ' + n(this.rows.length) + of + ' rows'];
+          if (this.batches) parts.push(this.batches + (this.batches === 1 ? ' request' : ' requests') + ' in ' + (this.elapsed / 1000).toFixed(1) + ' s');
+          if (this.scannedText) parts.push('searched back to ' + this.scannedText);
+          if (typeof this.estimated === 'number') parts.push('≈ ' + n(this.estimated) + ' logs in total');
+          if (this.rows.length >= ROW_CAP && this.hasMore) parts.push('page limit reached, narrow the date range');
+          return parts.join(' · ');
+        },
+        shown: function () {
+          var q = this.search.toLowerCase();
+          if (!q) return this.rows;
+          return this.rows.filter(function (r) {
+            return [r.auditdate, r.dataset, r.datasetcode, r.datasetname, r.url, r.useruid]
+              .some(function (v) { return v && String(v).toLowerCase().indexOf(q) !== -1; });
+          });
+        }
+      },
+      mounted: function () {
+        var vm = this;
+        if ('IntersectionObserver' in window) {
+          this.observer = new IntersectionObserver(function (entries) {
+            if (entries[0].isIntersecting && vm.hasMore && !vm.loading && !vm.error && !vm.search && vm.rows.length < ROW_CAP) vm.loadNext();
+          }, { rootMargin: '400px' });
+          if (this.$refs.more) this.observer.observe(this.$refs.more);
+        }
+        this.reload();
+      },
+      beforeDestroy: function () {
+        if (this.observer) this.observer.disconnect();
+        this.abort();
+      },
+      methods: {
+        number: function (v) { return nf.format(v || 0); },
+        abort: function () {
+          if (this.controller) this.controller.abort();
+          this.controller = null;
+        },
+        resetFilters: function () {
+          this.f = { dataset: 'ReferenceDomain', datasetcode: '', from: bkkDay(-6), to: bkkDay(0) };
+          this.reload();
+        },
+        reload: function () {
+          this.abort();
+          this.run++;
+          this.rows = []; this.next = ''; this.hasMore = false; this.batches = 0; this.elapsed = 0;
+          this.error = ''; this.note = ''; this.loadingAll = false; this.total = undefined; this.scan = null; this.counting = false; this.halted = false;
+          try { history.replaceState(null, '', location.pathname + '?' + this.query); } catch (e) {}
+          this.loadNext(true);
+        },
+        count: function () {
+          var vm = this, run = this.run;
+          if (vm.counting) return;
+          vm.counting = true;
+          api('/logs/audit/count?' + this.query).then(function (d) {
+            if (run === vm.run) { vm.total = d.total; vm.counting = false; }
+          }).catch(function () { if (run === vm.run) { vm.total = null; vm.counting = false; } });
+        },
+        loadNext: function (first, auto) {
+          if (this.loading || (!first && !this.hasMore)) return;
+          if (auto && this.halted) return;
+          if (!auto) { this.halted = false; this.want = this.batchSize; }
+          var vm = this, run = this.run, started = Date.now();
+          var p = new URLSearchParams(this.query);
+          p.set('size', Math.max(1, this.want || this.batchSize));
+          if (this.next) p.set('before', this.next);
+          this.controller = new AbortController();
+          this.loading = true; this.error = '';
+          return api('/logs/audit/data?' + p.toString(), this.controller.signal).then(function (d) {
+            if (run !== vm.run) return;
+            vm.rows = vm.rows.concat(d.rows.map(Object.freeze));
+            vm.next = d.next; vm.hasMore = d.hasMore; vm.batches++;
+            vm.scan = d.scan || null;
+            if (d.estimated !== undefined) vm.estimated = d.estimated;
+            vm.want -= d.rows.length; vm.note = d.note || '';
+            vm.elapsed += Date.now() - started;
+            vm.loading = false;
+            if (vm.hasMore && vm.rows.length < ROW_CAP && !vm.halted) {
+              if (d.partial && vm.want > 0) return vm.loadNext(false, true);
+              if (vm.loadingAll) { vm.want = vm.batchSize; return vm.loadNext(false, true); }
+            }
+            vm.loadingAll = false;
+          }).catch(function (err) {
+            if (run !== vm.run) return;
+            vm.loading = false; vm.loadingAll = false;
+            if (err.name !== 'AbortError') vm.error = err.message;
+          });
+        },
+        loadAll: function () {
+          this.loadingAll = true;
+          if (!this.loading) this.loadNext();
+        },
+        stop: function () {
+          this.halted = true;
+          this.loadingAll = false;
+          this.abort();
+          this.loading = false;
+        }
+      }
+    });
+  })();
+</script>

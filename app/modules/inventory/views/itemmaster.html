@@ -1,0 +1,82 @@
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-search" style="color:#2563eb;"></i>
+      <span>Filter</span>
+    </div>
+    <div class="card-body">
+      <form method="get" action="/inventory/item-masters">
+        <div class="form-row align-items-end">
+          <div class="form-group col-sm-3">
+            <label>ITEM CODE</label>
+            <input type="text" class="form-control" name="code">
+          </div>
+          <div class="form-group col-sm-3">
+            <input type="submit" class="btn btn-success" value="กรองข้อมูล">
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-pills" style="color:#2563eb;"></i>
+      <span>Item Master</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>CODE</th>
+              <th>NAME</th>
+              <th>EXTERNALCODE</th>
+              <th>TYPE</th>
+              <th>Baseuom Code</th>
+              <th>Baseuom Name</th>
+              <th>Purchasinguom Code</th>
+              <th>Purchasinguom Name</th>
+              <th>Store Code</th>
+              <th>Store Name</th>
+              <th>Allowconsignmentstock</th>
+              <th>Allowfractions</th>
+              <th>Allownegativestock</th>
+              <th>Allowrepacking</th>
+              <th>Isbatchidmandatory</th>
+              <th>Isexpirydatemandatory</th>
+              <th>ismanufacturingitem</th>
+              <th>isnoninventoryitem</th>
+              <th>Create By</th>
+              <th>Create At</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in results">
+              <td>{{ item.code }}</td>
+              <td>{{ item.name }}</td>
+              <td :style="item.externalcode == '' ? 'background-color: red; color : white;' : ''">{{ item.externalcode }}</td>
+              <td>{{ item.itemtype }}</td>
+              <td>{{ item.baseuomcode }}</td>
+              <td>{{ item.baseuomname }}</td>
+              <td>{{ item.purchasinguomcode || "" }}</td>
+              <td>{{ item.purchasinguomname || "" }}</td>
+              <td>{{ item.storecode }}</td>
+              <td>{{ item.storename }}</td>
+              <td :style="item.allowconsignmentstock ? 'background-color: green; color : white;' : ''">{{ item.allowconsignmentstock }}</td>
+              <td :style="item.allowfractions ? 'background-color: green; color : white;' : ''">{{ item.allowfractions }}</td>
+              <td :style="item.allownegativestock ? 'background-color: green; color : white;' : ''">{{ item.allownegativestock }}</td>
+              <td :style="item.allowrepacking ? 'background-color: green; color : white;' : ''">{{ item.allowrepacking }}</td>
+              <td :style="item.isbatchidmandatory ? 'background-color: green; color : white;' : ''">{{ item.isbatchidmandatory }}</td>
+              <td :style="item.isexpirydatemandatory ? 'background-color: green; color : white;' : ''">{{ item.isexpirydatemandatory }}</td>
+              <td :style="item.ismanufacturingitem ? 'background-color: green; color : white;' : ''">{{ item.ismanufacturingitem }}</td>
+              <td :style="item.isnoninventoryitem ? 'background-color: green; color : white;' : ''">{{ item.isnoninventoryitem }}</td>
+              <td>{{ item.createdby }}</td>
+              <td>{{ item.createdat }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

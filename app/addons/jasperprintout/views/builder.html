@@ -1,0 +1,684 @@
+<div class="col-12">
+<div class="jpb" ref="root" :class="{ 'is-fullscreen': fullscreen }">
+
+  <!-- Page header: what this page does, whether JasperServer / HIS are ready, page tools -->
+  <header class="jpb-top">
+    <div class="jpb-top-title">
+      <span class="jpb-top-icon"><i class="fas fa-file-pdf"></i></span>
+      <div>
+        <h1>Jasper Print-Out Builder</h1>
+        <p>Turn scanned or PDF forms into a Jasper print-out: crop the pages, put them in order, then publish or save it.</p>
+      </div>
+    </div>
+    <div class="jpb-top-side">
+      <span class="jpb-conn" :class="jasper.configured ? 'is-ok' : 'is-bad'" :title="serversTitle">
+        <i class="fas fa-server"></i> {{ jasper.configured ? readyServers + ' JasperServer' + (readyServers === 1 ? '' : 's') : 'JasperServer not set up' }}
+      </span>
+      <span class="jpb-conn" :class="hisBlocked ? 'is-warn' : 'is-ok'" :title="hisBlocked || ''">
+        <i class="fas fa-hospital"></i> {{ hisBlocked ? 'HIS not available' : 'HIS · ' + (his.site || (his.org && his.org.name) || '') }}
+      </span>
+      <button type="button" class="jpb-tool" @click="openDesigns" :disabled="saving" title="Open a print-out saved in the file manager"><i class="far fa-folder-open"></i><span>Open</span></button>
+      <a v-if="isAdmin" href="/reports/settings" class="jpb-tool" title="Reports > Settings"><i class="fas fa-sliders-h"></i><span>Settings</span></a>
+      <button type="button" class="jpb-tool" @click="toggleFullscreen" :aria-pressed="fullscreen ? 'true' : 'false'" :title="fullscreen ? 'Exit full screen (Esc)' : 'Full screen'">
+        <i class="fas" :class="fullscreen ? 'fa-compress' : 'fa-expand'"></i><span>{{ fullscreen ? 'Exit full screen' : 'Full screen' }}</span>
+      </button>
+    </div>
+  </header>
+
+  <div v-if="!jasper.configured" class="alert alert-warning jpb-alert" role="alert">
+    <i class="fas fa-plug mr-1"></i>
+    <span v-if="isAdmin">JasperServer is not set up yet. <a href="/reports/settings">Open Settings</a> to enter its URL and login. You can still crop pages, save them and download the JRXML.</span>
+    <span v-else>JasperServer is not set up yet, so reports can't be published. Ask an administrator to set it in Reports &gt; Settings. You can still crop pages, save them and download the JRXML.</span>
+  </div>
+
+  <!-- The three steps and how far this report is -->
+  <ol class="jpb-pipe" aria-label="Steps">
+    <li :class="'is-' + step1">
+      <span class="jpb-pipe-n"><i v-if="step1 === 'done'" class="fas fa-check"></i><template v-else>1</template></span>
+      <span class="jpb-pipe-text"><b>Load PDF</b><small>{{ pdfFiles.length ? pdfFiles.length + ' file' + (pdfFiles.length > 1 ? 's' : '') + (numPages ? ' · ' + numPages + ' page' + (numPages > 1 ? 's' : '') + ' open' : '') : 'or upload page images in step 2' }}</small></span>
+    </li>
+    <li :class="'is-' + step2">
+      <span class="jpb-pipe-n"><i v-if="step2 === 'done'" class="fas fa-check"></i><template v-else>2</template></span>
+      <span class="jpb-pipe-text"><b>Crop &amp; order pages</b><small>{{ selected.length ? selected.length + ' page' + (selected.length > 1 ? 's' : '') + ' in the report' : cropItems.length ? 'click crops to add them' : 'drag on a page, then Add crop' }}</small></span>
+    </li>
+    <li :class="'is-' + step3">
+      <span class="jpb-pipe-n">3</span>
+      <span class="jpb-pipe-text"><b>{{ canPublish ? (canSave ? 'Publish or save' : 'Publish') : 'Save' }}</b><small>{{ reportNameClean || 'name the report' }}<template v-if="savedId"> · saved{{ savedPath ? ' in ' + savedPath : '' }}</template></small></span>
+    </li>
+  </ol>
+
+  <div class="jpb-layout" :style="layoutStyle">
+    <!-- 1: PDF files -->
+    <aside v-show="filesOpen" class="jpb-panel jpb-left" id="jpb-files" aria-label="PDF files">
+      <div class="jpb-panel-head">
+        <h2>PDF files <span class="jpb-count">{{ pdfFiles.length }}</span></h2>
+        <button type="button" class="jpb-icon-btn" @click="toggleFiles" aria-controls="jpb-files" aria-expanded="true" title="Hide PDF files" aria-label="Hide PDF files"><i class="fas fa-angle-double-left"></i></button>
+      </div>
+      <div class="jpb-left-drop">
+        <label class="jpb-drop" :class="{ 'is-over': pdfDragOver }"
+               @dragover.prevent="pdfDragOver = true" @dragleave="pdfDragOver = false" @drop.prevent="onPdfDrop">
+          <i class="fas fa-cloud-upload-alt"></i>
+          <span class="jpb-drop-text">Click or drop PDF files</span>
+          <small>Several files at once is fine</small>
+          <input type="file" accept="application/pdf,.pdf" multiple @change="onPdfInput">
+        </label>
+      </div>
+      <div class="jpb-queue">
+        <p v-if="!pdfFiles.length" class="jpb-empty">No PDFs yet.</p>
+        <div v-for="(pf, idx) in pdfFiles" :key="pf.name + pf.size" class="jpb-file"
+             :class="{ 'is-open': idx === currentFileIdx, 'is-done': pf.status === 'done' }" @click="loadPdf(idx)"
+             role="button" tabindex="0" @keydown.enter="loadPdf(idx)">
+          <i class="fas" :class="pf.status === 'done' ? 'fa-check-circle' : 'fa-file-pdf'"></i>
+          <span class="jpb-file-info">
+            <span class="jpb-file-name" :title="pf.name">{{ pf.name }}</span>
+            <small>{{ sizeText(pf.size) }}</small>
+          </span>
+          <span class="jpb-badge" :class="fileBadge(pf, idx).cls">{{ fileBadge(pf, idx).text }}</span>
+          <button type="button" class="jpb-icon-btn is-danger" @click.stop="removePdf(idx)" title="Remove from the list" aria-label="Remove from the list"><i class="fas fa-times"></i></button>
+        </div>
+      </div>
+      <div class="jpb-out">
+        <div class="jpb-sub">Crop output</div>
+        <div class="jpb-ctrl-grid">
+          <label>Format
+            <select v-model="format" class="custom-select custom-select-sm">
+              <option value="jpeg">JPEG</option><option value="png">PNG</option><option value="webp">WebP</option>
+            </select>
+          </label>
+          <label>Quality <b>{{ quality }}%</b>
+            <input type="range" min="10" max="100" v-model.number="quality" class="custom-range">
+          </label>
+        </div>
+      </div>
+    </aside>
+
+    <!-- PDF workspace -->
+    <main class="jpb-panel jpb-main" aria-label="PDF pages">
+      <div class="jpb-panel-head">
+        <button v-if="!filesOpen" type="button" class="jpb-tool jpb-show" @click="toggleFiles" aria-controls="jpb-files" aria-expanded="false" title="Show PDF files">
+          <i class="fas fa-angle-double-right"></i> PDF files <span class="jpb-count">{{ pdfFiles.length }}</span>
+        </button>
+        <div class="jpb-bar-title">
+          <h2 :title="currentFile ? currentFile.name : ''">{{ currentFile ? currentFile.name : 'No PDF open' }}</h2>
+          <small>{{ numPages ? numPages + ' page' + (numPages > 1 ? 's' : '') + ' · drag on a page to select an area' : 'Its pages appear here for cropping' }}</small>
+        </div>
+        <div v-if="numPages" class="jpb-bar-tools">
+          <label class="jpb-mini">Page
+            <select v-model="pageNo" @change="goToPage" class="custom-select custom-select-sm" aria-label="Go to page">
+              <option v-for="p in numPages" :key="p" :value="p">{{ p }}</option>
+            </select>
+          </label>
+          <label class="jpb-mini">Zoom
+            <select v-model="scale" @change="renderPages" class="custom-select custom-select-sm" aria-label="Zoom">
+              <option value="0.75">75%</option><option value="1">100%</option><option value="1.5">150%</option>
+              <option value="2">200%</option><option value="2.5">250%</option>
+            </select>
+          </label>
+        </div>
+        <button v-if="!pagesOpen" type="button" class="jpb-tool jpb-show" @click="togglePages" aria-controls="jpb-pages" aria-expanded="false" title="Show Pages">
+          Pages <span class="jpb-count" :class="{ 'is-on': selected.length }">{{ selected.length }}</span> <i class="fas fa-angle-double-left"></i>
+        </button>
+      </div>
+      <div v-if="numPages" class="jpb-crop-bar">
+        <button type="button" class="btn btn-sm btn-light" @click="cropPage" title="Add the selected page as a full A4 page">
+          <i class="far fa-file"></i> Add page {{ pageNo }}
+        </button>
+        <button type="button" class="btn btn-sm btn-light" @click="cropAll" title="Add every page of this PDF">
+          <i class="fas fa-copy"></i> Add all {{ numPages }} pages
+        </button>
+        <span class="jpb-grow"></span>
+        <button type="button" class="btn btn-sm btn-light" @click="resetCrop" :disabled="!cropArea" title="Clear the selection (Esc)">
+          <i class="fas fa-times"></i> Clear
+        </button>
+        <button type="button" class="btn btn-sm btn-primary" @click="addCrop" :disabled="!cropArea" title="Add the selected area as a page">
+          <i class="fas fa-crop-alt"></i> Add crop
+        </button>
+      </div>
+      <div class="jpb-scroll">
+        <label v-show="!numPages" class="jpb-placeholder" :class="{ 'is-over': pdfDragOver }"
+               @dragover.prevent="pdfDragOver = true" @dragleave="pdfDragOver = false" @drop.prevent="onPdfDrop">
+          <span class="jpb-placeholder-icon"><i class="fas fa-file-pdf"></i></span>
+          <b>{{ loadingText || 'Drop a PDF here, or click to choose one' }}</b>
+          <small>No PDF? Upload page images in Pages instead.</small>
+          <input type="file" accept="application/pdf,.pdf" multiple @change="onPdfInput">
+        </label>
+        <div v-show="numPages" ref="pages" class="jpb-pages"></div>
+      </div>
+      <div class="jpb-foot" :class="{ 'is-ok': infoOk }"><span class="jpb-dot"></span>{{ info }}</div>
+    </main>
+
+    <!-- 2 + 3: pages and the report; the actions stay at the bottom -->
+    <aside class="jpb-right" aria-label="Pages and report">
+      <div class="jpb-resize" @mousedown="startResize" title="Drag to resize"></div>
+      <div class="jpb-right-scroll">
+        <section v-show="pagesOpen" class="jpb-panel" id="jpb-pages" aria-labelledby="jpb-pages-title">
+          <div class="jpb-panel-head">
+            <h2 id="jpb-pages-title">Pages <span class="jpb-count" :class="{ 'is-on': selected.length }">{{ selected.length }}</span></h2>
+            <button v-if="selected.length" type="button" class="btn btn-link btn-sm" @click="selected = []">Clear order</button>
+            <button type="button" class="jpb-icon-btn" @click="togglePages" aria-controls="jpb-pages" aria-expanded="true" title="Hide Pages" aria-label="Hide Pages"><i class="fas fa-angle-double-right"></i></button>
+          </div>
+          <div class="jpb-panel-body">
+            <div class="jpb-sub">Page order <small v-if="selected.length > 1">drag or use the arrows to reorder</small></div>
+            <div v-if="!selected.length" class="jpb-order-empty">
+              <i class="far fa-clone"></i>
+              <span>No pages yet. Crop areas of the PDF, or upload images; each becomes one A4 page.</span>
+            </div>
+            <ol v-else class="jpb-chips">
+              <li v-for="(item, idx) in selected" :key="item.id" class="jpb-chip" draggable="true"
+                  :class="{ 'is-drag': dragId === item.id }"
+                  @dragstart="onChipDragStart($event, item.id)" @dragover.prevent @drop.prevent="onChipDrop(item.id)" @dragend="dragId = null">
+                <i class="fas fa-grip-vertical jpb-chip-grip" aria-hidden="true"></i>
+                <span class="jpb-chip-no">{{ idx + 1 }}</span>
+                <img :src="item.dataURL" alt="">
+                <span class="jpb-chip-name" :title="item.name">{{ item.name }}</span>
+                <span class="jpb-chip-btns">
+                  <button type="button" @click="move(idx, -1)" :disabled="idx === 0" title="Move up" aria-label="Move up"><i class="fas fa-arrow-up"></i></button>
+                  <button type="button" @click="move(idx, 1)" :disabled="idx === selected.length - 1" title="Move down" aria-label="Move down"><i class="fas fa-arrow-down"></i></button>
+                  <button type="button" class="is-danger" @click="unpick(item.id)" title="Remove from the report" aria-label="Remove"><i class="fas fa-times"></i></button>
+                </span>
+              </li>
+            </ol>
+
+            <div class="jpb-pills" role="tablist" aria-label="Page sources">
+              <button type="button" role="tab" class="jpb-pill" :class="{ 'is-on': tab === 'gallery' }" :aria-selected="tab === 'gallery' ? 'true' : 'false'" @click="tab = 'gallery'">
+                <i class="fas fa-crop-alt"></i> Crop gallery <span>{{ cropItems.length }}</span>
+              </button>
+              <button type="button" role="tab" class="jpb-pill" :class="{ 'is-on': tab === 'upload' }" :aria-selected="tab === 'upload' ? 'true' : 'false'" @click="tab = 'upload'">
+                <i class="fas fa-upload"></i> Upload images <span>{{ uploadedItems.length }}</span>
+              </button>
+            </div>
+
+            <div v-show="tab === 'gallery'">
+              <div class="jpb-gallery-tools">
+                <small>Kept in this browser. Click a crop to add or remove it.</small>
+                <button v-if="cropItems.length" type="button" class="btn btn-link btn-sm text-danger" @click="confirmClear = true">Clear all</button>
+              </div>
+              <p v-if="!cropItems.length" class="jpb-empty">No crops yet. Drag on a PDF page and press <b>Add crop</b>.</p>
+              <div class="jpb-gallery">
+                <div v-for="item in cropItems" :key="item.id" class="jpb-card" :class="{ 'is-picked': isPicked('g_' + item.id) }"
+                     role="button" tabindex="0" @click="togglePick(item)" @keydown.enter="togglePick(item)" :aria-pressed="isPicked('g_' + item.id) ? 'true' : 'false'">
+                  <img :src="item.dataURL" :alt="item.name">
+                  <span class="jpb-card-no" v-if="isPicked('g_' + item.id)">{{ orderOf('g_' + item.id) }}</span>
+                  <span class="jpb-card-add" v-else><i class="fas fa-plus"></i></span>
+                  <span class="jpb-card-body">
+                    <span class="jpb-card-name" :title="item.name">{{ item.name }}</span>
+                    <small>Page {{ item.page }} · {{ item.width }}×{{ item.height }}</small>
+                  </span>
+                  <button type="button" class="jpb-card-del" @click.stop="askDelete(item)" title="Delete crop" aria-label="Delete crop"><i class="fas fa-trash"></i></button>
+                </div>
+              </div>
+            </div>
+
+            <div v-show="tab === 'upload'">
+              <label class="jpb-drop is-light" :class="{ 'is-over': imageDragOver }"
+                     @dragover.prevent="imageDragOver = true" @dragleave="imageDragOver = false" @drop.prevent="onImageDrop">
+                <i class="fas fa-images"></i>
+                <span class="jpb-drop-text">Click or drop images</span>
+                <small>JPG, PNG or WebP · each becomes one A4 page</small>
+                <input type="file" accept="image/*" multiple @change="onImageInput">
+              </label>
+              <ul class="jpb-uploads">
+                <li v-for="item in uploadedItems" :key="item.id">
+                  <img :src="item.dataURL" alt="">
+                  <span :title="item.name">{{ item.name }}</span>
+                  <span v-if="orderOf(item.id)" class="jpb-badge is-open">page {{ orderOf(item.id) }}</span>
+                  <button type="button" class="jpb-icon-btn is-danger" @click="removeUpload(item.id)" :aria-label="'Remove ' + item.name" title="Remove"><i class="fas fa-times"></i></button>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section class="jpb-panel" aria-labelledby="jpb-report-title">
+          <div class="jpb-panel-head">
+            <h2 id="jpb-report-title">Report</h2>
+            <span v-if="savedId" class="jpb-badge is-done" :title="'Saved in the file manager' + (savedPath ? ' (' + savedPath + ')' : '')"><i class="fas fa-save"></i> Saved</span>
+          </div>
+          <div class="jpb-panel-body jpb-form">
+            <div class="form-group">
+              <label for="jpb-name">Report name <span class="text-danger">*</span></label>
+              <input id="jpb-name" class="form-control form-control-sm" v-model="form.name" placeholder="e.g. FM_DEN_001" maxlength="100" autocomplete="off">
+              <small class="form-text text-muted" v-if="form.name && reportNameClean !== form.name">Saved as <code>{{ reportNameClean || '—' }}</code> (English letters, numbers and _ only)</small>
+            </div>
+            <div class="form-group">
+              <label for="jpb-version">Footer version <span class="label-optional">optional</span></label>
+              <input id="jpb-version" class="form-control form-control-sm" v-model="form.version" placeholder="e.g. FM-DEN-001 Rev.01">
+            </div>
+            <p class="jpb-layout-note"><i class="fas fa-th-large"></i> Each page fills one A4 portrait page under the Centrix header.</p>
+
+            <jr-publish-to v-if="canPublish" :form="form.pub" :ctx="ctx" :report-name="reportNameClean" check-url="/reports/print-out-builder/check-code" uid="jpb" :disabled="publishing"></jr-publish-to>
+          </div>
+        </section>
+      </div>
+
+      <div class="jpb-panel jpb-actions">
+        <template v-if="canPublish">
+          <button type="button" class="btn btn-primary btn-block jpb-publish" @click="publish" :disabled="!!publishBlocked || publishing">
+            <i class="fas" :class="publishing ? 'fa-spinner fa-spin' : 'fa-paper-plane'"></i>
+            {{ publishing ? 'Publishing…' : publishLabel }}
+          </button>
+          <small class="jpb-hint" :class="{ 'is-warn': !!publishBlocked }">{{ publishBlocked || publishHint }}</small>
+        </template>
+        <template v-else-if="canSave">
+          <button type="button" class="btn btn-primary btn-block jpb-publish" @click="openSave" :disabled="!selected.length || saving" title="Save as a design in the Jasper Designer file manager">
+            <i class="fas" :class="saving ? 'fa-spinner fa-spin' : 'fa-save'"></i> {{ savedId ? 'Save' : 'Save to file manager' }}
+          </button>
+          <small v-if="!selected.length" class="jpb-hint">Add pages to the page order first.</small>
+        </template>
+        <div class="jpb-act-row">
+          <button v-if="canPublish && canSave" type="button" class="btn btn-light btn-sm" @click="openSave" :disabled="!selected.length || saving" title="Save as a design in the Jasper Designer file manager">
+            <i class="fas" :class="saving ? 'fa-spinner fa-spin' : 'fa-save'"></i> {{ savedId ? 'Save' : 'Save to file manager' }}
+          </button>
+          <button type="button" class="btn btn-light btn-sm" @click="downloadJrxml" :disabled="!selected.length" :title="'Download the JRXML' + (selected.length > 1 ? ' and images (.zip)' : '') + ' for Jaspersoft Studio'">
+            <i class="fas fa-download"></i> {{ selected.length > 1 ? 'JRXML + images' : 'JRXML' }}
+          </button>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Confirmations -->
+  <div v-if="confirmClear" class="jpb-modal" @click.self="confirmClear = false">
+    <div class="jpb-modal-box" role="dialog" aria-modal="true" aria-labelledby="jpb-clear-title">
+      <i class="fas fa-trash jpb-modal-icon is-danger"></i>
+      <h3 id="jpb-clear-title">Clear the crop gallery?</h3>
+      <p>All {{ cropItems.length }} crops are deleted from this browser. This can't be undone.</p>
+      <div class="jpb-modal-actions">
+        <button type="button" class="btn btn-light" @click="confirmClear = false">Cancel</button>
+        <button type="button" class="btn btn-danger" @click="clearGallery">Delete all</button>
+      </div>
+    </div>
+  </div>
+  <div v-if="deleteTarget" class="jpb-modal" @click.self="deleteTarget = null">
+    <div class="jpb-modal-box" role="dialog" aria-modal="true" aria-labelledby="jpb-del-title">
+      <i class="fas fa-trash jpb-modal-icon is-danger"></i>
+      <h3 id="jpb-del-title">Delete this crop?</h3>
+      <p><b>{{ deleteTarget.name }}</b> is removed from the gallery and from the page order.</p>
+      <div class="jpb-modal-actions">
+        <button type="button" class="btn btn-light" @click="deleteTarget = null">Cancel</button>
+        <button type="button" class="btn btn-danger" @click="deleteCrop">Delete</button>
+      </div>
+    </div>
+  </div>
+  <!-- Save to file manager: the Jasper Designer library -->
+  <div v-if="fm" class="jpb-modal" @click.self="!saving && (fm = null)">
+    <div class="jpb-modal-box jpb-fm-box" role="dialog" aria-modal="true" aria-labelledby="jpb-fm-title">
+      <h3 id="jpb-fm-title"><i :class="fm.mode === 'open' ? 'far fa-folder-open' : 'fas fa-save'"></i> {{ fm.mode === 'open' ? 'Open a print-out' : 'Save to file manager' }}</h3>
+      <div class="jpb-fm-bar">
+        <nav class="jpb-fm-crumbs" aria-label="Folder">
+          <button type="button" class="jpb-fm-crumb" :class="{ 'is-here': !fm.path && !fm.q }" @click="fmGo('')"><i class="fas fa-home"></i> Designs</button>
+          <template v-for="c in fmCrumbs()">
+            <i class="fas fa-chevron-right jpb-fm-sep" :key="'s' + c.path"></i>
+            <button type="button" class="jpb-fm-crumb" :class="{ 'is-here': c.path === fm.path && !fm.q }" :key="c.path" @click="fmGo(c.path)">{{ c.name }}</button>
+          </template>
+        </nav>
+        <input v-model="fm.q" class="jpb-fm-search" type="search" placeholder="Search all folders…" aria-label="Search designs" @keydown.esc.stop="fm.q = ''">
+        <button v-if="canSave" type="button" class="btn btn-sm btn-light" @click="fmAskFolder" :disabled="fm.loading || fm.newFolder !== null" title="Create a folder here"><i class="fas fa-folder-plus"></i> New folder</button>
+      </div>
+      <!-- Order of the list below (folders stay on top) -->
+      <div class="jpb-fm-sort" role="group" aria-label="Sort">
+        <span class="jpb-fm-sort-label">Sort</span>
+        <button v-for="o in [{ by: 'name', label: 'Name' }, { by: 'updated', label: 'Modified' }]" :key="o.by" type="button" class="jpb-fm-sort-btn" :class="{ 'is-on': fmSort.by === o.by }"
+                @click="setFmSort(o.by)" :aria-pressed="fmSort.by === o.by ? 'true' : 'false'"
+                :title="fmSort.by === o.by ? 'Sorted by ' + o.label.toLowerCase() + (fmSort.dir === 'asc' ? (o.by === 'name' ? ', A to Z' : ', oldest first') : (o.by === 'name' ? ', Z to A' : ', newest first')) + '. Click to reverse.' : 'Sort by ' + o.label.toLowerCase()">
+          {{ o.label }}
+          <i v-if="fmSort.by === o.by" class="fas" :class="fmSort.dir === 'asc' ? 'fa-arrow-up' : 'fa-arrow-down'"></i>
+          <small v-if="fmSort.by === o.by">{{ fmSort.dir === 'asc' ? 'ASC' : 'DESC' }}</small>
+        </button>
+      </div>
+
+      <div class="jpb-fm-list">
+        <div v-if="fm.loading" class="text-muted p-3"><i class="fas fa-spinner fa-spin"></i> Loading…</div>
+        <template v-else>
+          <div v-if="fm.newFolder !== null" class="jpb-fm-row jpb-fm-new">
+            <i class="fas fa-folder jpb-fm-ic"></i>
+            <input ref="fmFolderInput" v-model="fm.newFolder" maxlength="60" placeholder="Folder name" aria-label="New folder name"
+                   @keydown.enter.prevent="fmCreateFolder" @keydown.esc.stop="fm.newFolder = null">
+            <button type="button" class="btn btn-sm btn-primary" @click="fmCreateFolder" :disabled="fmBusy || !fm.newFolder.trim()">Create</button>
+            <button type="button" class="btn btn-sm btn-light" @click="fm.newFolder = null">Cancel</button>
+          </div>
+          <template v-if="!fm.q">
+            <div v-for="f in fmSubfolders()" :key="'f:' + f.path" class="jpb-fm-row">
+              <button type="button" class="jpb-fm-name" @click="fmGo(f.path)"><i class="fas fa-folder jpb-fm-ic"></i> {{ f.name }}</button>
+              <span class="jpb-fm-meta">{{ f.count }} design{{ f.count === 1 ? '' : 's' }}</span>
+              <template v-if="fm.confirmDelete === 'f:' + f.path">
+                <button type="button" class="btn btn-sm btn-danger" @click="fmDeleteFolder(f.path)">Delete</button>
+                <button type="button" class="btn btn-sm btn-light" @click="fm.confirmDelete = null">Keep</button>
+              </template>
+              <button v-else-if="f.empty && canDelete" type="button" class="jpb-fm-x" @click="fm.confirmDelete = 'f:' + f.path" :aria-label="'Delete folder ' + f.name" title="Delete empty folder">&times;</button>
+              <span v-else class="jpb-fm-xspace"></span>
+            </div>
+          </template>
+          <div v-for="d in fmDesigns()" :key="d.id" class="jpb-fm-row" :class="{ 'is-current': d.id === savedId, 'is-picked': fm.mode === 'save' && d.name === cleanName(fm.name) && (d.path || '') === fm.path }">
+            <button type="button" class="jpb-fm-name" @click="fmPick(d)" :title="fm.mode === 'open' ? (fm.confirmOpen === d.id ? 'Click again to replace the current pages' : 'Open') : 'Use this name'">
+              <i v-if="fm.opening === d.id" class="fas fa-spinner fa-spin jpb-fm-ic"></i>
+              <i v-else class="far fa-file-alt jpb-fm-ic"></i> <span v-if="fm.q && d.path" class="jpb-fm-path">{{ d.path }}/</span>{{ d.name }}
+            </button>
+            <span class="jpb-fm-meta">{{ d.updated_by }} · {{ when(d.updated_at) }} · {{ fileSize(d.size) }}</span>
+            <template v-if="fm.confirmDelete === d.id">
+              <button type="button" class="btn btn-sm btn-danger" @click="fmDeleteDesign(d.id)">Delete</button>
+              <button type="button" class="btn btn-sm btn-light" @click="fm.confirmDelete = null">Keep</button>
+            </template>
+            <button v-else-if="canDelete" type="button" class="jpb-fm-x" @click="fm.confirmDelete = d.id" :aria-label="'Delete ' + d.name" title="Delete">&times;</button>
+            <span v-else class="jpb-fm-xspace"></span>
+          </div>
+          <p v-if="!fmDesigns().length && (fm.q || !fmSubfolders().length) && fm.newFolder === null" class="text-muted p-3 mb-0">
+            {{ fm.q ? 'No design matches "' + fm.q + '".' : 'This folder is empty.' }}
+          </p>
+        </template>
+      </div>
+
+      <div v-if="fm.error" class="jpb-fm-msg is-error" role="alert"><i class="fas fa-exclamation-triangle"></i> <span>{{ fm.error }}</span></div>
+      <template v-if="fm.mode === 'open'">
+        <div v-if="fm.confirmOpen" class="jpb-fm-msg is-warn"><i class="fas fa-exclamation-triangle"></i> <span>Opening it replaces the {{ selected.length }} page{{ selected.length > 1 ? 's' : '' }} in the page order. Click the design again to open it anyway.</span></div>
+        <small v-else class="text-muted d-block text-left mt-2">Click a print-out saved from this page to load its pages, name and version. Designs made in Jasper Designer open there.</small>
+      </template>
+      <template v-else>
+        <label class="jpb-fm-field">Report name<input v-model="fm.name" ref="fmName" @input="fm.confirmReplace = null" @keydown.enter.prevent="fmSave" maxlength="100"></label>
+        <small class="text-muted d-block text-left">Saved in <b>{{ fm.path ? '/' + fm.path : 'Designs (top level)' }}</b> as a Jasper Designer design with {{ selected.length }} page{{ selected.length > 1 ? 's' : '' }}. English letters, numbers and _ only.</small>
+        <div v-if="fm.confirmReplace" class="jpb-fm-msg is-warn"><i class="fas fa-exclamation-triangle"></i> <span>"{{ fm.name }}" already exists in this folder. Click Replace to overwrite it.</span></div>
+      </template>
+      <div class="jpb-modal-actions jpb-fm-actions">
+        <button type="button" class="btn btn-light" @click="fm = null" :disabled="saving">{{ fm.mode === 'open' ? 'Close' : 'Cancel' }}</button>
+        <button v-if="fm.mode === 'save'" type="button" class="btn" :class="fm.confirmReplace ? 'btn-danger' : 'btn-primary'" @click="fmSave" :disabled="saving || fm.loading || !cleanName(fm.name)">
+          <i class="fas" :class="saving ? 'fa-spinner fa-spin' : 'fa-save'"></i> {{ saving ? 'Saving…' : fm.confirmReplace ? 'Replace' : 'Save' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div v-if="saved" class="jpb-modal" @click.self="saved = null">
+    <div class="jpb-modal-box" role="dialog" aria-modal="true" aria-labelledby="jpb-saved-title">
+      <i class="fas fa-check-circle jpb-modal-icon is-ok"></i>
+      <h3 id="jpb-saved-title">Saved to the file manager</h3>
+      <p><b>{{ saved.path ? saved.path + '/' : '' }}{{ saved.name }}</b> with {{ saved.pages }} page{{ saved.pages > 1 ? 's' : '' }}. Open it in Jasper Designer to edit it, or publish it from Publish Report.</p>
+      <div class="jpb-modal-actions">
+        <button type="button" class="btn btn-light" @click="saved = null">Close</button>
+        <a class="btn btn-primary" :href="'/reports/jasper-designer#design=' + saved.id"><i class="fas fa-drafting-compass mr-1"></i> Open in Jasper Designer</a>
+      </div>
+    </div>
+  </div>
+
+  <div v-if="result" class="jpb-modal">
+    <div class="jpb-modal-box" role="dialog" aria-modal="true" aria-labelledby="jpb-done-title">
+      <i class="fas fa-check-circle jpb-modal-icon is-ok"></i>
+      <h3 id="jpb-done-title">Report published</h3>
+      <p><code>{{ result.routepath }}</code> with {{ result.pages }} page{{ result.pages > 1 ? 's' : '' }}:</p>
+      <ul class="jpb-servers">
+        <li v-for="sv in result.servers" :key="sv.id" :class="sv.ok ? 'is-ok' : 'is-bad'">
+          <i class="fas" :class="sv.ok ? 'fa-check-circle' : 'fa-times-circle'"></i> <b>{{ sv.name }}</b> {{ sv.ok ? 'published' : sv.error }}
+        </li>
+      </ul>
+      <p v-if="result.registered">Saved to HIS as <b>{{ result.registered.code }}</b> ({{ result.registered.created ? 'new report template' : 'existing template updated' }}).</p>
+      <div class="jpb-modal-actions">
+        <button type="button" class="btn btn-light" @click="result = null">Keep these pages</button>
+        <button type="button" class="btn btn-primary" @click="startOver">Start a new report</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="jpb-toasts" aria-live="polite">
+    <div v-for="t in toasts" :key="t.id" class="jpb-toast" :class="'is-' + t.type">
+      <i class="fas" :class="t.type === 'error' ? 'fa-exclamation-circle' : 'fa-check-circle'"></i> {{ t.msg }}
+    </div>
+  </div>
+</div>
+</div>
+
+<style>
+  /* Same look as Reports > Publish: a page header, a step strip and white panels with header bars. */
+  .jpb { --jpb-gap: 16px; --jpb-h: max(560px, calc(100vh - 330px)); color: var(--text); }
+  .jpb *, .jpb *::before, .jpb *::after { box-sizing: border-box; }
+  .jpb .form-control-sm, .jpb .custom-select-sm, .jpb .btn-sm:not(.btn-link) { height: 32px; font-size: .8rem; border-radius: 6px; }
+  .jpb .custom-select-sm { padding: 4px 28px 4px 10px; background-position: right 10px center; line-height: 1.5; }
+  .jpb .btn-sm:not(.btn-link) { display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
+  .jpb .btn-light { background: var(--surface-3); border-color: transparent; color: var(--text-2); }
+  .jpb .btn-light:hover:not(:disabled) { background: var(--border); color: var(--text); }
+  .jpb .btn-link.btn-sm { padding: 0 2px; height: auto; font-size: .76rem; }
+  .jpb code { font-family: var(--font-mono); font-size: .92em; color: var(--text-2); background: none; padding: 0; }
+  .jpb-alert { font-size: .82rem; border-radius: var(--radius-sm); margin-bottom: 12px; }
+  .jpb-count { display: inline-block; min-width: 20px; padding: 1px 7px; border-radius: 999px; background: var(--surface-3); color: var(--text-2); font-size: .7rem; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; vertical-align: middle; }
+  .jpb-count.is-on { background: var(--primary); color: #fff; }
+  .jpb-empty { font-size: .8rem; color: var(--muted); margin: 8px 2px; }
+  .jpb-grow { flex: 1; }
+  .jpb-sub { display: flex; align-items: baseline; gap: 8px; font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+  .jpb-sub small { font-size: .7rem; font-weight: 500; letter-spacing: 0; text-transform: none; }
+  .jpb-icon-btn { width: 26px; height: 26px; flex: none; display: inline-grid; place-items: center; border: 0; border-radius: 6px; background: none; color: var(--muted); font-size: .76rem; cursor: pointer; }
+  .jpb-icon-btn:hover:not(:disabled) { background: var(--surface-3); color: var(--text); }
+  .jpb-icon-btn.is-danger:hover:not(:disabled) { background: var(--danger-soft); color: var(--danger); }
+  .jpb-badge { display: inline-flex; align-items: center; gap: 4px; font-size: .64rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+  .jpb-badge.is-wait { background: var(--warning-soft); color: var(--warning); }
+  .jpb-badge.is-open { background: var(--primary-soft); color: var(--primary); }
+  .jpb-badge.is-done { background: var(--success-soft); color: var(--success); }
+
+  /* Header */
+  .jpb-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; margin-bottom: var(--jpb-gap); }
+  .jpb-top-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .jpb-top-icon { width: 42px; height: 42px; flex: none; border-radius: 12px; display: grid; place-items: center; background: var(--primary-soft); color: var(--primary); font-size: 1.15rem; }
+  .jpb-top h1 { font-size: 1.25rem; font-weight: 700; margin: 0; color: var(--text); }
+  .jpb-top p { font-size: .84rem; color: var(--text-2); margin: 2px 0 0; }
+  .jpb-top-side { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .jpb-conn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px; border-radius: 999px; font-size: .76rem; font-weight: 600; border: 1px solid var(--border); background: var(--surface); color: var(--text-2); max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .jpb-conn i { font-size: .74rem; }
+  .jpb-conn.is-ok i { color: var(--success); }
+  .jpb-conn.is-warn i { color: var(--warning); }
+  .jpb-conn.is-bad { color: var(--danger); border-color: var(--danger-soft); background: var(--danger-soft); }
+  .jpb-tool { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text-2); font-size: .78rem; font-weight: 600; cursor: pointer; text-decoration: none; }
+  .jpb-tool:hover:not(:disabled) { border-color: var(--border-strong); color: var(--text); text-decoration: none; }
+  .jpb-tool:disabled { opacity: .55; cursor: default; }
+
+  /* Steps */
+  .jpb-pipe { list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0 0 var(--jpb-gap); padding: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-sm); overflow: hidden; }
+  .jpb-pipe li { position: relative; display: flex; align-items: center; gap: 10px; padding: 10px 16px; min-width: 0; }
+  .jpb-pipe li + li { border-left: 1px solid var(--border); }
+  .jpb-pipe li + li::before { content: ''; position: absolute; left: -6px; top: 50%; width: 10px; height: 10px; background: var(--surface); border-top: 1px solid var(--border); border-right: 1px solid var(--border); transform: translateY(-50%) rotate(45deg); }
+  .jpb-pipe-n { width: 28px; height: 28px; flex: none; border-radius: 50%; display: grid; place-items: center; font-size: .8rem; font-weight: 700; background: var(--surface-3); color: var(--text-2); }
+  .jpb-pipe-text { display: flex; flex-direction: column; min-width: 0; }
+  .jpb-pipe-text b { font-size: .82rem; color: var(--text-2); }
+  .jpb-pipe-text small { font-size: .72rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .jpb-pipe .is-active .jpb-pipe-n { background: var(--primary); color: #fff; box-shadow: 0 0 0 3px var(--primary-ring); }
+  .jpb-pipe .is-active b { color: var(--text); }
+  .jpb-pipe .is-done .jpb-pipe-n { background: var(--success); color: #fff; }
+  .jpb-pipe .is-done b { color: var(--text); }
+
+  /* Layout: PDF files | pages of the PDF | pages and report */
+  .jpb-layout { display: grid; gap: var(--jpb-gap); height: var(--jpb-h); }
+  .jpb-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); min-width: 0; }
+  .jpb-panel-head { display: flex; align-items: center; gap: 8px; min-height: 52px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .jpb-panel-head h2 { flex: 1; min-width: 0; margin: 0; font-size: .92rem; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .jpb-panel-body { padding: 12px 14px 14px; }
+  .jpb-left, .jpb-main { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+
+  /* Drop zones */
+  .jpb-drop { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 16px 10px; margin: 0; border: 2px dashed var(--border-strong); border-radius: var(--radius-sm); background: var(--surface-2); cursor: pointer; text-align: center; transition: border-color .15s, background .15s; text-transform: none; letter-spacing: 0; }
+  .jpb-drop:hover, .jpb-drop.is-over { border-color: var(--primary); background: var(--primary-soft); }
+  .jpb-drop > i { font-size: 1.4rem; color: var(--primary); margin-bottom: 4px; }
+  .jpb-drop-text { font-size: .82rem; font-weight: 600; color: var(--text); }
+  .jpb-drop small { font-size: .72rem; color: var(--muted); font-weight: 400; }
+  .jpb-drop input, .jpb-placeholder input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+  .jpb-drop.is-light { padding: 12px 10px; margin-bottom: 8px; }
+
+  /* PDF files */
+  .jpb-left-drop { padding: 12px 14px 4px; }
+  .jpb-queue { flex: 1; overflow-y: auto; padding: 6px 10px 10px; min-height: 0; scrollbar-gutter: stable; }
+  .jpb-file { display: flex; align-items: center; gap: 8px; padding: 8px 6px 8px 10px; border: 1px solid transparent; border-radius: 8px; margin-bottom: 4px; cursor: pointer; transition: background .12s; }
+  .jpb-file:hover { background: var(--surface-2); }
+  .jpb-file.is-open { background: var(--primary-soft); border-color: var(--primary-ring); }
+  .jpb-file > i { color: var(--danger); }
+  .jpb-file.is-done > i { color: var(--success); }
+  .jpb-file-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .jpb-file-name { font-size: .8rem; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .jpb-file-info small { font-size: .7rem; color: var(--muted); }
+  .jpb-out { padding: 12px 14px; border-top: 1px solid var(--border); background: var(--surface-2); border-radius: 0 0 var(--radius) var(--radius); }
+  .jpb-ctrl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .jpb-ctrl-grid label { font-size: .72rem; font-weight: 600; color: var(--text-2); margin: 0; display: flex; flex-direction: column; gap: 3px; text-transform: none; letter-spacing: 0; }
+  .jpb-ctrl-grid label b { font-weight: 600; color: var(--primary); font-variant-numeric: tabular-nums; }
+
+  /* PDF workspace */
+  .jpb-bar-title { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .jpb-bar-title h2 { flex: none; }
+  .jpb-bar-title small { font-size: .72rem; color: var(--muted); }
+  .jpb-bar-tools { display: flex; gap: 8px; }
+  .jpb-show { flex: none; height: 32px; }
+  .jpb-show .jpb-count { min-width: 18px; padding: 0 6px; font-size: .66rem; }
+  .jpb-show i { font-size: .72rem; color: var(--muted); }
+  .jpb-mini { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-size: .74rem; font-weight: 600; color: var(--text-2); text-transform: none; letter-spacing: 0; }
+  .jpb-mini select { width: auto; min-width: 74px; }
+  .jpb-crop-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 8px 14px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+  .jpb-scroll { flex: 1; overflow: auto; padding: 18px; min-height: 0; background: var(--bg, var(--surface-2)); }
+  .jpb-placeholder { position: relative; height: 100%; min-height: 240px; margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-align: center; color: var(--muted); border: 2px dashed var(--border); border-radius: var(--radius); cursor: pointer; transition: border-color .15s, background .15s; text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .jpb-placeholder:hover, .jpb-placeholder.is-over { border-color: var(--primary); background: var(--primary-soft); }
+  .jpb-placeholder-icon { width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; background: var(--primary-soft); color: var(--primary); font-size: 1.5rem; margin-bottom: 8px; }
+  .jpb-placeholder b { font-size: .9rem; color: var(--text); }
+  .jpb-placeholder small { font-size: .76rem; }
+  .jpb-pages { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+  .jpb-page { position: relative; background: #fff; border: 1.5px solid var(--border); border-radius: 4px; box-shadow: var(--shadow); cursor: crosshair; max-width: 100%; overflow: hidden; }
+  .jpb-page:hover { border-color: var(--border-strong); }
+  .jpb-page.is-selected { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-ring), var(--shadow); }
+  .jpb-page canvas { display: block; width: 100%; height: auto; }
+  .jpb-page-label { text-align: center; padding: 6px 0; font-size: .7rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: var(--surface-2); border-top: 1px solid var(--border); cursor: default; }
+  .jpb-crop { position: absolute; display: none; border: 2px solid var(--primary); background: rgba(37, 99, 235, .12); pointer-events: none; }
+  .jpb-foot { display: flex; align-items: center; gap: 8px; padding: 9px 14px; font-size: .76rem; color: var(--text-2); border-top: 1px solid var(--border); border-radius: 0 0 var(--radius) var(--radius); }
+  .jpb-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--primary); flex: none; }
+  .jpb-foot.is-ok .jpb-dot { background: var(--success); }
+
+  /* Pages and report (scrolls), actions (always visible) */
+  .jpb-right { position: relative; display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0; }
+  .jpb-right-scroll { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 2px; scrollbar-gutter: stable; }
+  .jpb-right-scroll > .jpb-panel { flex: none; }
+  .jpb-resize { position: absolute; left: calc(var(--jpb-gap) / -2 - 3px); top: 0; bottom: 0; width: 6px; cursor: col-resize; z-index: 3; border-radius: 3px; }
+  .jpb-resize:hover, body.jpb-resizing .jpb-resize { background: var(--primary-ring); }
+  body.jpb-resizing { cursor: col-resize; user-select: none; }
+
+  .jpb-order-empty { display: flex; align-items: center; gap: 10px; padding: 12px; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); font-size: .78rem; color: var(--muted); margin-bottom: 12px; }
+  .jpb-order-empty i { font-size: 1.2rem; color: var(--border-strong); }
+  .jpb-chips { list-style: none; margin: 0 0 12px; padding: 4px; display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); }
+  .jpb-chip { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 4px 4px 4px 6px; cursor: grab; }
+  .jpb-chip:hover { border-color: var(--border-strong); }
+  .jpb-chip.is-drag { opacity: .5; }
+  .jpb-chip-grip { color: var(--border-strong); font-size: .72rem; }
+  .jpb-chip img { width: 26px; height: 34px; object-fit: cover; border-radius: 3px; border: 1px solid var(--border); background: #fff; }
+  .jpb-chip-no { font-size: .7rem; font-weight: 800; color: #fff; background: var(--primary); border-radius: 999px; min-width: 22px; text-align: center; padding: 1px 6px; font-variant-numeric: tabular-nums; }
+  .jpb-chip-name { flex: 1; min-width: 0; font-size: .78rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .jpb-chip-btns { display: flex; gap: 1px; }
+  .jpb-chip-btns button { border: 0; background: none; color: var(--muted); font-size: .7rem; width: 24px; height: 24px; border-radius: 5px; cursor: pointer; }
+  .jpb-chip-btns button:hover:not(:disabled) { background: var(--surface-3); color: var(--text); }
+  .jpb-chip-btns button.is-danger:hover { background: var(--danger-soft); color: var(--danger); }
+  .jpb-chip-btns button:disabled { opacity: .3; cursor: default; }
+
+  .jpb-pills { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .jpb-pill { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text-2); font-size: .74rem; font-weight: 600; cursor: pointer; }
+  .jpb-pill i { font-size: .7rem; }
+  .jpb-pill span { font-size: .68rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .jpb-pill:hover { border-color: var(--border-strong); }
+  .jpb-pill.is-on { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .jpb-pill.is-on span { color: rgba(255, 255, 255, .8); }
+  .jpb-gallery-tools { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .jpb-gallery-tools small { font-size: .72rem; color: var(--muted); }
+  .jpb-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+  .jpb-card { position: relative; border: 1.5px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; background: var(--surface); cursor: pointer; display: flex; flex-direction: column; transition: border-color .12s, box-shadow .12s; }
+  .jpb-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-sm); }
+  .jpb-card.is-picked { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-ring); }
+  .jpb-card img { width: 100%; height: 96px; object-fit: contain; background: var(--surface-3); border-bottom: 1px solid var(--border); }
+  .jpb-card-no, .jpb-card-add { position: absolute; top: 6px; left: 6px; min-width: 22px; height: 22px; border-radius: 999px; display: grid; place-items: center; padding: 0 6px; font-size: .72rem; font-weight: 800; }
+  .jpb-card-no { background: var(--primary); color: #fff; }
+  .jpb-card-add { background: var(--surface); color: var(--muted); border: 1px solid var(--border); opacity: 0; transition: opacity .12s; font-size: .62rem; }
+  .jpb-card:hover .jpb-card-add, .jpb-card:focus .jpb-card-add { opacity: 1; }
+  .jpb-card-body { padding: 5px 30px 6px 8px; display: flex; flex-direction: column; min-width: 0; }
+  .jpb-card-name { font-size: .74rem; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .jpb-card-body small { font-size: .68rem; color: var(--muted); }
+  .jpb-card-del { position: absolute; right: 4px; bottom: 6px; border: 0; background: none; color: var(--muted); font-size: .74rem; width: 24px; height: 24px; border-radius: 4px; cursor: pointer; }
+  .jpb-card-del:hover { color: var(--danger); background: var(--danger-soft); }
+  .jpb-uploads { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+  .jpb-uploads li { display: flex; align-items: center; gap: 8px; font-size: .78rem; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 4px 4px 4px 6px; }
+  .jpb-uploads img { width: 22px; height: 28px; object-fit: cover; border-radius: 3px; border: 1px solid var(--border); }
+  .jpb-uploads li > span:first-of-type { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .jpb-form label { font-size: .76rem; font-weight: 600; color: var(--text-2); margin-bottom: 3px; }
+  .jpb-form .form-group { margin-bottom: 10px; }
+  .jpb-layout-note { display: flex; gap: 6px; align-items: center; font-size: .74rem; color: var(--muted); margin: 0 0 10px; padding: 7px 10px; border-radius: var(--radius-sm); background: var(--surface-2); }
+  .jpb-actions { flex: none; padding: 12px 14px; box-shadow: 0 -6px 16px -12px rgba(15, 23, 42, .25), var(--shadow); }
+  .jpb-publish { display: flex; align-items: center; justify-content: center; gap: 8px; height: 40px; font-weight: 600; }
+  .jpb-hint { display: block; text-align: center; font-size: .72rem; color: var(--muted); margin: 6px 0 8px; }
+  .jpb-hint.is-warn { color: var(--warning); }
+  .jpb-act-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .jpb-servers { list-style: none; padding: 0; margin: 0 0 8px; font-size: .84rem; text-align: left; }
+  .jpb-servers li { padding: 2px 0; overflow-wrap: anywhere; }
+  .jpb-servers .is-ok i { color: var(--success); }
+  .jpb-servers .is-bad { color: var(--danger); }
+
+  /* Full screen (the browser's, or filling the window when it isn't allowed) */
+  .jpb.is-fullscreen { --jpb-h: max(420px, calc(100vh - 190px)); position: fixed; inset: 0; z-index: 1040; overflow: auto; padding: 16px 20px; background: var(--bg, var(--surface-2)); }
+  .jpb:fullscreen { --jpb-h: max(420px, calc(100vh - 190px)); padding: 16px 20px; background: var(--bg, var(--surface-2)); overflow: auto; }
+
+  .jpb-modal { position: fixed; inset: 0; z-index: 1060; background: rgba(15, 23, 42, .45); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .jpb-modal-box { background: var(--surface); border-radius: 14px; box-shadow: var(--shadow-lg); padding: 26px 24px 20px; width: 100%; max-width: 400px; text-align: center; }
+  .jpb-modal-box h3 { font-size: 1.05rem; margin: 10px 0 6px; text-wrap: balance; }
+  .jpb-modal-box p { font-size: .84rem; color: var(--text-2); margin: 0 0 8px; overflow-wrap: anywhere; }
+  .jpb-modal-icon { font-size: 1.6rem; }
+  .jpb-modal-icon.is-danger { color: var(--danger); }
+  .jpb-modal-icon.is-ok { color: var(--success); font-size: 2.2rem; }
+  .jpb-modal-actions { display: flex; gap: 8px; justify-content: center; margin-top: 14px; flex-wrap: wrap; }
+  /* Save to file manager (same look as Jasper Designer's Open / Save as) */
+  .jpb-fm-box { max-width: 760px; text-align: left; max-height: 90vh; overflow: auto; }
+  .jpb-fm-box h3 { display: flex; gap: 8px; align-items: center; margin: 0 0 12px; }
+  .jpb-fm-box h3 i { color: var(--primary); }
+  .jpb-fm-sort { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin: -2px 0 8px; }
+  .jpb-fm-sort-label { font-size: .66rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin-right: 2px; }
+  .jpb-fm-sort-btn { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); font-size: .72rem; font-weight: 600; color: var(--text-2); cursor: pointer; }
+  .jpb-fm-sort-btn:hover { border-color: var(--primary); }
+  .jpb-fm-sort-btn.is-on { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
+  .jpb-fm-sort-btn i { font-size: .62rem; }
+  .jpb-fm-sort-btn small { font-size: .6rem; font-weight: 700; letter-spacing: .03em; }
+  .jpb-fm-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .jpb-fm-crumbs { display: flex; align-items: center; gap: 2px; flex: 1 1 240px; min-width: 0; flex-wrap: wrap; }
+  .jpb-fm-crumb { border: 0; background: none; padding: 3px 6px; border-radius: 6px; font-size: .85rem; color: var(--text-2); cursor: pointer; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .jpb-fm-crumb:hover { background: var(--primary-soft); color: var(--primary); }
+  .jpb-fm-crumb.is-here { font-weight: 700; color: var(--text); }
+  .jpb-fm-sep { font-size: .6rem; color: var(--muted); }
+  .jpb-fm-search { height: 30px; border: 1px solid var(--border); border-radius: 6px; padding: 0 10px; font-size: .85rem; width: 190px; max-width: 100%; }
+  .jpb-fm-list { display: flex; flex-direction: column; gap: 4px; height: 340px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; padding: 6px; }
+  .jpb-fm-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; }
+  .jpb-fm-row.is-current { border-color: var(--primary); background: var(--primary-soft); }
+  .jpb-fm-row.is-picked { border-color: var(--primary); }
+  .jpb-fm-name { flex: 1; min-width: 0; text-align: left; border: 0; background: none; font-weight: 600; color: var(--text); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .jpb-fm-name:hover { color: var(--primary); }
+  .jpb-fm-meta { font-size: .72rem; color: var(--muted); white-space: nowrap; }
+  .jpb-fm-ic { width: 16px; text-align: center; }
+  .jpb-fm-list .fa-folder { color: #e0a526; }
+  .jpb-fm-path { color: var(--muted); font-weight: 400; }
+  .jpb-fm-new input { flex: 1; min-width: 0; height: 30px; border: 1px solid var(--primary); border-radius: 6px; padding: 0 8px; font-size: .88rem; }
+  .jpb-fm-x { border: 0; background: none; color: var(--muted); font-size: 1.05rem; line-height: 1; cursor: pointer; border-radius: 4px; padding: 0 4px; }
+  .jpb-fm-x:hover { color: var(--danger); background: var(--danger-soft); }
+  .jpb-fm-xspace { width: 22px; }
+  .jpb-fm-field { display: flex; flex-direction: column; font-size: .76rem; font-weight: 600; color: var(--text-2); margin: 12px 0 4px; }
+  .jpb-fm-field input { height: 34px; border: 1px solid var(--border); border-radius: 6px; padding: 0 10px; font-size: .9rem; font-weight: 400; margin-top: 2px; }
+  .jpb-fm-msg { display: flex; gap: 8px; align-items: flex-start; font-size: .8rem; border-radius: 8px; padding: 8px 10px; margin: 8px 0 0; }
+  .jpb-fm-msg.is-warn { color: var(--warning); background: var(--warning-soft); }
+  .jpb-fm-msg.is-error { color: var(--danger); background: var(--danger-soft); }
+  .jpb-fm-actions { justify-content: flex-end; }
+  .jpb-toasts { position: fixed; top: 76px; right: 20px; z-index: 1070; display: flex; flex-direction: column; gap: 6px; max-width: min(380px, calc(100vw - 40px)); }
+  .jpb-toast { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--success); border-radius: 8px; box-shadow: var(--shadow-lg); padding: 10px 14px; font-size: .82rem; color: var(--text); }
+  .jpb-toast i { color: var(--success); margin-right: 4px; }
+  .jpb-toast.is-error { border-left-color: var(--danger); }
+  .jpb-toast.is-error i { color: var(--danger); }
+
+  @media (max-width: 1199px) {
+    .jpb-layout { grid-template-columns: 1fr !important; height: auto; }
+    .jpb-left { max-height: 420px; }
+    .jpb-main { height: 70vh; }
+    .jpb-right-scroll { overflow: visible; }
+    .jpb-resize { display: none; }
+  }
+  @media (max-width: 767px) {
+    .jpb-pipe { grid-template-columns: 1fr; }
+    .jpb-pipe li + li { border-left: 0; border-top: 1px solid var(--border); }
+    .jpb-pipe li + li::before { display: none; }
+    .jpb-top-side .jpb-tool span { display: none; }
+  }
+</style>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="/reports/print-out-builder/assets/publish-panel.js"></script>
+<script src="/reports/print-out-builder/assets/builder.js"></script>

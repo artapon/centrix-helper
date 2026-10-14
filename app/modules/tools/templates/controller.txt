@@ -1,0 +1,17 @@
+const moment = require('moment-timezone');
+const {name}Model = require("../../models/{name}Model.js");
+
+exports.get{name}Data = async function (req, res) {
+    let data = {};
+    try {
+        let {name}Data = await {name}Model.get{name}(data);
+        console.log(moment().tz('Asia/Bangkok').format('YYYY-MM-DD HH:mm:ss') + ' | [Success] | Query was successful.')
+        res.status(200).json({name}Data);
+    } catch(err) {
+        console.error(moment().tz('Asia/Bangkok').format('YYYY-MM-DD HH:mm:ss') + ' | [Error] | ' + err.message);
+        res.status(404).json({
+            status : false,
+            message : err.message}
+        );
+    }
+}

@@ -1,0 +1,46 @@
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-file-invoice-dollar" style="color:#2563eb;"></i>
+      <span>Payment Items</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>Seq</th>
+              <th>Paiddate</th>
+              <th class="text-right">Amount</th>
+              <th class="text-right">Paidamount</th>
+              <th class="text-right">Returnchange</th>
+              <th class="text-center">Currency</th>
+              <th class="text-center">Paymentmode</th>
+              <th class="text-center">Iscancelled</th>
+              <th class="text-center">Canceldate</th>
+              <th class="text-center">Cancelledbyuseruid</th>
+              <th class="text-center">Isarsettlement</th>
+              <th class="text-center">Shouldnotbeused</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in results">
+              <td>{{ item.sequencenumber }}</td>
+              <td>{{ item.paiddate }}</td>
+              <td  class="text-right" :style="item.amount < 0 ? 'background-color: red; color : white;' : ''" >{{ item.amount }}</td>
+              <td  class="text-right" :style="item.paidamount < 0 ? 'background-color: red; color : white;' : ''" >{{ item.paidamount }}</td>
+              <td class="text-right" :style="item.returnchange < 0 ? 'background-color: red; color : white;' : ''" >{{ item.returnchange }}</td>
+              <td class="text-center">{{ item.currencyuid }}</td>
+              <td class="text-center">{{ item.paymentmodeuid }}</td>
+              <td class="text-center" >{{ item.iscancelled || "" }}</td>
+              <td class="text-center">{{ item.canceldate || "" }}</td>
+              <td class="text-center">{{ item.cancelledbyuseruid || "" }}</td>
+              <td class="text-center">{{ item.isarsettlement }}</td>
+              <td class="text-center">{{ item.shouldnotbeused || "" }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

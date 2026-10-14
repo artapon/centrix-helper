@@ -1,0 +1,244 @@
+<div class="col-12">
+  <div v-if="success" class="alert alert-success" role="alert"><i class="fas fa-check-circle mr-2"></i>{{ success }}</div>
+  <div v-if="error" class="alert alert-danger" role="alert"><i class="fas fa-exclamation-triangle mr-2"></i>{{ error }}</div>
+
+  <div class="card">
+    <div class="card-header">
+      <i class="fas fa-user-tag"></i>
+      <span>Roles</span>
+      <span class="badge badge-secondary">{{ roles.length }}</span>
+      <button type="button" class="btn btn-primary btn-sm" @click="openCreate()">
+        <i class="fas fa-plus mr-1"></i> Add role
+      </button>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>Role</th>
+              <th>Menu access</th>
+              <th>Users</th>
+              <th class="text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="r in roles" :key="r.key">
+              <td>
+                <strong>{{ r.name }}</strong>
+                <span v-if="r.is_system" class="badge badge-secondary ml-1">Built-in</span>
+                <small class="d-block text-muted">{{ r.description || r.key }}</small>
+              </td>
+              <td>
+                <span v-if="r.key === adminRole" class="badge badge-primary"><i class="fas fa-infinity"></i> Everything</span>
+                <template v-else>
+                  <div class="access-meter" :title="pageCount(r.permissions) + ' of ' + totalItems + ' menu items'">
+                    <div class="access-meter-bar"><span :style="{ width: percent(r) + '%' }"></span></div>
+                    <span class="access-meter-label">{{ pageCount(r.permissions) }} / {{ totalItems }}</span>
+                  </div>
+                  <small v-if="missingActions(r.permissions)" class="d-block text-muted"><i class="fas fa-lock"></i> {{ missingActions(r.permissions) }} page action{{ missingActions(r.permissions) === 1 ? '' : 's' }} not granted</small>
+                </template>
+              </td>
+              <td>{{ r.user_count }}</td>
+              <td class="text-right">
+                <button type="button" class="btn btn-secondary btn-sm" @click="openEdit(r)" :disabled="r.key === adminRole"
+                        :title="r.key === adminRole ? 'Administrators always have full access' : 'Edit permissions'">
+                  <i class="fas fa-pen mr-1"></i> Permissions
+                </button>
+                <button type="button" class="btn btn-outline-danger btn-sm" @click="openDelete(r)"
+                        :disabled="!!r.is_system || r.user_count > 0"
+                        :title="r.is_system ? 'Built-in roles cannot be deleted' : (r.user_count > 0 ? 'Assigned to users' : 'Delete')">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <p class="text-muted small">
+    Permissions control which menu items a role sees and which pages it can open. Some pages also list actions (for example
+    <strong>Deploy to Production</strong> on Publish Report): untick one to hide that button for the role; the server refuses it too. User and role management are
+    always limited to administrators. Connecting to a site from <strong>Manage Connections</strong> also needs <strong>DB Info</strong>.
+  </p>
+
+  <!-- Add / edit role -->
+  <div class="modal fade" id="roleModal" tabindex="-1" aria-labelledby="roleModalTitle">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <form class="modal-content" method="post" :action="form.isNew ? '/admin/roles' : `/admin/roles/${form.key}`">
+        <div class="modal-header">
+          <h5 class="modal-title" id="roleModalTitle">{{ form.isNew ? 'Add role' : 'Edit role: ' + form.name }}</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        </div>
+        <div class="modal-body">
+          <div class="form-row">
+            <div class="form-group col-sm-5">
+              <label for="r_name">Role name</label>
+              <input id="r_name" type="text" class="form-control" name="name" v-model="form.name" maxlength="60" required>
+            </div>
+            <div class="form-group col-sm-7">
+              <label for="r_description">Description <span class="label-optional">optional</span></label>
+              <input id="r_description" type="text" class="form-control" name="description" v-model="form.description" maxlength="200">
+            </div>
+          </div>
+
+          <div class="perm-toolbar">
+            <label class="mb-0">Menu access</label>
+            <span class="text-muted small">{{ pageCount(form.selected) }} of {{ totalItems }} selected</span>
+            <span class="perm-toolbar-actions">
+              <button type="button" class="btn btn-link btn-sm" @click="setAll(true)">Select all</button>
+              <button type="button" class="btn btn-link btn-sm" @click="setAll(false)">Clear</button>
+            </span>
+          </div>
+
+          <div class="perm-grid">
+            <fieldset v-for="section in menu" :key="section.header" class="perm-group">
+              <legend>
+                <div class="custom-control custom-checkbox">
+                  <input type="checkbox" class="custom-control-input" :id="'sec-' + section.header"
+                         :checked="sectionState(section) === 'all'"
+                         :indeterminate.prop="sectionState(section) === 'some'"
+                         @change="setSection(section, $event.target.checked)">
+                  <label class="custom-control-label" :for="'sec-' + section.header">{{ section.header }}</label>
+                </div>
+              </legend>
+              <div v-for="item in section.items" :key="item.permission" class="perm-entry">
+                <div class="custom-control custom-checkbox perm-item">
+                  <input type="checkbox" class="custom-control-input" name="permissions" :id="'perm-' + item.permission"
+                         :value="item.permission" :checked="has(item.permission)" @change="setItem(item, $event.target.checked)">
+                  <label class="custom-control-label" :for="'perm-' + item.permission">
+                    <i :class="item.icon"></i> {{ item.text }}
+                  </label>
+                </div>
+                <!-- What the role may do on that page (only together with the page) -->
+                <div v-if="item.actions.length" class="perm-actions" :class="{ 'is-off': !has(item.permission) }">
+                  <div v-for="a in item.actions" :key="a.permission" class="custom-control custom-checkbox perm-action" :title="a.description">
+                    <input type="checkbox" class="custom-control-input" name="permissions" :id="'perm-' + a.permission"
+                           :value="a.permission" v-model="form.selected" :disabled="!has(item.permission)">
+                    <label class="custom-control-label" :for="'perm-' + a.permission">{{ a.text }}</label>
+                  </div>
+                </div>
+              </div>
+            </fieldset>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">{{ form.isNew ? 'Create role' : 'Save permissions' }}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Delete role -->
+  <div class="modal fade" id="deleteRoleModal" tabindex="-1" aria-labelledby="deleteRoleTitle">
+    <div class="modal-dialog modal-dialog-centered">
+      <form class="modal-content" method="post" :action="`/admin/roles/${pendingDelete.key}/delete`">
+        <div class="modal-header">
+          <h5 class="modal-title" id="deleteRoleTitle">Delete role</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        </div>
+        <div class="modal-body">Delete the role <strong>{{ pendingDelete.name }}</strong>?</div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-danger">Delete role</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<style>
+  .access-meter { display: flex; align-items: center; gap: 10px; min-width: 180px; }
+  .access-meter-bar { flex: 1; height: 6px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+  .access-meter-bar span { display: block; height: 100%; background: var(--primary); border-radius: 999px; }
+  .access-meter-label { font-size: .78rem; color: var(--text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  .perm-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 4px 0 10px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+  .perm-toolbar-actions { margin-left: auto; }
+  .perm-toolbar .btn-link { height: auto; padding: 2px 6px; box-shadow: none; }
+  .perm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+  .perm-group { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px 8px; margin: 0; }
+  .perm-group legend { width: auto; margin: 0 0 6px; padding: 0; font-size: inherit; }
+  .perm-group legend .custom-control-label { font-weight: 700; font-size: .78rem; letter-spacing: .05em; text-transform: uppercase; color: var(--text-2); }
+  .perm-item { margin: 4px 0; }
+  .perm-entry + .perm-entry { margin-top: 2px; }
+  .perm-actions { margin: 2px 0 6px 26px; padding-left: 10px; border-left: 2px solid var(--border); }
+  .perm-actions.is-off { opacity: .5; }
+  .perm-action { margin: 2px 0; min-height: 1.2rem; }
+  .perm-action .custom-control-label { font-size: .8rem; color: var(--text-2); }
+  .perm-item .custom-control-label i { width: 16px; text-align: center; color: var(--muted); margin-right: 2px; }
+</style>
+
+<script>
+  Page.setup({
+    data: function () {
+      return {
+        form: { isNew: true, key: '', name: '', description: '', selected: [] },
+        pendingDelete: { key: '', name: '' }
+      };
+    },
+    computed: {
+      allPermissions: function () {
+        return this.menu.reduce(function (all, section) {
+          return all.concat(section.items.map(function (item) { return item.permission; }));
+        }, []);
+      },
+      // Each page with its actions
+      itemList: function () {
+        return this.menu.reduce(function (all, section) { return all.concat(section.items); }, []);
+      },
+      totalItems: function () { return this.allPermissions.length; }
+    },
+    methods: {
+      percent: function (role) {
+        return this.totalItems ? Math.round(this.pageCount(role.permissions) / this.totalItems * 100) : 0;
+      },
+      // Pages only (a page's actions are "<page>#<action>")
+      pageCount: function (list) { return list.filter(function (p) { return p.indexOf('#') < 0; }).length; },
+      // Actions of the granted pages that are not granted
+      missingActions: function (list) {
+        return this.itemList.reduce(function (n, item) {
+          if (list.indexOf(item.permission) < 0) return n;
+          return n + item.actions.filter(function (a) { return list.indexOf(a.permission) < 0; }).length;
+        }, 0);
+      },
+      has: function (permission) { return this.form.selected.indexOf(permission) >= 0; },
+      // Ticking a page grants all its actions (untick the ones it shouldn't have); unticking removes them.
+      withItem: function (selected, item, on) {
+        var keys = [item.permission].concat(item.actions.map(function (a) { return a.permission; }));
+        var rest = selected.filter(function (p) { return keys.indexOf(p) < 0; });
+        return on ? rest.concat(keys) : rest;
+      },
+      setItem: function (item, on) { this.form.selected = this.withItem(this.form.selected, item, on); },
+      sectionState: function (section) {
+        var selected = this.form.selected;
+        var count = section.items.filter(function (item) { return selected.indexOf(item.permission) >= 0; }).length;
+        return count === 0 ? 'none' : (count === section.items.length ? 'all' : 'some');
+      },
+      setSection: function (section, on) {
+        var vm = this, selected = vm.form.selected;
+        section.items.forEach(function (item) { selected = vm.withItem(selected, item, on); });
+        vm.form.selected = selected;
+      },
+      setAll: function (on) {
+        var vm = this, selected = [];
+        if (on) vm.itemList.forEach(function (item) { selected = vm.withItem(selected, item, true); });
+        vm.form.selected = selected;
+      },
+      openCreate: function () {
+        this.form = { isNew: true, key: '', name: '', description: '', selected: [] };
+        $('#roleModal').modal('show');
+      },
+      openEdit: function (role) {
+        this.form = { isNew: false, key: role.key, name: role.name, description: role.description, selected: role.permissions.slice() };
+        $('#roleModal').modal('show');
+      },
+      openDelete: function (role) {
+        this.pendingDelete = { key: role.key, name: role.name };
+        $('#deleteRoleModal').modal('show');
+      }
+    }
+  });
+</script>

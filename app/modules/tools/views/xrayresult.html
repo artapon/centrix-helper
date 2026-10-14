@@ -1,0 +1,60 @@
+<div class="col-sm-12" id="app">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-x-ray" style="color:#2563eb;"></i>
+      <span>Centrix Xray (ORU) Generate for test</span>
+    </div>
+    <div class="card-body">
+      <form method="post" action="/radiology/hl7-result">
+        <div class="form-row">
+          <div class="form-group col-sm-4">
+            <label>Xray Order Code ตัวอย่าง : XR1014</label>
+            <input autocomplete="off" name="xraycode" type="text" class="form-control" required>
+          </div>
+          <div class="form-group col-sm-4">
+            <label>Ordernumber ตัวอย่าง : RADOPD00000017</label>
+            <input autocomplete="off" name="ordernumber" type="text" class="form-control" required>
+          </div>
+          <div class="form-group col-sm-4">
+            <label>Accessionnumber ตัวอย่าง : RPHDEV-65-49629</label>
+            <input autocomplete="off" name="accessionnumber" type="text" class="form-control" required>
+          </div>
+          <div class="form-group col-sm-4">
+            <label>VISITID ตัวอย่าง : I65000034</label>
+            <input autocomplete="off" name="visitid" type="text" class="form-control" required>
+          </div>
+          <div class="form-group col-sm-4">
+            <label>Departmentcode ตัวอย่าง : ICU</label>
+            <input autocomplete="off" name="departmentcode" type="text" class="form-control" required>
+          </div>
+          <div class="form-group col-sm-4">
+            <label>HN ตัวอย่าง : 01-65-000087</label>
+            <input autocomplete="off" name="hn" type="text" class="form-control" required>
+          </div>
+          <div class="form-group col-sm-4">
+            <label>ผล X-ray : Normal / Abnormal</label>
+            <input autocomplete="off" name="result" type="text" class="form-control" required>
+          </div>
+          <div class="form-group col-sm-4">
+            <label>Departmenttype ตัวอย่าง : OPD / IPD</label>
+            <select name="departmenttype" class="form-control">
+              <option value="OPD">OPD</option>
+              <option value="OPD">IPD</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group mb-0">
+          <button type="submit" class="btn btn-success btn-block"><i class="fas fa-file-export"></i> <b>Generate ORU</b></button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-body" style="font-size:12px;">
+      {{ message }}
+    </div>
+  </div>
+</div>

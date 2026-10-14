@@ -1,0 +1,95 @@
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-filter" style="color:#2563eb;"></i>
+      <span>Filter</span>
+    </div>
+    <div class="card-body">
+      <form class="form-group" method="get" action="/interfaces/sap">
+        <div class="form-row">
+          <div class="form-group col-sm-3">
+            <label>From Date : &nbsp;</label>
+            <input type="text" class="datetimepicker2 form-control" name="date">
+          </div>
+          <div class="form-group col-sm-3">
+            <label>To Date : &nbsp;</label>
+            <input type="text" class="datetimepicker2 form-control" name="date2">
+          </div>
+          <div class="form-group col-sm-3">
+            <label>Identifierkey</label>
+            <input type="text" class="form-control" name="identifierkey">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-sm-3">
+            <label>Response Status</label>
+            <select name="responsestatus" class="form-control">
+              <option value="" selected>ทั้งหมด</option>
+              <option value="E">Error</option>
+              <option value="S">Success</option>
+            </select>
+          </div>
+          <div class="form-group col-sm-3">
+            <label>Isdone</label>
+            <select name="isdone" class="form-control">
+              <option value="" selected>ทั้งหมด</option>
+              <option value="true">True</option>
+              <option value="false">False</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-sm-3">
+            <input type="submit" class="btn btn-success" value="กรองข้อมูล">
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
+      <span style="display:flex;align-items:center;gap:8px;">
+        <i class="fas fa-sync" style="color:#2563eb;"></i>
+        SAP Interface Logs
+      </span>
+      <a :href="export_url" class="btn btn-success btn-sm"><i class="fas fa-download mr-1"></i>Export Logs</a>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>UID</th>
+              <th>Identifierkey</th>
+              <th>Transactioncode</th>
+              <th>Transactiontype</th>
+              <th>Domain</th>
+              <th>Response Status</th>
+              <th>Isdone</th>
+              <th>Response Message</th>
+              <th>From Date</th>
+              <th>To Date</th>
+              <th>Created At</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in sapLogs">
+              <td class="text-center">{{ item._id }}</td>
+              <td class="text-center">{{ item.identifierkey }}</td>
+              <td class="text-center">{{ item.transactioncode }}</td>
+              <td class="text-center">{{ item.transactiontype }}</td>
+              <td class="text-center">{{ item.domain }}</td>
+              <td class="text-center" :style="item.responsestatus == 'E' ? 'background-color: red; color : white;' : 'background-color: green; color : white;'">{{ item.responsestatus }}</td>
+              <td class="text-center" :style="item.isdone == true ? 'background-color: green; color : white;' : 'background-color: red; color : white;'">{{ item.isdone }}</td>
+              <td class="text-center">{{ item.responsemessage }}</td>
+              <td class="text-center">{{ item.fromdate || "" }}</td>
+              <td class="text-center">{{ item.todate }}</td>
+              <td class="text-center">{{ item.createdat }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

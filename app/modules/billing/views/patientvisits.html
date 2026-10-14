@@ -1,0 +1,46 @@
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-hospital-user" style="color:#2563eb;"></i>
+      <span>Patient Visits</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th class="text-center" >VisitID</th>
+              <th class="text-center" >HN</th>
+              <th class="text-center" >Entype</th>
+              <th class="text-center" >Visit Status</th>
+              <th>Isreadmission</th>
+              <th>isvisitanonymous</th>
+              <th class="text-center" >Startdate</th>
+              <th class="text-center" >Medical Discharge Date</th>
+              <th class="text-center" >Enddate</th>
+              <th class="text-center" >Createdby</th>
+              <th class="text-center" >Modifiedby</th>
+              <th class="text-center" >Modifiedat</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in visits">
+              <td class="text-center" ><a target="_blank" :href="`/patients/summary?vn=${ item.visitid }`" >{{ item.visitid }}</a></td>
+              <td class="text-center" ><a target="_blank" :href="`/patients/summary?hn=${ item.hn }`" >{{ item.hn }}</a></td>
+              <td>{{ item.entype }}</td>
+              <td class="text-center" >{{ item.visitstatus || "" }}</td>
+              <td class="text-center" >{{ item.isreadmission || "" }}</td>
+              <td class="text-center" >{{ item.isvisitanonymous || "" }}</td>
+              <td class="text-center" >{{ item.startdate }}</td>
+              <td class="text-center" >{{ item.enddate || "" }}</td>
+              <td class="text-center" >{{ item.medicaldischargedate || "" }}</td>
+              <td class="text-center" >{{ item.createdby }}</td>
+              <td class="text-center" >{{ item.modifiedby }}</td>
+              <td class="text-center" >{{ item.modifiedat }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

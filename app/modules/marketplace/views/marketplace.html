@@ -1,0 +1,207 @@
+<div class="col-12">
+  <div v-if="success" class="alert alert-success" role="alert"><i class="fas fa-check-circle mr-2"></i>{{ success }}</div>
+  <div v-if="error" class="alert alert-danger" role="alert"><i class="fas fa-exclamation-triangle mr-2"></i>{{ error }}</div>
+
+  <div class="mk-toolbar">
+    <div class="mk-search">
+      <i class="fas fa-search"></i>
+      <input type="search" v-model.trim="q" placeholder="Search add-ons…" aria-label="Search add-ons">
+    </div>
+    <div class="mk-filter" role="group" aria-label="Show">
+      <button v-for="f in filters" :key="f.key" type="button" :class="{ 'is-on': show === f.key }"
+              :aria-pressed="show === f.key ? 'true' : 'false'" @click="show = f.key">
+        {{ f.label }} <span class="mk-count">{{ f.count }}</span>
+      </button>
+    </div>
+  </div>
+
+  <div v-if="!addons.length" class="card">
+    <div class="card-body text-center text-muted">
+      <i class="fas fa-store fa-2x mb-2 d-block"></i>
+      No add-ons are installed. Add-ons live in <code>app/addons/&lt;id&gt;/</code> with an <code>addon.json</code> manifest.
+    </div>
+  </div>
+  <p v-else-if="!shown.length" class="text-muted">No add-ons match.</p>
+
+  <div class="mk-grid">
+    <article v-for="a in shown" :key="a.id" :id="'addon-' + a.id" class="mk-card" :class="{ 'is-inactive': !a.active, 'is-target': target === a.id }">
+      <header class="mk-head">
+        <span class="mk-icon"><i :class="a.icon"></i></span>
+        <div class="mk-title">
+          <h2>{{ a.name }} <span class="mk-version">v{{ a.version }}</span></h2>
+          <small>{{ a.category }}<template v-if="a.author"> · {{ a.author }}</template></small>
+        </div>
+        <span class="mk-status" :class="a.active ? 'is-active' : 'is-off'">
+          <i class="fas" :class="a.active ? 'fa-check-circle' : 'fa-pause-circle'"></i> {{ a.active ? 'Active' : 'Inactive' }}
+        </span>
+      </header>
+
+      <p class="mk-summary">{{ a.summary || a.description }}</p>
+
+      <div v-if="a.missing && a.missing.length" class="mk-missing" role="alert">
+        <i class="fas fa-box-open"></i>
+        <span>Needs the npm package{{ a.missing.length > 1 ? 's' : '' }} <b>{{ a.missing.join(', ') }}</b>. Run
+          <code>npm install {{ a.missing.join(' ') }}</code> in the app folder, then restart the server.</span>
+      </div>
+
+      <div v-if="a.menu" class="mk-menu">
+        <span class="mk-label">Adds to the menu</span>
+        <div class="mk-menu-items">
+          <span class="mk-menu-head">{{ a.menu.header }}</span>
+          <a v-for="item in a.menu.items" :key="item.link" class="mk-chip" :href="a.active ? item.link : null"
+             :title="a.active ? 'Open ' + item.text : 'Activate to open'">
+            <i :class="item.icon"></i> {{ item.text }}
+          </a>
+        </div>
+      </div>
+
+      <button type="button" class="mk-more" @click="toggle(a.id)" :aria-expanded="open[a.id] ? 'true' : 'false'">
+        <i class="fas" :class="open[a.id] ? 'fa-chevron-up' : 'fa-chevron-down'"></i> {{ open[a.id] ? 'Hide details' : 'Details' }}
+      </button>
+      <div v-if="open[a.id]" class="mk-details">
+        <p v-if="a.summary && a.description">{{ a.description }}</p>
+        <template v-if="a.features.length">
+          <span class="mk-label">Features</span>
+          <ul class="mk-features">
+            <li v-for="f in a.features" :key="f"><i class="fas fa-check"></i> {{ f }}</li>
+          </ul>
+        </template>
+        <template v-if="a.requires.length">
+          <span class="mk-label">Needs</span>
+          <ul class="mk-features is-needs">
+            <li v-for="r in a.requires" :key="r"><i class="fas fa-plug"></i> {{ r }}</li>
+          </ul>
+        </template>
+        <span class="mk-label">Pages</span>
+        <p class="mk-paths"><code v-for="p in a.paths" :key="p">{{ p }}</code></p>
+      </div>
+
+      <footer class="mk-foot">
+        <span class="mk-changed">{{ changedText(a) }}</span>
+        <template v-if="a.active">
+          <template v-if="confirming === a.id">
+            <form method="post" :action="'/admin/marketplace/' + a.id + '/deactivate'" class="mk-confirm">
+              <span>Hide {{ a.name }} from the menu and close its pages for everyone? Its data and role permissions are kept.</span>
+              <span class="mk-confirm-actions">
+                <button type="submit" class="btn btn-danger btn-sm"><i class="fas fa-power-off mr-1"></i> Deactivate</button>
+                <button type="button" class="btn btn-light btn-sm" @click="confirming = ''">Cancel</button>
+              </span>
+            </form>
+          </template>
+          <button v-else type="button" class="btn btn-outline-danger btn-sm" @click="confirming = a.id">
+            <i class="fas fa-power-off mr-1"></i> Deactivate
+          </button>
+        </template>
+        <form v-else method="post" :action="'/admin/marketplace/' + a.id + '/activate'">
+          <button type="submit" class="btn btn-primary btn-sm" :disabled="a.missing && a.missing.length > 0"
+                  :title="a.missing && a.missing.length ? 'Install the missing packages first' : ''"><i class="fas fa-bolt mr-1"></i> Activate</button>
+        </form>
+      </footer>
+    </article>
+  </div>
+
+  <p class="text-muted small mt-3">
+    Activating or deactivating an add-on applies to everyone at once and stays after a restart. When active, an add-on's
+    menu items are open to administrators and can be granted to roles in <a href="/admin/roles">Roles &amp; Permissions</a>.
+  </p>
+</div>
+
+<style>
+  .mk-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  .mk-search { position: relative; flex: 1 1 260px; max-width: 420px; }
+  .mk-search i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: .8rem; }
+  .mk-search input { width: 100%; height: 36px; padding: 0 12px 0 32px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); }
+  .mk-search input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-ring); }
+  .mk-filter { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); overflow: hidden; }
+  .mk-filter button { border: 0; background: transparent; padding: 6px 12px; font-size: .8rem; font-weight: 600; color: var(--text-2); cursor: pointer; }
+  .mk-filter button + button { border-left: 1px solid var(--border); }
+  .mk-filter button.is-on { background: var(--primary-soft); color: var(--primary); }
+  .mk-count { font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 500; margin-left: 2px; }
+  .mk-filter button.is-on .mk-count { color: inherit; }
+
+  .mk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); gap: 16px; align-items: start; }
+  .mk-card { display: flex; flex-direction: column; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; min-width: 0; }
+  .mk-card.is-target { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-ring); }
+  .mk-head { display: flex; align-items: flex-start; gap: 12px; }
+  .mk-icon { flex: 0 0 44px; height: 44px; border-radius: 10px; display: grid; place-items: center; background: var(--primary-soft); color: var(--primary); font-size: 1.15rem; }
+  .mk-card.is-inactive .mk-icon { background: var(--surface-3); color: var(--muted); }
+  .mk-title { flex: 1; min-width: 0; }
+  .mk-title h2 { font-size: 1.02rem; margin: 0 0 2px; text-wrap: balance; }
+  .mk-title small { color: var(--muted); font-size: .76rem; }
+  .mk-version { font-size: .7rem; font-weight: 600; color: var(--text-2); background: var(--surface-3); border-radius: 999px; padding: 1px 7px; vertical-align: 2px; font-variant-numeric: tabular-nums; }
+  .mk-status { display: inline-flex; align-items: center; gap: 5px; font-size: .74rem; font-weight: 600; border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+  .mk-status.is-active { color: var(--success); background: var(--success-soft); }
+  .mk-status.is-off { color: var(--text-2); background: var(--surface-3); }
+  .mk-summary { margin: 0; color: var(--text-2); font-size: .86rem; line-height: 1.5; }
+  .mk-missing { display: flex; gap: 8px; align-items: flex-start; font-size: .8rem; color: var(--warning); background: var(--warning-soft); border-radius: var(--radius-sm); padding: 8px 10px; }
+  .mk-missing i { margin-top: 2px; }
+  .mk-missing code { color: inherit; background: rgba(0,0,0,.05); border-radius: 4px; padding: 0 4px; }
+  .mk-label { display: block; font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .mk-menu-items { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .mk-menu-head { font-size: .78rem; font-weight: 700; color: var(--text); margin-right: 2px; }
+  .mk-chip { display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; color: var(--text-2); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 3px 9px; text-decoration: none; }
+  .mk-chip i { color: var(--muted); }
+  a.mk-chip[href]:hover { border-color: var(--primary); color: var(--primary); text-decoration: none; }
+  .mk-more { align-self: flex-start; border: 0; background: none; padding: 0; font-size: .8rem; font-weight: 600; color: var(--primary); cursor: pointer; }
+  .mk-more i { font-size: .7rem; margin-right: 3px; }
+  .mk-details { border-top: 1px solid var(--border); padding-top: 12px; font-size: .84rem; color: var(--text-2); }
+  .mk-details p { margin: 0 0 12px; line-height: 1.5; }
+  .mk-features { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 4px; }
+  .mk-features i { width: 16px; color: var(--success); font-size: .75rem; }
+  .mk-features.is-needs i { color: var(--muted); }
+  .mk-paths { display: flex; flex-wrap: wrap; gap: 6px; }
+  .mk-paths code { font-size: .76rem; background: var(--surface-3); border-radius: 4px; padding: 1px 6px; color: var(--text-2); }
+  .mk-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; border-top: 1px solid var(--border); padding-top: 12px; margin-top: auto; }
+  .mk-foot form { margin: 0; }
+  .mk-changed { font-size: .76rem; color: var(--muted); }
+  .mk-confirm { display: flex; flex-direction: column; gap: 8px; width: 100%; padding: 10px 12px; background: var(--danger-soft); border-radius: var(--radius-sm); }
+  .mk-confirm > span:first-child { font-size: .8rem; font-weight: 600; color: var(--danger); }
+  .mk-confirm-actions { display: flex; gap: 6px; }
+</style>
+
+<script>
+  Page.setup({
+    data: function () {
+      var open = {};
+      var target = (location.hash || '').replace(/^#addon-/, '');
+      if (target) open[target] = true;   // arriving from a link to one add-on: show its details
+      return { q: '', show: 'all', open: open, confirming: '', target: target };
+    },
+    computed: {
+      filters: function () {
+        var active = this.addons.filter(function (a) { return a.active; }).length;
+        return [
+          { key: 'all', label: 'All', count: this.addons.length },
+          { key: 'active', label: 'Active', count: active },
+          { key: 'inactive', label: 'Inactive', count: this.addons.length - active }
+        ];
+      },
+      shown: function () {
+        var q = this.q.toLowerCase(), show = this.show;
+        return this.addons.filter(function (a) {
+          if (show === 'active' && !a.active) return false;
+          if (show === 'inactive' && a.active) return false;
+          if (!q) return true;
+          var text = [a.name, a.category, a.author, a.summary, a.description].concat(a.features)
+            .concat(a.menu ? a.menu.items.map(function (i) { return i.text; }) : []).join(' ').toLowerCase();
+          return text.indexOf(q) >= 0;
+        });
+      }
+    },
+    methods: {
+      toggle: function (id) { this.$set(this.open, id, !this.open[id]); },
+      // "Activated by admin1 · 09/10/2026 14:03 GMT+7", or the manifest default when never changed.
+      changedText: function (a) {
+        if (!a.changedAt) return a.active ? 'Active by default' : 'Inactive by default';
+        var d = new Date(a.changedAt), when = '';
+        if (!isNaN(d)) {
+          var p = {};
+          new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
+            .formatToParts(d).forEach(function (x) { p[x.type] = x.value; });
+          when = p.day + '/' + p.month + '/' + p.year + ' ' + p.hour + ':' + p.minute + ' GMT+7';
+        }
+        return (a.active ? 'Activated' : 'Deactivated') + (a.changedBy ? ' by ' + a.changedBy : '') + (when ? ' · ' + when : '');
+      }
+    }
+  });
+</script>

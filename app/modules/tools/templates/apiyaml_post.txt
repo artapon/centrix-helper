@@ -1,0 +1,32 @@
+/public/api/v1/{name}Data:
+    post:
+      tags:
+        - "{name}"
+      summary: "{name} Data"
+      description: ""
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                  {prop1}
+                     {typep1}
+                  {prop2}
+                     {typep2}
+                  {prop3}
+                     {typep3}
+                  {prop4}
+                     {typep4}
+              example:
+                {exp1}
+                {exp2}
+                {exp3}
+                {exp4}
+      responses:
+        '200':    # status code
+          description: ""
+          content:
+             application/json:
+              schema: 
+                type: array

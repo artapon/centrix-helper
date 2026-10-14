@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Install · Centrix HIS Helper Tools</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <link href="/lib/bootstrap/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="/lib/@fortawesome/fontawesome-free/css/all.min.css" rel="stylesheet">
+  <link href="/css/app.css?v=${assetVersion}" rel="stylesheet">
+</head>
+<body class="auth-page">
+  <main class="auth-panel auth-panel-wide">
+    <div class="auth-brand">
+      <span class="sidebar-brand-mark"><i class="fas fa-heartbeat"></i></span>
+      <span class="auth-brand-text"><strong>Centrix</strong><small>HIS Helper Tools</small></span>
+    </div>
+
+    <div class="auth-card">
+      <div class="auth-step">Initial setup</div>
+      <h1>Create the administrator account</h1>
+      <p class="auth-sub">This account can sign in and manage other users. You only do this once.</p>
+
+      ${error ? `<div class="alert alert-danger" role="alert"><i class="fas fa-exclamation-triangle mr-2"></i>${error}</div>` : ''}
+
+      <form method="post" action="/install" class="auth-form">
+        <div class="form-group">
+          <label for="setup_code">Setup code</label>
+          <input type="text" class="form-control auth-code" id="setup_code" name="setup_code"
+                 autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="8" required autofocus>
+          <small class="form-text">Printed in the server console when the app starts (<code>pm2 logs</code>), and saved in <code>data/setup-code.txt</code>.</small>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group col-sm-6">
+            <label for="username">Username</label>
+            <input type="text" class="form-control" id="username" name="username" value="${username}"
+                   pattern="[a-zA-Z0-9._\\-]{3,32}" title="3–32 characters: letters, numbers, dot, dash or underscore"
+                   autocomplete="username" autocapitalize="off" spellcheck="false" required>
+          </div>
+          <div class="form-group col-sm-6">
+            <label for="name">Full name <span class="label-optional">optional</span></label>
+            <input type="text" class="form-control" id="name" name="name" value="${name}" autocomplete="name">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group col-sm-6">
+            <label for="password">Password</label>
+            <div class="password-field">
+              <input type="password" class="form-control" id="password" name="password" minlength="${minLength}" autocomplete="new-password" required>
+              <button type="button" class="password-toggle" data-password-toggle="password" aria-label="Show password"><i class="far fa-eye"></i></button>
+            </div>
+            <small class="form-text">At least ${minLength} characters.</small>
+          </div>
+          <div class="form-group col-sm-6">
+            <label for="password_confirm">Confirm password</label>
+            <input type="password" class="form-control" id="password_confirm" name="password_confirm" minlength="${minLength}" autocomplete="new-password" required>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block btn-lg"><i class="fas fa-user-shield mr-1"></i> Create administrator</button>
+      </form>
+    </div>
+
+    <p class="auth-foot">v${version}</p>
+  </main>
+  <script src="/js/auth.js?v=${assetVersion}"></script>
+</body>
+</html>

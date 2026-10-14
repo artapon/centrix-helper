@@ -1,0 +1,84 @@
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-filter" style="color:#2563eb;"></i>
+      <span>Filter Deposits</span>
+    </div>
+    <div class="card-body">
+      <form method="get" action="/billing/deposits">
+        <div class="form-row align-items-end">
+          <div class="form-group col-sm-3 mb-3">
+            <label>HN</label>
+            <input type="text" class="form-control" name="hn" >
+          </div>
+          <div class="form-group col-sm-3 mb-3">
+            <label>VN / AN</label>
+            <input type="text" class="form-control" name="vn" >
+          </div>
+          <div class="form-group col-sm-3 mb-3">
+            <input type="submit" class="btn btn-success" value="กรองข้อมูล" >
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-hand-holding-usd" style="color:#2563eb;"></i>
+      <span>Deposits</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th class="text-center" >VN</th>
+              <th class="text-center" >HN</th>
+              <th class="text-left" >Sequencenumber</th>
+              <th class="text-center" >Depositdate</th>
+              <th class="text-center" >Visit Status</th>
+              <th class="text-center" >Paidamount</th>
+              <th class="text-center" >Amount</th>
+              <th class="text-center" >Payment Mode</th>
+              <th class="text-center" >User</th>
+              <th class="text-center" >Cancelrefundbyuser</th>
+              <th class="text-center" >Isrefund</th>
+              <th class="text-center" >Iscancelled</th>
+              <th class="text-center" >Isipddeposit</th>
+              <th class="text-center" >Isduetobillcancel</th>
+              <th class="text-center" >Createdby</th>
+              <th class="text-center" >Createdat</th>
+              <th class="text-center" >Modifiedby</th>
+              <th class="text-center" >Modifiedat</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in deposits">
+              <td class="text-center" > <a v-if="item.visitid" target="_blank" :href="`/patients/summary?vn=${ item.visitid }`" >{{ item.visitid }}</a><template v-else>{{ item.visitid }}</template> </td>
+              <td class="text-center" ><a target="_blank" :href="`/patients/summary?hn=${ item.mrn }`" >{{ item.mrn }}</a></td>
+              <td>{{ item.sequencenumber }}</td>
+              <td>{{ item.depositdate }}</td>
+              <td class="text-center" >{{ item.visitstatus || "" }}</td>
+              <td class="text-center" :style="item.paidamount <= 0 ? 'background-color: red; color : white;' : ''" >{{ item.paidamount || "" }}</td>
+              <td class="text-center" :style="item.amount <= 0 ? 'background-color: red; color : white;' : ''" >{{ item.amount || "" }}</td>
+              <td class="text-center" >{{ item.paymentmode || "" }}</td>
+              <td class="text-center" >{{ item.user || "" }}</td>
+              <td class="text-center" >{{ item.cancelrefundbyuser || "" }}</td>
+              <td class="text-center" :style="item.isrefund == true ? 'background-color: green; color : white;' : ''" >{{ item.isrefund }}</td>
+              <td class="text-center" :style="item.iscancelled == true ? 'background-color: red; color : white;' : ''" >{{ item.iscancelled }}</td>
+              <td class="text-center" :style="item.isipddeposit == true ? 'background-color: green; color : white;' : ''" >{{ item.isipddeposit }}</td>
+              <td class="text-center" :style="item.isduetobillcancel == true ? 'background-color: green; color : white;' : ''" >{{ item.isduetobillcancel }}</td>
+              <td class="text-center" >{{ item.createdby }}</td>
+              <td class="text-center" >{{ item.createdat }}</td>
+              <td class="text-center" >{{ item.modifiedby }}</td>
+              <td class="text-center" >{{ item.modifiedat }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

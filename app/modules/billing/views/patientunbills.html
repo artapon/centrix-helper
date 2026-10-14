@@ -1,0 +1,113 @@
+<div class="col-sm-12">
+  <!-- Filter Card -->
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-filter" style="color:#2563eb;"></i>
+      <span>Filter Charge Codes</span>
+    </div>
+    <div class="card-body">
+      <form method="get" action="/billing/charge-codes">
+        <div class="form-row align-items-end">
+          <div class="form-group col-sm-3 mb-3">
+            <label><i class="fas fa-id-card mr-1" style="color:#94a3b8;"></i>HN</label>
+            <input type="text" class="form-control" name="hn" placeholder="HN" :value="hn">
+          </div>
+          <div class="form-group col-sm-3 mb-3">
+            <label><i class="fas fa-hospital-user mr-1" style="color:#94a3b8;"></i>VN / AN</label>
+            <input type="text" class="form-control" name="vn" placeholder="VN or AN" :value="vn">
+          </div>
+          <div class="form-group col-sm-2 mb-3" style="padding-top:4px;">
+            <label style="visibility:hidden;">Search</label>
+            <button type="submit" class="btn btn-primary w-100">
+              <i class="fas fa-search mr-1"></i> Search
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="col-sm-12">
+  <!-- Results Card -->
+  <div class="card">
+    <div class="card-header"
+      style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+      <span style="display:flex;align-items:center;gap:8px;">
+        <i class="fas fa-dollar-sign" style="color:#2563eb;"></i>
+        Patient Charge Codes
+      </span>
+      <div style="display:flex;gap:8px;">
+        <a :href="pageUrl(lastpage)" class="btn btn-secondary btn-sm" :class="{ disabled: page === 0 }">
+          <i class="fas fa-chevron-left mr-1"></i> Previous
+        </a>
+        <a :href="pageUrl(nextpage)" class="btn btn-secondary btn-sm" :class="{ disabled: unbills.length < 50 }">
+          Next <i class="fas fa-chevron-right ml-1"></i>
+        </a>
+      </div>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border-radius:0 0 14px 14px;border:none;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>VN</th>
+              <th>HN</th>
+              <th>Start Date</th>
+              <th>Visit Status</th>
+              <th class="text-center">Charge Code Items</th>
+              <th class="text-center">Allocation Init.</th>
+              <th>Created By</th>
+              <th>Created At</th>
+              <th>Modified By</th>
+              <th>Modified At</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="!unbills.length">
+              <td colspan="10" class="text-center text-muted">No charge codes found{{ hn || vn ? ' for this HN / VN' : '' }}.</td>
+            </tr>
+            <tr v-for="item in unbills" :key="item._id">
+              <td><a target="_blank" :href="`/patients/summary?vn=${item.visitid}`">{{ item.visitid }}</a></td>
+              <td><a target="_blank" :href="`/patients/summary?hn=${item.mrn}`">{{ item.mrn }}</a></td>
+              <td>{{ item.startdate || '' }}</td>
+              <td>{{ item.visitstatus || '' }}</td>
+              <td class="text-center">
+                <a :href="`/billing/unbill-items/${item._id}`">{{ item.chargecodes }}</a>
+              </td>
+              <td class="text-center">
+                <span :class="item.allocationinitialized == true ? 'badge badge-success' : 'badge badge-secondary'">
+                  {{ item.allocationinitialized }}
+                </span>
+              </td>
+              <td>{{ item.createdby || '' }}</td>
+              <td>{{ item.createdat || '' }}</td>
+              <td>{{ item.modifiedby || '' }}</td>
+              <td>{{ item.modifiedat || '' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card-footer" style="display:flex;justify-content:flex-end;gap:8px;">
+      <a :href="pageUrl(lastpage)" class="btn btn-secondary btn-sm" :class="{ disabled: page === 0 }">
+        <i class="fas fa-chevron-left mr-1"></i> Previous
+      </a>
+      <a :href="pageUrl(nextpage)" class="btn btn-secondary btn-sm" :class="{ disabled: unbills.length < 50 }">
+        Next <i class="fas fa-chevron-right ml-1"></i>
+      </a>
+    </div>
+  </div>
+</div>
+<script>
+  Page.setup({
+    methods: {
+      pageUrl: function (page) {
+        var params = new URLSearchParams({ page: page });
+        if (this.hn) params.set('hn', this.hn);
+        if (this.vn) params.set('vn', this.vn);
+        return '/billing/charge-codes?' + params.toString();
+      }
+    }
+  });
+</script>

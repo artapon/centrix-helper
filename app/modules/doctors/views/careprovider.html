@@ -1,0 +1,44 @@
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-user-md" style="color:#2563eb;"></i>
+      <span>Care Provider Schedules</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>BUSINESS_UNIT</th>
+              <th>APPOINTMENTSESSIONUID</th>
+              <th>CAREPROVIDER_CODE</th>
+              <th>CAREPROVIDER_NAME</th>
+              <th>CAREPROVIDER_LICENNUMBER</th>
+              <th>DEPARTMENT_NAME</th>
+              <th>DEPARTMENT_CODE</th>
+              <th>SCHEDULE_DATE</th>
+              <th>SCHEDULE_STARTTIME</th>
+              <th>SCHEDULE_ENDTIME</th>
+              <th>STATUS_CANCELLED</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in schedules">
+              <td :style="!item.organisations_code ? 'background-color: red; color : white;' : ''">{{ item.organisations_code }}</td>
+              <td :style="!item.appointmentsessionuid ? 'background-color: red; color : white;' : ''">{{ item.appointmentsessionuid }}</td>
+              <td :style="!item.careprovider_code ? 'background-color: red; color : white;' : ''">{{ item.careprovider_code }}</td>
+              <td :style="!item.careprovider_name ? 'background-color: red; color : white;' : ''">{{ item.careprovider_name }}</td>
+              <td :style="!item.careprovider_licennumber ? 'background-color: red; color : white;' : ''">{{ item.careprovider_licennumber }}</td>
+              <td :style="!item.department_name ? 'background-color: red; color : white;' : ''">{{ item.department_name }}</td>
+              <td :style="!item.department_code ? 'background-color: red; color : white;' : ''">{{ item.department_code }}</td>
+              <td :style="!item.appointment_date ? 'background-color: red; color : white;' : ''">{{ item.appointment_date }}</td>
+              <td :style="!item.appointment_starttime ? 'background-color: red; color : white;' : ''">{{ item.appointment_starttime }}</td>
+              <td :style="!item.appointment_endtime ? 'background-color: red; color : white;' : ''">{{ item.appointment_endtime }}</td>
+              <td :style="item.iscancelled ? 'background-color: red; color : white;' : ''">{{ item.iscancelled }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

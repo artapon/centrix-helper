@@ -1,0 +1,68 @@
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-filter" style="color:#2563eb;"></i>
+      <span>Filter</span>
+    </div>
+    <div class="card-body">
+      <form method="get" :action="`/radiology/mirth-log/${channelType}`" class="form-group">
+        <div class="form-row">
+          <div class="form-group col-sm-5">
+            <label>HN หรือ Accessionnumber : &nbsp;</label>
+            <input type="text" class="form-control" name="PATIENTMRN" >
+          </div>
+          <div class="form-group col-sm-5">
+            <label>Status : &nbsp;</label>
+            <select name="status" class="form-control">
+              <option value="ERROR" selected>ERROR</option>
+              <option value="SENT">SUCCESS</option>
+            </select>
+          </div>
+          <div class="form-group col-sm-3" style="display:flex;align-items:flex-end;">
+            <input type="submit" value="กรองข้อมูล" class="btn btn-success">
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<div class="col-sm-12 mt-2">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-history" style="color:#2563eb;"></i>
+      <span>X-Ray Result Log</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th class="text-center">Accessionnumber</th>
+              <th class="text-center">PatientHN</th>
+              <th class="text-center">Channel Name</th>
+              <th class="text-center">Connector Name</th>
+              <th class="text-center">Source Name</th>
+              <th class="text-center">{{ channelType == "orm" ? "VisitID" :  "DoctorCode" }}</th>
+              <th class="text-center">Status</th>
+              <th class="text-center">ErrorMessage</th>
+              <th class="text-center">ReceivedDateTime</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in xraylogs">
+              <td class="text-center">{{ item.Accessionnumber || "" }}</td>
+              <td class="text-center"><a target="_blank" :href="`/patients/summary?hn=${ item.PatientHN }`" >{{ item.PatientHN }}</a></td>
+              <td class="text-center">{{ item.channelName }}</td>
+              <td class="text-center">{{ item.connectorName || "" }}</td>
+              <td class="text-center" :style="item.SourceName == 'Discontinued Order' ? 'background-color: red; color : white;' : ''">{{ item.SourceName || "" }}</td>
+              <td class="text-center">{{ item.DoctorCode }}</td>
+              <td class="text-center" :style="item.status == 'ERROR' ? 'background-color: red; color : white;' : 'background-color: green; color : white;'">{{ item.status }}</td>
+              <td class="text-center">{{ item.ErrorMessage || "" }}</td>
+              <td class="text-center">{{ item.receivedDateTime }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

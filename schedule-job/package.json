@@ -1,0 +1,17 @@
+{
+  "name": "schedule-job",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "http": "^0.0.1-security",
+    "https": "^1.0.0",
+    "moment": "^2.29.1",
+    "node-schedule": "^2.0.0"
+  }
+}

@@ -1,0 +1,171 @@
+<div class="col-sm-12">
+  <!-- Search Filters Card -->
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-search" style="color:#2563eb;"></i>
+      <span>Search & Filter Patient Visits</span>
+    </div>
+    <div class="card-body">
+      <form method="get" action="/patients/visits">
+        <!-- Basic Filters -->
+        <div class="form-row">
+          <div class="form-group col-sm-3 mb-3">
+            <label><i class="fas fa-hospital-user mr-1" style="color:#94a3b8;"></i>VN / AN</label>
+            <input type="text" class="form-control" name="vn" :value="vn" placeholder="VN or AN">
+          </div>
+          <div class="form-group col-sm-3 mb-3">
+            <label><i class="fas fa-id-card mr-1" style="color:#94a3b8;"></i>HN</label>
+            <input type="text" class="form-control" name="hn" :value="hn" placeholder="HN">
+          </div>
+          <div class="form-group col-sm-3 mb-3">
+            <label><i class="fas fa-calendar-alt mr-1" style="color:#94a3b8;"></i>Visit Date</label>
+            <input type="text" class="datetimepicker2 form-control" name="visitdate" :value="visitdate" placeholder="YYYY-MM-DD">
+          </div>
+        </div>
+
+        <!-- Advanced Filters Collapse Trigger -->
+        <div class="mb-3">
+          <a class="btn btn-link p-0" data-toggle="collapse" href="#advancedSearchCollapse" role="button" aria-expanded="false" aria-controls="advancedSearchCollapse" style="color:#2563eb; font-weight:600; font-size:0.875rem;">
+            <i class="fas fa-sliders-h mr-1"></i> Advanced Search Options
+          </a>
+        </div>
+
+        <!-- Advanced Filters -->
+        <div :class="`collapse ${visitstatusuid || entypeuid ? 'show' : ''}`" id="advancedSearchCollapse">
+          <div class="form-row" style="background-color: #f8fafc; padding: 16px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 20px;">
+            <div class="form-group col-sm-6 mb-0">
+              <label><i class="fas fa-info-circle mr-1" style="color:#94a3b8;"></i>Visit Status</label>
+              <select name="visitstatusuid" class="form-control">
+                <option value="">-- All Statuses --</option>
+                <option v-for="status in visitStatuses" :value="status.uid"  :selected="status.uid == visitstatusuid">{{ status.valuedescription }}</option>
+              </select>
+            </div>
+            <div class="form-group col-sm-6 mb-0">
+              <label><i class="fas fa-tags mr-1" style="color:#94a3b8;"></i>Encounter Type</label>
+              <select name="entypeuid" class="form-control">
+                <option value="">-- All Types --</option>
+                <option v-for="type in encounterTypes" :value="type.uid"  :selected="type.uid == entypeuid">{{ type.valuedescription }}</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group col-sm-3 mb-0">
+            <button type="submit" class="btn btn-primary w-100">
+              <i class="fas fa-filter mr-1"></i> Filter Data
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="col-sm-12">
+  <!-- Results Card -->
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+      <span style="display:flex;align-items:center;gap:8px;">
+        <i class="fas fa-hospital-user" style="color:#2563eb;"></i>
+        Patient Visits Records
+      </span>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button onclick="toggleCells()" class="btn btn-secondary btn-sm">
+          <i class="fas fa-eye mr-1"></i> Toggle Extra Columns
+        </button>
+        <a :href="`/patients/visits?vn=${vn}&hn=${hn}&visitstatusuid=${visitstatusuid}&entypeuid=${entypeuid}&visitdate=${visitdate}&page=${lastpage}`" class="btn btn-secondary btn-sm">
+          <i class="fas fa-chevron-left mr-1"></i> Previous
+        </a>
+        <a :href="`/patients/visits?vn=${vn}&hn=${hn}&visitstatusuid=${visitstatusuid}&entypeuid=${entypeuid}&visitdate=${visitdate}&page=${nextpage}`" class="btn btn-secondary btn-sm">
+          Next <i class="fas fa-chevron-right ml-1"></i>
+        </a>
+      </div>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border-radius:0 0 14px 14px;border:none;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>VisitID</th>
+              <th>HN</th>
+              <th>First Careprovider</th>
+              <th>First Department</th>
+              <th>Last Careprovider</th>
+              <th class="hideable" style="display: none;">Med Department</th>
+              <th>Last Department</th>
+              <th>Encounter Type</th>
+              <th>Visit Status</th>
+              <th class="hideable text-center" style="display: none;">Readmission</th>
+              <th class="hideable text-center" style="display: none;">Anonymous</th>
+              <th class="hideable text-center" style="display: none;">Pregnant</th>
+              <th class="hideable text-center" style="display: none;">Lactation</th>
+              <th class="hideable text-center" style="display: none;">Precaution</th>
+              <th class="hideable text-center" style="display: none;">Convert OPD</th>
+              <th class="hideable text-center" style="display: none;">Admitted</th>
+              <th>Start Date</th>
+              <th>End Date</th>
+              <th>Created By</th>
+              <th>Modified By</th>
+              <th>Modified At</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in visits">
+              <td><a target="_blank" :href="`/patients/summary?vn=${item.visitid}`">{{ item.visitid }}</a></td>
+              <td><a target="_blank" :href="`/patients/summary?hn=${item.hn}`">{{ item.hn }}</a></td>
+              <td>{{ item.fcareproviders || '' }}</td>
+              <td>{{ item.fdepartment || '' }}</td>
+              <td>{{ item.lcareproviders || '' }}</td>
+              <td class="hideable" style="display: none;">{{ item.mdepartmentjourney || '' }}</td>
+              <td>{{ item.ldepartment || '' }}</td>
+              <td><span class="badge badge-primary">{{ item.entype || '' }}</span></td>
+              <td>
+                <span :class="item.visitstatus == 'Medical Discharge' || item.visitstatus == 'Financial Discharge' ? 'status-inactive' : 'status-active'">
+                  {{ item.visitstatus || '' }}
+                </span>
+              </td>
+              <td class="hideable text-center" style="display: none;">
+                <span :class="item.isreadmission == true ? 'badge badge-success' : 'badge badge-secondary'">{{ item.isreadmission }}</span>
+              </td>
+              <td class="hideable text-center" style="display: none;">
+                <span :class="item.isvisitanonymous == true ? 'badge badge-success' : 'badge badge-secondary'">{{ item.isvisitanonymous }}</span>
+              </td>
+              <td class="hideable text-center" style="display: none;">
+                <span :class="item.ispatientpregnant == true ? 'badge badge-success' : 'badge badge-secondary'">{{ item.ispatientpregnant }}</span>
+              </td>
+              <td class="hideable text-center" style="display: none;">
+                <span :class="item.ispatientlactaion == true ? 'badge badge-success' : 'badge badge-secondary'">{{ item.ispatientlactaion }}</span>
+              </td>
+              <td class="hideable text-center" style="display: none;">
+                <span :class="item.showprecaution == 'true' ? 'badge badge-success' : 'badge badge-secondary'">{{ item.showprecaution }}</span>
+              </td>
+              <td class="hideable text-center" style="display: none;">
+                <span :class="item.isconvertedfromopd == true ? 'badge badge-success' : 'badge badge-secondary'">{{ item.isconvertedfromopd || '' }}</span>
+              </td>
+              <td class="hideable text-center" style="display: none;">
+                <span :class="item.isadmitted == true ? 'badge badge-success' : 'badge badge-secondary'">{{ item.isadmitted || '' }}</span>
+              </td>
+              <td>{{ item.startdate }}</td>
+              <td>{{ item.enddate || '' }}</td>
+              <td>{{ item.createdby || '' }}</td>
+              <td>{{ item.modifiedby || '' }}</td>
+              <td>{{ item.modifiedat || '' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card-footer" style="display:flex;justify-content:flex-end;gap:8px;">
+      <button onclick="toggleCells()" class="btn btn-secondary btn-sm">
+        <i class="fas fa-eye mr-1"></i> Toggle Extra Columns
+      </button>
+      <a :href="`/patients/visits?vn=${vn}&hn=${hn}&visitstatusuid=${visitstatusuid}&entypeuid=${entypeuid}&visitdate=${visitdate}&page=${lastpage}`" class="btn btn-secondary btn-sm">
+        <i class="fas fa-chevron-left mr-1"></i> Previous
+      </a>
+      <a :href="`/patients/visits?vn=${vn}&hn=${hn}&visitstatusuid=${visitstatusuid}&entypeuid=${entypeuid}&visitdate=${visitdate}&page=${nextpage}`" class="btn btn-secondary btn-sm">
+        Next <i class="fas fa-chevron-right ml-1"></i>
+      </a>
+    </div>
+  </div>
+</div>

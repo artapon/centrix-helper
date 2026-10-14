@@ -1,0 +1,694 @@
+<div class="col-sm-12">
+  <div v-if="success" class="alert alert-success" role="alert">
+    <i class="fas fa-check-circle mr-2"></i>{{ success }}
+  </div>
+  <div v-if="error" class="alert alert-danger" role="alert">
+    <i class="fas fa-exclamation-triangle mr-2"></i>{{ error }}
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <i class="fas fa-plug"></i>
+      <span>DB Connections</span>
+      <span class="badge badge-secondary">{{ connections.length }}</span>
+      <button type="button" class="btn btn-primary btn-sm" @click="openAdd()">
+        <i class="fas fa-plus mr-1"></i> Add Connection
+      </button>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Type</th>
+              <th>Server</th>
+              <th>Database</th>
+              <th>Site Code</th>
+              <th>Centrix URL</th>
+              <th class="text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="connections.length === 0"><td colspan="7" class="text-center text-muted">No DB connections configured yet.</td></tr>
+            <tr v-for="item in connections" :key="item.ID">
+              <td>
+                <span class="conn-color" :style="{ background: item.COLOR || 'transparent', borderColor: item.COLOR || 'var(--border-strong)' }"></span>
+                <strong>{{ item.NAME }}</strong>
+                <span v-if="isActive(item)" class="badge badge-success ml-1">Connected</span>
+              </td>
+              <td>
+                <span class="badge badge-secondary">{{ item.CONN_TYPE === 'replicaset' ? 'Replica set' : (item.USE_SRV ? 'DNS seedlist' : 'Single') }}</span>
+                <span v-if="item.TLS" class="badge badge-info ml-1" title="TLS/SSL"><i class="fas fa-lock"></i> TLS</span>
+              </td>
+              <td class="font-monospace">{{ serverSummary(item) }}</td>
+              <td>{{ item.MONGODB_DB || '—' }}</td>
+              <td>{{ item.DEFAULT_SITE_CODE }}</td>
+              <td>{{ item.CENTRIX_BASE_URL || '—' }}</td>
+              <td class="text-right text-nowrap">
+                <form v-if="canConnect" method="post" action="/database/connect" class="d-inline" @submit="connectingId = item.ID">
+                  <input type="hidden" name="site_index" :value="item.SITE_INDEX">
+                  <input type="hidden" name="from" value="connections">
+                  <button type="submit" class="btn btn-sm conn-connect-btn" :class="isActive(item) ? 'btn-outline-primary' : 'btn-primary'"
+                          :disabled="connectingId !== null" :title="(isActive(item) ? 'Reconnect to ' : 'Connect to ') + item.NAME">
+                    <i :class="connectingId === item.ID ? 'fas fa-spinner fa-spin' : (isActive(item) ? 'fas fa-redo-alt' : 'fas fa-link')"></i>
+                    {{ connectingId === item.ID ? 'Connecting…' : (isActive(item) ? 'Reconnect' : 'Connect') }}
+                  </button>
+                </form>
+                <button type="button" class="btn btn-secondary btn-sm" @click="openEdit(item.ID)" title="Edit">
+                  <i class="fas fa-pen"></i>
+                </button>
+                <button type="button" class="btn btn-outline-danger btn-sm" @click="confirmDelete(item)" title="Delete">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Connection editor -->
+  <div class="modal fade" id="connectionModal" tabindex="-1" aria-labelledby="connectionModalTitle" data-backdrop="static">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <form class="modal-content" ref="form" method="post" :action="f.id ? `/database/connections/${f.id}` : '/database/connections'"
+            @submit="onSubmit" novalidate>
+        <div class="modal-header">
+          <h5 class="modal-title" id="connectionModalTitle">
+            <i class="fas fa-database text-primary mr-2"></i>{{ f.id ? 'Edit Connection' : 'Add DB Connection' }}
+          </h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        </div>
+
+        <div class="modal-body conn-editor">
+          <!-- Import from a connection string -->
+          <div v-if="ui.showImport" class="conn-import">
+            <label for="c_uri"><i class="fas fa-file-import mr-1"></i> Import from connection string (URI)</label>
+            <div class="input-group">
+              <input id="c_uri" type="text" class="form-control font-monospace" v-model="ui.uriInput"
+                     placeholder="mongodb://user:password@host:27017/centrixdb?authSource=centrixdb"
+                     @keydown.enter.prevent="importUri()" spellcheck="false" autocomplete="off">
+              <div class="input-group-append">
+                <button type="button" class="btn btn-primary" @click="importUri()" :disabled="!ui.uriInput.trim() || ui.busy">Import</button>
+              </div>
+            </div>
+            <small class="form-text">Accepts <code>mongodb://</code> and <code>mongodb+srv://</code>. Fills in the sections below; review, then save.</small>
+          </div>
+
+          <!-- To URI result -->
+          <div v-if="ui.exportUri" class="conn-import">
+            <label><i class="fas fa-link mr-1"></i> Connection string</label>
+            <div class="input-group">
+              <input type="text" class="form-control font-monospace" :value="ui.exportUri" readonly ref="exportUri" @focus="$event.target.select()">
+              <div class="input-group-append">
+                <button type="button" class="btn btn-secondary" @click="copyUri()"><i class="far fa-copy mr-1"></i>{{ ui.copied ? 'Copied' : 'Copy' }}</button>
+              </div>
+            </div>
+            <small v-if="ui.exportUri.indexOf('<password>') >= 0" class="form-text">The saved password is not shown; replace <code>&lt;password&gt;</code> when using this elsewhere.</small>
+          </div>
+
+          <!-- Test Connection result -->
+          <div v-if="ui.test" :class="['alert', ui.test.ok ? 'alert-success' : 'alert-danger', 'conn-test']" role="status">
+            <template v-if="ui.test.ok">
+              <i class="fas fa-check-circle mr-2"></i>
+              <span><strong>Connected</strong> in {{ ui.test.latencyMs }} ms · MongoDB {{ ui.test.version }}
+                <template v-if="ui.test.replicaSet"> · replica set <strong>{{ ui.test.replicaSet }}</strong> (primary {{ ui.test.primary }})</template>
+                <template v-if="ui.test.database"> · database <strong>{{ ui.test.database }}</strong>: {{ ui.test.collections }} collections</template>
+              </span>
+            </template>
+            <template v-else>
+              <i class="fas fa-times-circle mr-2"></i><span><strong>Connection failed:</strong> {{ ui.test.error }}</span>
+            </template>
+          </div>
+
+          <!-- Always visible: name and color -->
+          <div class="form-row">
+            <div class="form-group col-md-7">
+              <label for="c_name">Name</label>
+              <input id="c_name" ref="name" type="text" name="name" class="form-control" v-model="f.name"
+                     placeholder="e.g. Hospital A - Production" maxlength="80">
+            </div>
+            <div class="form-group col-md-5">
+              <label>Mark with color</label>
+              <div class="color-swatches" role="radiogroup" aria-label="Mark with color">
+                <button v-for="c in colors" :key="c.value" type="button" class="color-swatch"
+                        :class="{ 'is-selected': f.color === c.value, 'is-none': !c.value }"
+                        :style="c.value ? { background: c.value } : {}" :title="c.label" :aria-label="c.label"
+                        role="radio" :aria-checked="f.color === c.value ? 'true' : 'false'" @click="f.color = c.value"></button>
+              </div>
+              <input type="hidden" name="color" :value="f.color">
+            </div>
+          </div>
+
+          <!-- MongoDB -->
+          <section class="conn-section" :class="{ 'is-open': open.mongodb }">
+            <button type="button" class="conn-section-head" @click="toggle('mongodb')" :aria-expanded="open.mongodb ? 'true' : 'false'">
+              <i class="fas fa-chevron-right conn-section-chevron"></i>
+              <i class="fas fa-database conn-section-icon"></i>
+              <span class="conn-section-title">MongoDB</span>
+              <span class="conn-section-summary">{{ summary.mongodb }}</span>
+            </button>
+            <div class="conn-section-body" v-show="open.mongodb">
+              <div class="form-group">
+                <label for="c_type">Type</label>
+                <select id="c_type" name="conn_type" class="form-control" v-model="f.conn_type">
+                  <option value="single">Single Server or DNS Seedlist</option>
+                  <option value="replicaset">Replica Set or Cluster</option>
+                </select>
+              </div>
+
+              <template v-if="f.conn_type === 'single'">
+                <div class="form-row">
+                  <div class="form-group" :class="f.use_srv ? 'col-12' : 'col-sm-9'">
+                    <label for="c_host">Server</label>
+                    <input id="c_host" ref="host" type="text" class="form-control" v-model="f.host"
+                           :placeholder="f.use_srv ? 'cluster0.example.mongodb.net' : 'localhost'" spellcheck="false">
+                  </div>
+                  <div v-if="!f.use_srv" class="form-group col-sm-3">
+                    <label for="c_port">Port</label>
+                    <input id="c_port" type="number" min="1" max="65535" name="mongodb_port" class="form-control" v-model="f.port" placeholder="27017">
+                  </div>
+                </div>
+                <div class="custom-control custom-checkbox mb-3">
+                  <input type="checkbox" class="custom-control-input" id="c_srv" v-model="f.use_srv">
+                  <label class="custom-control-label" for="c_srv">SRV Record <span class="text-muted">(mongodb+srv:// — port is resolved through DNS, TLS on by default)</span></label>
+                </div>
+              </template>
+
+              <template v-else>
+                <label>Members</label>
+                <div v-for="(m, i) in f.members" :key="i" class="form-row member-row">
+                  <div class="col">
+                    <input type="text" class="form-control" v-model="m.host" :placeholder="'member ' + (i + 1) + ' host'"
+                           :ref="'member' + i" spellcheck="false" :aria-label="'Member ' + (i + 1) + ' host'">
+                  </div>
+                  <div class="col-3">
+                    <input type="number" min="1" max="65535" class="form-control" v-model="m.port" placeholder="27017" :aria-label="'Member ' + (i + 1) + ' port'">
+                  </div>
+                  <div class="col-auto">
+                    <button type="button" class="btn btn-outline-secondary" @click="removeMember(i)" :disabled="f.members.length === 1" title="Remove member">
+                      <i class="fas fa-minus"></i>
+                    </button>
+                  </div>
+                </div>
+                <button type="button" class="btn btn-link btn-sm px-0 mb-3" @click="addMember()"><i class="fas fa-plus mr-1"></i> Add member</button>
+                <div class="form-row">
+                  <div class="form-group col-sm-6">
+                    <label for="c_rs">Replica set name <span class="label-optional">optional</span></label>
+                    <input id="c_rs" type="text" name="mongodb_replica_set" class="form-control" v-model="f.mongodb_replica_set" placeholder="rs0">
+                  </div>
+                  <div class="form-group col-sm-6">
+                    <label for="c_rp">Read preference</label>
+                    <select id="c_rp" name="read_preference" class="form-control" v-model="f.read_preference">
+                      <option value="">Default (primary)</option>
+                      <option value="primaryPreferred">Primary preferred</option>
+                      <option value="secondary">Secondary</option>
+                      <option value="secondaryPreferred">Secondary preferred</option>
+                      <option value="nearest">Nearest</option>
+                    </select>
+                  </div>
+                </div>
+              </template>
+
+              <input type="hidden" name="mongodb_host" :value="hostValue">
+              <input type="hidden" name="use_srv" :value="f.use_srv ? '1' : '0'">
+
+              <div class="form-group mb-0">
+                <label for="c_db">Database</label>
+                <input id="c_db" type="text" name="mongodb_db" class="form-control" v-model="f.mongodb_db" placeholder="centrixdb" spellcheck="false">
+              </div>
+            </div>
+          </section>
+
+          <!-- Authentication -->
+          <section class="conn-section" :class="{ 'is-open': open.auth }">
+            <button type="button" class="conn-section-head" @click="toggle('auth')" :aria-expanded="open.auth ? 'true' : 'false'">
+              <i class="fas fa-chevron-right conn-section-chevron"></i>
+              <i class="fas fa-key conn-section-icon"></i>
+              <span class="conn-section-title">Authentication</span>
+              <span class="conn-section-summary">{{ summary.auth }}</span>
+            </button>
+            <div class="conn-section-body" v-show="open.auth">
+              <div class="form-row">
+                <div class="form-group col-sm-6">
+                  <label for="c_authmode">Authentication mode</label>
+                  <select id="c_authmode" name="auth_mode" class="form-control" v-model="f.auth_mode">
+                    <option value="none">None</option>
+                    <option value="password">Username / Password</option>
+                  </select>
+                </div>
+                <div v-if="f.auth_mode === 'password'" class="form-group col-sm-6">
+                  <label for="c_mech">Mechanism</label>
+                  <select id="c_mech" name="auth_mechanism" class="form-control" v-model="f.auth_mechanism">
+                    <option value="">Default (negotiate)</option>
+                    <option value="SCRAM-SHA-256">SCRAM-SHA-256</option>
+                    <option value="SCRAM-SHA-1">SCRAM-SHA-1</option>
+                  </select>
+                </div>
+              </div>
+              <template v-if="f.auth_mode === 'password'">
+                <div class="form-row">
+                  <div class="form-group col-sm-6">
+                    <label for="c_user">Username</label>
+                    <input id="c_user" type="text" name="mongodb_username" class="form-control" v-model="f.mongodb_username" autocomplete="off" spellcheck="false">
+                  </div>
+                  <div class="form-group col-sm-6">
+                    <label for="c_pass">Password</label>
+                    <input id="c_pass" type="password" name="mongodb_password" class="form-control" v-model="f.mongodb_password"
+                           autocomplete="new-password" :placeholder="f.has_mongodb_password ? '•••••••• (saved — leave blank to keep)' : ''">
+                  </div>
+                </div>
+                <div class="form-group mb-0">
+                  <label for="c_authdb">Authentication database</label>
+                  <input id="c_authdb" type="text" name="mongodb_auth_source" class="form-control" v-model="f.mongodb_auth_source" placeholder="centrixdb">
+                </div>
+              </template>
+              <p v-else class="text-muted mb-0">Connect without credentials.</p>
+            </div>
+          </section>
+
+          <!-- SSL / TLS -->
+          <section class="conn-section" :class="{ 'is-open': open.tls }">
+            <button type="button" class="conn-section-head" @click="toggle('tls')" :aria-expanded="open.tls ? 'true' : 'false'">
+              <i class="fas fa-chevron-right conn-section-chevron"></i>
+              <i class="fas fa-lock conn-section-icon"></i>
+              <span class="conn-section-title">SSL / TLS</span>
+              <span class="conn-section-summary">{{ summary.tls }}</span>
+            </button>
+            <div class="conn-section-body" v-show="open.tls">
+              <div class="custom-control custom-switch mb-2">
+                <input type="checkbox" class="custom-control-input" id="c_tls" v-model="f.tls">
+                <label class="custom-control-label" for="c_tls">Use SSL/TLS to connect</label>
+              </div>
+              <div class="custom-control custom-checkbox" v-if="f.tls">
+                <input type="checkbox" class="custom-control-input" id="c_tlsins" v-model="f.tls_insecure">
+                <label class="custom-control-label" for="c_tlsins">Allow invalid certificates and hostnames <span class="text-muted">(self-signed; not for production)</span></label>
+              </div>
+              <input type="hidden" name="tls" :value="f.tls ? '1' : '0'">
+              <input type="hidden" name="tls_insecure" :value="f.tls && f.tls_insecure ? '1' : '0'">
+            </div>
+          </section>
+
+          <!-- Centrix -->
+          <section class="conn-section" :class="{ 'is-open': open.centrix }">
+            <button type="button" class="conn-section-head" @click="toggle('centrix')" :aria-expanded="open.centrix ? 'true' : 'false'">
+              <i class="fas fa-chevron-right conn-section-chevron"></i>
+              <i class="fas fa-hospital conn-section-icon"></i>
+              <span class="conn-section-title">Centrix</span>
+              <span class="conn-section-summary">{{ summary.centrix }}</span>
+            </button>
+            <div class="conn-section-body" v-show="open.centrix">
+              <div class="form-row">
+                <div class="form-group col-sm-4 mb-0">
+                  <label for="c_site">Default site code</label>
+                  <input id="c_site" type="text" name="default_site_code" class="form-control" v-model="f.default_site_code" placeholder="00057">
+                  <small class="form-text">Organisation code in this database (blank = 00057).</small>
+                </div>
+                <div class="form-group col-sm-8 mb-0">
+                  <label for="c_cxurl">Centrix base URL</label>
+                  <input id="c_cxurl" type="text" name="centrix_base_url" class="form-control" v-model="f.centrix_base_url" placeholder="http://127.0.0.1:8080">
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- JasperServer -->
+          <section class="conn-section" :class="{ 'is-open': open.jasper }">
+            <button type="button" class="conn-section-head" @click="toggle('jasper')" :aria-expanded="open.jasper ? 'true' : 'false'">
+              <i class="fas fa-chevron-right conn-section-chevron"></i>
+              <i class="fas fa-file-alt conn-section-icon"></i>
+              <span class="conn-section-title">JasperServer database</span>
+              <span class="conn-section-summary">{{ summary.jasper }}</span>
+            </button>
+            <div class="conn-section-body" v-show="open.jasper">
+              <div class="form-row">
+                <div class="form-group col-sm-8">
+                  <label for="c_jhost">Host</label>
+                  <input id="c_jhost" type="text" name="jasperserver_db_ip" class="form-control" v-model="f.jasperserver_db_ip">
+                </div>
+                <div class="form-group col-sm-4">
+                  <label for="c_jport">Port</label>
+                  <input id="c_jport" type="text" name="jasperserver_db_port" class="form-control" v-model="f.jasperserver_db_port" placeholder="3306">
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group col-sm-4 mb-0">
+                  <label for="c_juser">Username</label>
+                  <input id="c_juser" type="text" name="jasperserver_db_user" class="form-control" v-model="f.jasperserver_db_user" autocomplete="off">
+                </div>
+                <div class="form-group col-sm-4 mb-0">
+                  <label for="c_jpass">Password</label>
+                  <input id="c_jpass" type="password" name="jasperserver_db_pass" class="form-control" v-model="f.jasperserver_db_pass"
+                         autocomplete="new-password" :placeholder="f.has_jasperserver_db_pass ? '•••••• (saved)' : ''">
+                </div>
+                <div class="form-group col-sm-4 mb-0">
+                  <label for="c_jdb">Database</label>
+                  <input id="c_jdb" type="text" name="jasperserver_db_name" class="form-control" v-model="f.jasperserver_db_name">
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Advanced -->
+          <section class="conn-section" :class="{ 'is-open': open.more }">
+            <button type="button" class="conn-section-head" @click="toggle('more')" :aria-expanded="open.more ? 'true' : 'false'">
+              <i class="fas fa-chevron-right conn-section-chevron"></i>
+              <i class="fas fa-sliders-h conn-section-icon"></i>
+              <span class="conn-section-title">Advanced</span>
+              <span class="conn-section-summary">{{ summary.more }}</span>
+            </button>
+            <div class="conn-section-body" v-show="open.more">
+              <div class="form-row">
+                <div class="form-group col-sm-6 mb-0">
+                  <label for="c_timeout">Connect timeout (ms)</label>
+                  <input id="c_timeout" type="number" min="500" step="500" name="connect_timeout_ms" class="form-control" v-model="f.connect_timeout_ms" placeholder="3000">
+                </div>
+                <div class="form-group col-sm-6 mb-0">
+                  <label for="c_app">App name</label>
+                  <input id="c_app" type="text" name="app_name" class="form-control" v-model="f.app_name" placeholder="MedintHelper">
+                  <small class="form-text">Shown in the server's connection list and logs.</small>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <p v-if="ui.formError" class="text-danger mt-3 mb-0" role="alert"><i class="fas fa-exclamation-circle mr-1"></i>{{ ui.formError }}</p>
+        </div>
+
+        <div class="modal-footer conn-footer">
+          <button type="button" class="btn btn-secondary" @click="testConnection()" :disabled="ui.busy">
+            <i :class="ui.testing ? 'fas fa-spinner fa-spin' : 'fas fa-plug'"></i> Test Connection
+          </button>
+          <span class="conn-footer-spacer"></span>
+          <button type="button" class="btn btn-outline-secondary" @click="toggleImport()" :class="{ active: ui.showImport }">
+            <i class="fas fa-file-import"></i> From URI
+          </button>
+          <button type="button" class="btn btn-outline-secondary" @click="exportUri()" :disabled="ui.busy">
+            <i class="fas fa-link"></i> To URI
+          </button>
+          <!-- The clicked button's connect value is submitted with the form -->
+          <button type="submit" name="connect" value="0" class="btn btn-primary" :disabled="ui.busy">
+            <i class="fas fa-save"></i> Save
+          </button>
+          <button type="submit" name="connect" value="1" class="btn btn-success" :disabled="ui.busy">
+            <i class="fas fa-bolt"></i> Save &amp; Connect
+          </button>
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Delete Confirmation Modal -->
+  <div class="modal fade" id="deleteConnectionModal" tabindex="-1" aria-labelledby="deleteConnectionTitle">
+    <div class="modal-dialog modal-dialog-centered">
+      <form class="modal-content" method="post" :action="`/database/connections/${pendingDelete.ID}/delete`">
+        <div class="modal-header">
+          <h5 class="modal-title" id="deleteConnectionTitle"><i class="fas fa-exclamation-triangle text-danger mr-2"></i>Delete Connection</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        </div>
+        <div class="modal-body">
+          Are you sure you want to delete <strong>{{ pendingDelete.NAME }}</strong>? This cannot be undone.
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-danger"><i class="fas fa-trash mr-1"></i> Delete</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<style>
+  .font-monospace { font-family: var(--font-mono); font-size: .82rem; }
+  .conn-connect-btn { min-width: 96px; }
+  .conn-color { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid; margin-right: 8px; vertical-align: middle; }
+
+  .conn-editor { background: var(--surface-2); }
+  .conn-import { background: var(--surface); border: 1px dashed var(--border-strong); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; }
+  .conn-import label { text-transform: none; letter-spacing: 0; font-size: .85rem; color: var(--text); }
+  .conn-test { align-items: center; }
+
+
+  .conn-section { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px; overflow: hidden; }
+  .conn-section.is-open { border-color: #c9d6ea; box-shadow: var(--shadow-sm); }
+  .conn-section-head {
+    width: 100%; display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px; border: 0; background: transparent; text-align: left; cursor: pointer; color: var(--text);
+  }
+  .conn-section-head:hover { background: var(--surface-2); }
+  .conn-section-chevron { font-size: .7rem; color: var(--muted); width: 12px; transition: transform .18s var(--ease); }
+  .conn-section.is-open .conn-section-chevron { transform: rotate(90deg); }
+  .conn-section-icon { color: var(--primary); width: 16px; text-align: center; }
+  .conn-section-title { font-weight: 600; font-size: .9rem; white-space: nowrap; }
+  .conn-section-summary { margin-left: auto; color: var(--muted); font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%; }
+  .conn-section-body { padding: 4px 16px 16px 38px; border-top: 1px solid var(--border); padding-top: 14px; }
+  .member-row { margin-bottom: 8px; }
+
+  .conn-footer { flex-wrap: wrap; gap: 6px; }
+  .conn-footer > * { margin: 0 !important; }
+  .conn-footer-spacer { flex: 1; }
+  @media (max-width: 767.98px) {
+    .conn-section-body { padding-left: 16px; }
+    .conn-section-summary { display: none; }
+    .conn-footer-spacer { flex-basis: 100%; height: 0; }
+  }
+</style>
+
+<script>
+  var EMPTY_CONNECTION = {
+    id: null, name: '', color: '',
+    conn_type: 'single', use_srv: false, host: '', port: '', members: [{ host: '', port: '' }],
+    mongodb_replica_set: '', read_preference: '', mongodb_db: '',
+    auth_mode: 'password', auth_mechanism: '', mongodb_username: '', mongodb_password: '', mongodb_auth_source: '',
+    has_mongodb_password: false,
+    tls: false, tls_insecure: false,
+    default_site_code: '00057', centrix_base_url: '',
+    jasperserver_db_ip: '', jasperserver_db_port: '', jasperserver_db_user: '', jasperserver_db_pass: '', jasperserver_db_name: '',
+    has_jasperserver_db_pass: false,
+    connect_timeout_ms: '', app_name: ''
+  };
+  // Sections start collapsed except MongoDB.
+  var DEFAULT_OPEN = { mongodb: true, auth: false, tls: false, centrix: false, jasper: false, more: false };
+
+  // "h1:27017,h2" -> [{ host: 'h1', port: '27017' }, { host: 'h2', port: '' }]
+  function splitMembers(text) {
+    var members = String(text || '').split(/[\s,]+/).filter(Boolean).map(function (m) {
+      var ipv6 = m.match(/^\[(.+)\](?::(\d+))?$/);
+      if (ipv6) return { host: ipv6[1], port: ipv6[2] || '' };
+      var parts = m.split(':');
+      return { host: parts[0], port: parts[1] || '' };
+    });
+    return members.length ? members : [{ host: '', port: '' }];
+  }
+
+  Page.setup({
+    data: function () {
+      return {
+        f: $.extend(true, {}, EMPTY_CONNECTION),
+        open: $.extend({}, DEFAULT_OPEN),
+        ui: { showImport: false, uriInput: '', exportUri: '', copied: false, test: null, busy: false, testing: false, formError: '' },
+        pendingDelete: { ID: null, NAME: '' },
+        connectingId: null,
+        colors: [
+          { value: '', label: 'None' },
+          { value: '#dc2626', label: 'Red' },
+          { value: '#ea580c', label: 'Orange' },
+          { value: '#ca8a04', label: 'Yellow' },
+          { value: '#16a34a', label: 'Green' },
+          { value: '#2563eb', label: 'Blue' },
+          { value: '#7c3aed', label: 'Purple' },
+          { value: '#64748b', label: 'Gray' }
+        ]
+      };
+    },
+    computed: {
+      // Value submitted as mongodb_host: one server, or "host:port,host:port" for a replica set.
+      hostValue: function () {
+        var f = this.f;
+        if (f.conn_type === 'single') return f.host.trim();
+        return f.members.filter(function (m) { return m.host.trim(); }).map(function (m) {
+          var host = m.host.trim();
+          if (host.indexOf(':') >= 0) host = '[' + host + ']';
+          return host + ':' + (m.port || 27017);
+        }).join(',');
+      },
+      summary: function () {
+        var f = this.f;
+        var server;
+        if (f.conn_type === 'replicaset') {
+          var count = f.members.filter(function (m) { return m.host.trim(); }).length;
+          server = 'Replica set' + (f.mongodb_replica_set ? ' ' + f.mongodb_replica_set : '') + ' · ' + count + ' member' + (count === 1 ? '' : 's');
+        } else {
+          server = f.host ? (f.use_srv ? 'SRV ' + f.host : f.host + ':' + (f.port || 27017)) : 'No server yet';
+        }
+        return {
+          mongodb: server + (f.mongodb_db ? ' / ' + f.mongodb_db : ''),
+          auth: f.auth_mode === 'none' ? 'None'
+            : (f.mongodb_username || 'No username') + ' @ ' + (f.mongodb_auth_source || 'centrixdb') + (f.auth_mechanism ? ' · ' + f.auth_mechanism : ''),
+          tls: !f.tls ? (f.use_srv && f.conn_type === 'single' ? 'On (SRV default)' : 'Off') : (f.tls_insecure ? 'On · invalid certificates allowed' : 'On'),
+          centrix: [f.default_site_code, f.centrix_base_url].filter(Boolean).join(' · ') || 'Not set',
+          jasper: f.jasperserver_db_ip ? f.jasperserver_db_ip + (f.jasperserver_db_port ? ':' + f.jasperserver_db_port : '') + (f.jasperserver_db_name ? ' / ' + f.jasperserver_db_name : '') : 'Not set',
+          more: [f.connect_timeout_ms ? 'timeout ' + f.connect_timeout_ms + ' ms' : '', f.app_name].filter(Boolean).join(' · ') || 'Defaults'
+        };
+      }
+    },
+    methods: {
+      isActive: function (item) {
+        return this.activeSiteIndex !== null && String(item.SITE_INDEX) === String(this.activeSiteIndex);
+      },
+      serverSummary: function (item) {
+        if (item.CONN_TYPE === 'replicaset') {
+          return item.MONGODB_HOST + (item.MONGODB_REPLICA_SET ? '  (' + item.MONGODB_REPLICA_SET + ')' : '');
+        }
+        return item.USE_SRV ? item.MONGODB_HOST : item.MONGODB_HOST + ':' + (item.MONGODB_PORT || 27017);
+      },
+      toggle: function (name) { this.open[name] = !this.open[name]; },
+      resetUi: function (showImport) {
+        this.ui = { showImport: showImport, uriInput: '', exportUri: '', copied: false, test: null, busy: false, testing: false, formError: '' };
+        this.open = $.extend({}, DEFAULT_OPEN);
+      },
+      openAdd: function () {
+        this.f = $.extend(true, {}, EMPTY_CONNECTION);
+        this.resetUi(true);
+        $('#connectionModal').modal('show');
+      },
+      openEdit: function (id) {
+        var vm = this;
+        fetch('/api/database/connections/' + id, { headers: { Accept: 'application/json' } })
+          .then(function (res) { if (!res.ok) throw new Error(res.status); return res.json(); })
+          .then(function (c) {
+            vm.f = vm.fromSettings($.extend({}, c, { id: c.id }));
+            vm.resetUi(false);
+            $('#connectionModal').modal('show');
+          })
+          .catch(function () { vm.error = 'Could not load the connection details.'; });
+      },
+      // Server/editor settings -> form state (used for edit and "From URI").
+      fromSettings: function (s) {
+        var f = $.extend(true, {}, EMPTY_CONNECTION);
+        Object.keys(f).forEach(function (key) { if (s[key] !== undefined && s[key] !== null) f[key] = s[key]; });
+        f.conn_type = s.conn_type === 'replicaset' ? 'replicaset' : 'single';
+        f.use_srv = !!s.use_srv;
+        f.tls = !!s.tls;
+        f.tls_insecure = !!s.tls_insecure;
+        f.host = f.conn_type === 'single' ? (s.mongodb_host || '') : '';
+        f.port = s.mongodb_port || '';
+        f.members = f.conn_type === 'replicaset' ? splitMembers(s.mongodb_host) : [{ host: '', port: '' }];
+        f.auth_mode = s.mongodb_username ? 'password' : 'none';
+        f.mongodb_password = s.mongodb_password || '';
+        f.jasperserver_db_pass = '';
+        return f;
+      },
+      addMember: function () {
+        var vm = this;
+        this.f.members.push({ host: '', port: '' });
+        this.$nextTick(function () { var el = vm.$refs['member' + (vm.f.members.length - 1)]; if (el && el[0]) el[0].focus(); });
+      },
+      removeMember: function (i) { this.f.members.splice(i, 1); },
+      toggleImport: function () {
+        this.ui.showImport = !this.ui.showImport;
+        if (this.ui.showImport) this.$nextTick(function () { $('#c_uri').trigger('focus'); });
+      },
+      // Fields sent to the test / URI endpoints, same names as the form posts.
+      payload: function () {
+        var data = {};
+        $(this.$refs.form).serializeArray().forEach(function (field) { data[field.name] = field.value; });
+        data.id = this.f.id;
+        return data;
+      },
+      post: function (url, body) {
+        return fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(body)
+        }).then(function (res) { return res.json(); });
+      },
+      importUri: function () {
+        var vm = this;
+        vm.ui.busy = true;
+        vm.post('/api/database/connections/uri', { action: 'parse', uri: vm.ui.uriInput })
+          .then(function (r) {
+            if (!r.ok) { vm.ui.formError = r.error; return; }
+            var keep = { id: vm.f.id, name: vm.f.name, color: vm.f.color, default_site_code: vm.f.default_site_code, centrix_base_url: vm.f.centrix_base_url,
+                         jasperserver_db_ip: vm.f.jasperserver_db_ip, jasperserver_db_port: vm.f.jasperserver_db_port,
+                         jasperserver_db_user: vm.f.jasperserver_db_user, jasperserver_db_name: vm.f.jasperserver_db_name,
+                         has_jasperserver_db_pass: vm.f.has_jasperserver_db_pass };
+            var next = vm.fromSettings(r.settings);
+            if (!keep.name) keep.name = r.settings.mongodb_host.split(/[,:]/)[0];
+            vm.f = $.extend(next, keep);
+            vm.ui.formError = '';
+            vm.ui.showImport = false;
+            vm.ui.uriInput = '';
+            vm.open.mongodb = true;
+            vm.open.auth = !!r.settings.mongodb_username;
+            vm.open.tls = !!r.settings.tls;
+          })
+          .catch(function () { vm.ui.formError = 'Could not read that connection string.'; })
+          .then(function () { vm.ui.busy = false; });
+      },
+      exportUri: function () {
+        var vm = this;
+        vm.ui.busy = true;
+        vm.post('/api/database/connections/uri', $.extend({ action: 'build' }, vm.payload()))
+          .then(function (r) {
+            if (!r.ok) { vm.ui.formError = r.error; return; }
+            vm.ui.exportUri = r.uri;
+            vm.ui.copied = false;
+          })
+          .catch(function () { vm.ui.formError = 'Could not build the connection string.'; })
+          .then(function () { vm.ui.busy = false; });
+      },
+      copyUri: function () {
+        var vm = this;
+        var done = function () { vm.ui.copied = true; setTimeout(function () { vm.ui.copied = false; }, 1500); };
+        if (navigator.clipboard && window.isSecureContext) {
+          navigator.clipboard.writeText(vm.ui.exportUri).then(done);
+        } else {
+          vm.$refs.exportUri.select();
+          document.execCommand('copy');
+          done();
+        }
+      },
+      testConnection: function () {
+        var vm = this;
+        if (!vm.validate()) return;
+        vm.ui.busy = vm.ui.testing = true;
+        vm.ui.test = null;
+        vm.post('/api/database/connections/test', vm.payload())
+          .then(function (r) { vm.ui.test = r; })
+          .catch(function () { vm.ui.test = { ok: false, error: 'The test request failed.' }; })
+          .then(function () { vm.ui.busy = vm.ui.testing = false; });
+      },
+      // Required fields may sit in a collapsed section: open it and focus the field.
+      validate: function () {
+        this.ui.formError = '';
+        if (!this.hostValue) {
+          this.open.mongodb = true;
+          this.ui.formError = this.f.conn_type === 'single' ? 'Enter the server.' : 'Add at least one replica set member.';
+          var vm = this;
+          this.$nextTick(function () {
+            var el = vm.f.conn_type === 'single' ? vm.$refs.host : (vm.$refs.member0 || [])[0];
+            if (el) el.focus();
+          });
+          return false;
+        }
+        return true;
+      },
+      onSubmit: function (e) {
+        if (!this.f.name.trim()) {
+          e.preventDefault();
+          this.ui.formError = 'Enter a name for this connection.';
+          this.$refs.name.focus();
+          return;
+        }
+        if (!this.validate()) e.preventDefault();
+      },
+      confirmDelete: function (item) {
+        this.pendingDelete = { ID: item.ID, NAME: item.NAME };
+        $('#deleteConnectionModal').modal('show');
+      }
+    }
+  });
+</script>

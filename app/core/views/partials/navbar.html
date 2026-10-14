@@ -1,0 +1,46 @@
+<header class="app-topbar">
+  <button type="button" class="topbar-icon-btn" data-sidebar-toggle aria-label="Toggle navigation" aria-controls="app-sidebar">
+    <i class="fas fa-bars"></i>
+  </button>
+
+  <nav class="topbar-breadcrumb" aria-label="Breadcrumb">
+    <a href="/"><i class="fas fa-home"></i></a>
+    ${shell.section ? `<i class="fas fa-chevron-right sep"></i><span class="crumb-section">${shell.section}</span>` : ''}
+    <i class="fas fa-chevron-right sep"></i><span class="crumb-page" aria-current="page">${shell.docTitle}</span>
+  </nav>
+
+  <div class="topbar-actions">
+    ${shell.connected
+      ? `<a href="${shell.connectLink}" class="conn-chip is-connected" title="Connected — click to switch site"${shell.siteColor ? ` style="border-color:${shell.siteColor};box-shadow:inset 3px 0 0 ${shell.siteColor}"` : ''}>
+           <span class="conn-dot"></span>
+           <span class="conn-label">${shell.siteName || 'Connected'}</span>
+           <i class="fas fa-exchange-alt conn-switch"></i>
+         </a>`
+      : `<a href="${shell.connectLink}" class="conn-chip is-disconnected" title="No database connected">
+           <span class="conn-dot"></span>
+           <span class="conn-label">Not connected</span>
+         </a>`
+    }
+    <a href="/tools/shortcuts" class="topbar-icon-btn" title="Shortcuts" aria-label="Shortcuts"><i class="fas fa-th"></i></a>
+    ${shell.user ? `
+    <div class="dropdown">
+      <button type="button" class="topbar-user-btn" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" title="Signed in as ${shell.user.username}">
+        <span class="topbar-user">${shell.user.initials}</span>
+        <i class="fas fa-chevron-down"></i>
+      </button>
+      <div class="dropdown-menu dropdown-menu-right user-menu">
+        <div class="user-menu-head">
+          <strong>${shell.user.name}</strong>
+          <span>${shell.user.username} · ${shell.user.roleName}</span>
+        </div>
+        <div class="dropdown-divider"></div>
+        <a class="dropdown-item" href="/account"><i class="fas fa-user-circle"></i> My account</a>
+        ${shell.user.isAdmin ? `<a class="dropdown-item" href="/admin/users"><i class="fas fa-users-cog"></i> Manage users</a><a class="dropdown-item" href="/admin/roles"><i class="fas fa-user-tag"></i> Roles &amp; permissions</a>` : ''}
+        <div class="dropdown-divider"></div>
+        <form method="post" action="/logout">
+          <button type="submit" class="dropdown-item text-danger"><i class="fas fa-sign-out-alt"></i> Sign out</button>
+        </form>
+      </div>
+    </div>` : ''}
+  </div>
+</header>

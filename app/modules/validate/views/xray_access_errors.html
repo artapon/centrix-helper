@@ -1,0 +1,28 @@
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-exclamation-triangle" style="color:#d97706;"></i>
+      <span>X-Ray Access Errors</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>Accessionnumber</th>
+              <th>Error HN</th>
+              <th>Total Duplicate</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in xrayOrders">
+              <td>{{ item._id.accessionnumber }}</td>
+              <td>{{ item.errorhn }}</td>
+              <td>{{ item.count }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

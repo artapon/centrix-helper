@@ -1,0 +1,48 @@
+<div class="col-sm-12" id="app">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-flask" style="color:#2563eb;"></i>
+      <span>Centrix Labresult (ORU) Generate for test</span>
+    </div>
+    <div class="card-body">
+      <form method="post" action="/lab/hl7-result">
+        <div class="form-row">
+          <div class="form-group col-sm-4">
+            <label>Lab Code ตัวอย่าง : L3001</label>
+            <input autocomplete="off" name="labcode" type="text" class="form-control" required>
+          </div>
+          <div class="form-group col-sm-4">
+            <label>Ordercode ตัวอย่าง : LB2200000033</label>
+            <input autocomplete="off" name="ordercode" type="text" class="form-control" required>
+          </div>
+          <div class="form-group col-sm-4">
+            <label>Departmentcode ตัวอย่าง : ICU</label>
+            <input autocomplete="off" name="departmentcode" type="text" class="form-control" required>
+          </div>
+          <div class="form-group col-sm-4">
+            <label>HN ตัวอย่าง : 01-65-000087</label>
+            <input autocomplete="off" name="hn" type="text" class="form-control" required>
+          </div>
+          <div class="form-group col-sm-4">
+            <label>Departmenttype ตัวอย่าง : OPD / IPD</label>
+            <select name="departmenttype" class="form-control">
+              <option value="OPD">OPD</option>
+              <option value="OPD">IPD</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group mb-0">
+          <button type="submit" class="btn btn-success btn-block"><i class="fas fa-file-export"></i> <b>Generate ORU</b></button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-body" style="font-size:12px;">
+      {{ message }}
+    </div>
+  </div>
+</div>

@@ -1,0 +1,30 @@
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-truck" style="color:#2563eb;"></i>
+      <span>Vendor</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>CODE</th>
+              <th>NAME</th>
+              <th>DESCRIPTION</th>
+              <th>Create At</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in results">
+              <td>{{ item.code }}</td>
+              <td>{{ item.name }}</td>
+              <td>{{ item.description }}</td>
+              <td>{{ item.createdat }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

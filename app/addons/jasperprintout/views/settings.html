@@ -1,0 +1,461 @@
+<div class="col-12">
+<div class="rs">
+  <div v-if="saved" class="alert alert-success" role="status"><i class="fas fa-check-circle mr-2"></i>Settings saved. The Print-Out Builder, Jasper Designer and Publish Report use them from now on.</div>
+  <div v-if="error" class="alert alert-danger" role="alert"><i class="fas fa-exclamation-triangle mr-2"></i>{{ error }}</div>
+
+  <!-- What each tool works with right now (saved values) -->
+  <div class="rs-tools">
+    <a v-for="t in tools" :key="t.key" class="rs-tool" :href="t.link">
+      <span class="rs-tool-head"><i :class="t.icon"></i> {{ t.name }}</span>
+      <span v-if="s.allowDirectPublish === false" class="rs-tool-row" :class="s.configured ? 'is-ok' : 'is-bad'"><i class="fas" :class="s.configured ? 'fa-route' : 'fa-times-circle'"></i> {{ !s.configured ? 'JasperServer not set up' : t.key === 'publish' ? 'Deploy workflow only' : 'No direct publish' }}</span>
+      <span v-else class="rs-tool-row" :class="s.configured ? 'is-ok' : 'is-bad'" :title="defaultNames"><i class="fas" :class="s.configured ? 'fa-check-circle' : 'fa-times-circle'"></i> {{ s.configured ? 'Publishes to ' + (defaultNames || 'a JasperServer') : 'JasperServer not set up' }}</span>
+      <span v-if="t.his" class="rs-tool-row" :class="hisReady ? 'is-ok' : 'is-warn'"><i class="fas" :class="hisReady ? 'fa-check-circle' : 'fa-exclamation-circle'"></i> Centrix HIS {{ hisReady ? 'ready' : 'needs the interface user' }}</span>
+      <span v-else class="rs-tool-row is-muted"><i class="fas fa-minus-circle"></i> No Centrix HIS saving</span>
+      <span class="rs-tool-row is-muted" :title="t.folder"><i class="far fa-folder"></i> <code>/{{ t.folder }}</code></span>
+    </a>
+  </div>
+
+  <div class="rs-layout">
+    <nav class="rs-nav" aria-label="Settings sections">
+      <a v-for="sec in sections" :key="sec.id" :href="'#' + sec.id" :class="{ 'is-on': current === sec.id }" @click.prevent="go(sec.id)">
+        <i :class="sec.icon"></i> {{ sec.name }}
+      </a>
+    </nav>
+
+    <form class="rs-main" @submit.prevent="save" novalidate>
+      <!-- JasperServers -->
+      <section class="card" id="rs-connection">
+        <div class="card-header">
+          <i class="fas fa-server"></i><span>JasperServers</span>
+          <span class="badge" :class="s.configured ? 'badge-success' : 'badge-warning'">{{ s.configured ? readyCount + ' set up' : 'Not set up' }}</span>
+        </div>
+        <div class="card-body">
+          <p class="rs-used">Used by <span class="rs-chip">Print-Out Builder</span><span class="rs-chip">Jasper Designer</span><span class="rs-chip">Publish Report</span>. A report can be published to several servers at once; those set to <b>publish by default</b> are ticked first.
+            Put servers in the <b>UAT</b> and <b>Production</b> zones to use the deploy workflow on Publish Report: deploy to UAT, check the report there, then deploy to Production.</p>
+          <p v-if="!f.servers.length" class="rs-empty">No JasperServer yet. Add the one reports should be published to.</p>
+          <div v-for="(sv, i) in f.servers" :key="sv.key" class="rs-server" :class="{ 'is-default': sv.publishByDefault }">
+            <div class="rs-server-head">
+              <span class="rs-server-no">{{ i + 1 }}</span>
+              <b>{{ sv.name || 'New JasperServer' }}</b>
+              <span v-if="sv.publishByDefault" class="rs-chip">Publish by default</span>
+              <span v-if="sv.zone" class="rs-chip">{{ sv.zone === 'uat' ? 'UAT' : 'Production' }}</span>
+              <span class="rs-server-tools">
+                <button type="button" class="btn btn-link btn-sm" @click="moveServer(i, -1)" :disabled="i === 0" title="Move up" aria-label="Move up"><i class="fas fa-arrow-up"></i></button>
+                <button type="button" class="btn btn-link btn-sm" @click="moveServer(i, 1)" :disabled="i === f.servers.length - 1" title="Move down" aria-label="Move down"><i class="fas fa-arrow-down"></i></button>
+                <button type="button" class="btn btn-link btn-sm text-danger" @click="removeServer(i)" :title="'Remove ' + (sv.name || 'this server')" aria-label="Remove server"><i class="fas fa-trash"></i></button>
+              </span>
+            </div>
+            <div class="form-row">
+              <div class="form-group col-md-3">
+                <label :for="'rs-name-' + sv.key">Name</label>
+                <input :id="'rs-name-' + sv.key" type="text" class="form-control" v-model.trim="sv.name" maxlength="60" placeholder="e.g. Production, UAT">
+              </div>
+              <div class="form-group col-md-3">
+                <label :for="'rs-zone-' + sv.key">Deploy zone</label>
+                <select :id="'rs-zone-' + sv.key" class="custom-select" v-model="sv.zone">
+                  <option value="">None</option>
+                  <option value="uat">UAT (verify first)</option>
+                  <option value="prod">Production</option>
+                </select>
+              </div>
+              <div class="form-group col-md-6">
+                <label :for="'rs-url-' + sv.key">Server URL</label>
+                <input :id="'rs-url-' + sv.key" type="url" class="form-control" v-model.trim="sv.url" placeholder="http://10.0.0.5:8080/jasperserver" autocomplete="off">
+              </div>
+              <div class="form-group col-md-6">
+                <label :for="'rs-user-' + sv.key">User name</label>
+                <input :id="'rs-user-' + sv.key" type="text" class="form-control" v-model.trim="sv.user" autocomplete="off">
+              </div>
+              <div class="form-group col-md-6">
+                <label :for="'rs-pass-' + sv.key">Password</label>
+                <input :id="'rs-pass-' + sv.key" type="password" class="form-control" v-model="sv.password" autocomplete="new-password"
+                       :placeholder="sv.hasPassword && !sv.clearPassword ? 'Saved. Leave blank to keep it' : ''" :disabled="sv.clearPassword">
+                <div v-if="sv.hasPassword" class="custom-control custom-checkbox mt-1">
+                  <input type="checkbox" class="custom-control-input" :id="'rs-clear-' + sv.key" v-model="sv.clearPassword">
+                  <label class="custom-control-label small" :for="'rs-clear-' + sv.key">Remove the saved password</label>
+                </div>
+              </div>
+            </div>
+            <div class="rs-server-switches">
+              <div class="custom-control custom-switch">
+                <input type="checkbox" class="custom-control-input" :id="'rs-default-' + sv.key" v-model="sv.publishByDefault">
+                <label class="custom-control-label" :for="'rs-default-' + sv.key">Publish to it by default</label>
+              </div>
+              <div class="custom-control custom-switch">
+                <input type="checkbox" class="custom-control-input" :id="'rs-self-' + sv.key" v-model="sv.allowSelfSigned">
+                <label class="custom-control-label" :for="'rs-self-' + sv.key">Allow a self-signed HTTPS certificate</label>
+              </div>
+            </div>
+            <div class="rs-test">
+              <button type="button" class="btn btn-secondary btn-sm" @click="test(sv)" :disabled="sv.testing || !sv.url">
+                <i class="fas" :class="sv.testing ? 'fa-spinner fa-spin' : 'fa-plug'"></i> Test connection
+              </button>
+              <span v-if="sv.testResult" class="rs-test-result" :class="sv.testResult.ok ? 'is-ok' : 'is-bad'" role="status">
+                <i class="fas" :class="sv.testResult.ok ? 'fa-check-circle' : 'fa-times-circle'"></i> {{ sv.testResult.text }}
+              </span>
+            </div>
+          </div>
+          <button type="button" class="btn btn-outline-primary btn-sm" @click="addServer" :disabled="f.servers.length >= maxServers">
+            <i class="fas fa-plus"></i> Add JasperServer
+          </button>
+          <small v-if="f.servers.length >= maxServers" class="text-muted ml-2">At most {{ maxServers }} servers.</small>
+        </div>
+      </section>
+
+      <!-- Publishing: direct publish allowed, or the deploy workflow only -->
+      <section class="card" id="rs-policy">
+        <div class="card-header">
+          <i class="fas fa-shield-alt"></i><span>Publishing</span>
+          <span class="badge" :class="f.allowDirectPublish ? 'badge-success' : 'badge-warning'">{{ f.allowDirectPublish ? 'Direct publish allowed' : 'Deploy workflow only' }}</span>
+        </div>
+        <div class="card-body">
+          <p class="rs-used">Used by <span class="rs-chip">Print-Out Builder</span><span class="rs-chip">Jasper Designer</span><span class="rs-chip">Publish Report</span></p>
+          <div class="custom-control custom-switch">
+            <input type="checkbox" class="custom-control-input" id="rs-direct" v-model="f.allowDirectPublish">
+            <label class="custom-control-label" for="rs-direct">Allow direct publish</label>
+          </div>
+          <small class="form-text text-muted mb-2">Publish a report straight to the chosen JasperServers, without checking it on UAT first.</small>
+          <p v-if="!f.allowDirectPublish" class="rs-note mb-0">
+            <i class="fas fa-info-circle"></i>
+            Off: the <b>Publish</b> buttons of the Print-Out Builder and Jasper Designer and Publish Report's <b>Direct publish</b> are hidden, and the server refuses direct publishing.
+            Reports reach JasperServer only through Publish Report's <b>Deploy workflow</b>: UAT, check, then Production<template v-if="!zonesReady">. Put servers in the UAT and Production zones above, or nothing can be published</template>.
+            Saving designs, JRXML downloads and the designer's preview on JasperServer still work.
+          </p>
+        </div>
+      </section>
+
+      <!-- Centrix HIS -->
+      <section class="card" id="rs-his">
+        <div class="card-header">
+          <i class="fas fa-hospital"></i><span>Centrix HIS registration</span>
+          <span class="badge" :class="hisReady ? 'badge-success' : 'badge-warning'">{{ hisReady ? 'Ready' : 'Not set' }}</span>
+        </div>
+        <div class="card-body">
+          <p class="rs-used">Used by <span class="rs-chip">Print-Out Builder</span><span class="rs-chip">Publish Report</span></p>
+          <div class="form-group">
+            <label for="rs-iuser">Interface user UID</label>
+            <input id="rs-iuser" type="text" class="form-control rs-mono" v-model.trim="f.interfaceUserUid" maxlength="24" placeholder="24-character ObjectId">
+            <small class="form-text text-muted">The Centrix user recorded as <code>createdby</code> / <code>modifiedby</code> when a report is saved as a Visit Slip.</small>
+          </div>
+          <p class="rs-note mb-0">
+            <i class="fas fa-info-circle"></i>
+            Reports are saved to the organisation of the site each user is connected to<template v-if="site.connected">: you are connected to <b>{{ site.name }}</b>{{ site.code ? ' (' + site.code + ')' : '' }}</template><template v-else>. You are not connected to a site now</template>.
+          </p>
+        </div>
+      </section>
+
+      <!-- Print-Out Builder -->
+      <section class="card" id="rs-builder">
+        <div class="card-header"><i class="fas fa-file-pdf"></i><span>Print-Out Builder defaults</span></div>
+        <div class="card-body">
+          <p class="rs-used">Used by <span class="rs-chip">Print-Out Builder</span> and, unless set below, <span class="rs-chip">Jasper Designer</span><span class="rs-chip">Publish Report</span></p>
+          <div class="form-row">
+            <div class="form-group col-md-6">
+              <label for="rs-folder">Folder</label>
+              <input id="rs-folder" type="text" class="form-control" v-model.trim="f.defaultFolder" :placeholder="defaults.defaultFolder">
+              <small class="form-text text-muted">Where new reports go, e.g. <code>PrintOut</code>. Users can change it per report.</small>
+            </div>
+            <div class="form-group col-md-6">
+              <label for="rs-ds">Data source</label>
+              <input id="rs-ds" type="text" class="form-control rs-mono" v-model.trim="f.defaultDataSource" :placeholder="defaults.defaultDataSource">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="rs-ic">Input controls</label>
+            <textarea id="rs-ic" class="form-control rs-mono" rows="2" v-model="inputControlsText"></textarea>
+            <small class="form-text text-muted">One repository path per line, attached to every report unit.</small>
+          </div>
+          <div class="form-group mb-0">
+            <label for="rs-header">Header subreport <span class="label-optional">optional</span></label>
+            <input id="rs-header" type="text" class="form-control rs-mono" v-model.trim="f.headerSubreport" :placeholder="defaults.headerSubreport">
+            <small class="form-text text-muted">Printed at the top of every Print-Out Builder page. Leave empty for no header.</small>
+          </div>
+        </div>
+      </section>
+
+      <!-- Jasper Designer + Publish Report -->
+      <section class="card" id="rs-designer">
+        <div class="card-header"><i class="fas fa-drafting-compass"></i><span>Jasper Designer and Publish Report defaults</span></div>
+        <div class="card-body">
+          <p class="rs-used">Used by <span class="rs-chip">Jasper Designer</span><span class="rs-chip">Publish Report</span>. Leave a box empty to use the Print-Out Builder's value. A design's own folder and data source still come first.</p>
+          <div class="form-row">
+            <div class="form-group col-md-6">
+              <label for="rs-dfolder">Folder</label>
+              <input id="rs-dfolder" type="text" class="form-control" v-model.trim="f.designerFolder" :placeholder="'Same as Print-Out Builder (' + (f.defaultFolder || defaults.defaultFolder) + ')'">
+            </div>
+            <div class="form-group col-md-6">
+              <label for="rs-dds">Data source</label>
+              <input id="rs-dds" type="text" class="form-control rs-mono" v-model.trim="f.designerDataSource" :placeholder="'Same as Print-Out Builder (' + (f.defaultDataSource || defaults.defaultDataSource) + ')'">
+            </div>
+          </div>
+          <div class="form-group mb-0">
+            <label>Input controls</label>
+            <div class="rs-radio">
+              <div class="custom-control custom-radio">
+                <input type="radio" class="custom-control-input" id="rs-dic-same" value="same" v-model="f.designerInputControlsMode">
+                <label class="custom-control-label" for="rs-dic-same">Same as Print-Out Builder <small class="text-muted">({{ builderControls.length ? builderControls.length + ' path' + (builderControls.length === 1 ? '' : 's') : 'none' }})</small></label>
+              </div>
+              <div class="custom-control custom-radio">
+                <input type="radio" class="custom-control-input" id="rs-dic-custom" value="custom" v-model="f.designerInputControlsMode">
+                <label class="custom-control-label" for="rs-dic-custom">Its own list</label>
+              </div>
+            </div>
+            <textarea v-if="f.designerInputControlsMode === 'custom'" class="form-control rs-mono mt-2" rows="2" v-model="designerControlsText" aria-label="Jasper Designer input controls" placeholder="One repository path per line. Empty = no input controls."></textarea>
+          </div>
+        </div>
+      </section>
+
+      <!-- Jaspersoft Studio -->
+      <section class="card" id="rs-studio">
+        <div class="card-header"><i class="fas fa-tools"></i><span>Jaspersoft Studio properties</span><span class="label-optional">optional</span></div>
+        <div class="card-body">
+          <p class="rs-used">Used by <span class="rs-chip">Print-Out Builder</span>: written into its JRXML so the report opens in Jaspersoft Studio with these values. Publishing doesn't need them.</p>
+          <div class="form-row">
+            <div class="form-group col-md-6">
+              <label for="rs-adapter">Default data adapter</label>
+              <input id="rs-adapter" type="text" class="form-control" v-model.trim="f.dataAdapter">
+            </div>
+            <div class="form-group col-md-6">
+              <label for="rs-unit">Report unit folder</label>
+              <input id="rs-unit" type="text" class="form-control rs-mono" v-model.trim="f.reportUnit" placeholder="/Training">
+            </div>
+            <div class="form-group col-md-6 mb-md-0">
+              <label for="rs-visit">Default patientvisituid</label>
+              <input id="rs-visit" type="text" class="form-control rs-mono" v-model.trim="f.defaultVisitUid" maxlength="24">
+            </div>
+            <div class="form-group col-md-6 mb-0">
+              <label for="rs-org">Default organisationuid</label>
+              <input id="rs-org" type="text" class="form-control rs-mono" v-model.trim="f.defaultOrgUid" maxlength="24">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="rs-savebar" :class="{ 'is-dirty': dirty }">
+        <span class="rs-savebar-text">
+          <template v-if="dirty"><i class="fas fa-circle"></i> Unsaved changes</template>
+          <template v-else><i class="fas fa-check"></i> All changes saved</template>
+        </span>
+        <button type="button" class="btn btn-light" @click="reset" :disabled="!dirty || saving">Discard</button>
+        <button type="submit" class="btn btn-primary" :disabled="saving || !dirty">
+          <i class="fas" :class="saving ? 'fa-spinner fa-spin' : 'fa-save'"></i> Save settings
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+</div>
+
+<style>
+  .rs *, .rs *::before, .rs *::after { box-sizing: border-box; }
+  .rs-mono { font-family: var(--font-mono); font-size: .85rem; }
+  .rs-tools { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .rs-tool { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); color: var(--text-2); text-decoration: none; min-width: 0; }
+  .rs-tool:hover { border-color: var(--primary-ring); text-decoration: none; color: var(--text-2); }
+  .rs-tool-head { font-weight: 700; color: var(--text); font-size: .9rem; margin-bottom: 2px; }
+  .rs-tool-head i { color: var(--primary); margin-right: 4px; }
+  .rs-tool-row { font-size: .78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rs-tool-row i { width: 14px; text-align: center; margin-right: 2px; }
+  .rs-tool-row.is-ok i { color: var(--success); }
+  .rs-tool-row.is-bad i { color: var(--danger); }
+  .rs-tool-row.is-warn i { color: var(--warning); }
+  .rs-tool-row.is-muted { color: var(--muted); }
+  .rs-tool-row code { font-size: .74rem; }
+
+  .rs-layout { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 16px; align-items: start; }
+  .rs-nav { position: sticky; top: 80px; display: flex; flex-direction: column; gap: 2px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 8px; }
+  .rs-nav a { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: var(--radius-sm); font-size: .84rem; font-weight: 600; color: var(--text-2); text-decoration: none; }
+  .rs-nav a i { width: 16px; text-align: center; color: var(--muted); }
+  .rs-nav a:hover { background: var(--surface-2); color: var(--text); }
+  .rs-nav a.is-on { background: var(--primary-soft); color: var(--primary); }
+  .rs-nav a.is-on i { color: var(--primary); }
+  .rs-main { min-width: 0; max-width: 900px; }
+  .rs-main > .card { margin-bottom: 16px; scroll-margin-top: 80px; }
+  .rs-used { font-size: .8rem; color: var(--muted); margin-bottom: 14px; }
+  .rs-chip { display: inline-block; font-size: .7rem; font-weight: 700; color: var(--primary); background: var(--primary-soft); border-radius: 999px; padding: 1px 8px; margin: 0 2px; }
+  .rs-note { font-size: .8rem; color: var(--text-2); }
+  .rs-note i { color: var(--primary); margin-right: 4px; }
+  .rs-empty { font-size: .84rem; color: var(--muted); }
+  .rs-server { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 12px; background: var(--surface-2); }
+  .rs-server.is-default { border-color: var(--primary-ring); }
+  .rs-server-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; min-width: 0; }
+  .rs-server-head b { font-size: .92rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rs-server-no { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: .72rem; font-weight: 700; background: var(--primary); color: #fff; flex: none; }
+  .rs-server-tools { margin-left: auto; display: flex; flex: none; }
+  .rs-server-tools .btn { padding: 2px 6px; height: auto; color: var(--muted); }
+  .rs-server-tools .btn.text-danger { color: var(--danger) !important; }
+  .rs-server-switches { display: flex; flex-wrap: wrap; gap: 6px 24px; margin-bottom: 10px; }
+  .rs-radio { display: flex; gap: 20px; flex-wrap: wrap; }
+  .rs-test { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .rs-test-result { font-size: .84rem; font-weight: 600; }
+  .rs-test-result.is-ok { color: var(--success); }
+  .rs-test-result.is-bad { color: var(--danger); }
+  .rs-savebar { position: sticky; bottom: 0; z-index: 5; display: flex; align-items: center; gap: 8px; padding: 12px 16px; margin-bottom: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-lg); }
+  .rs-savebar-text { flex: 1; font-size: .84rem; color: var(--muted); }
+  .rs-savebar-text i { font-size: .7rem; margin-right: 4px; }
+  .rs-savebar.is-dirty { border-color: var(--warning); }
+  .rs-savebar.is-dirty .rs-savebar-text { color: var(--warning); font-weight: 600; }
+
+  @media (max-width: 991px) {
+    .rs-tools { grid-template-columns: 1fr; }
+    .rs-layout { grid-template-columns: 1fr; }
+    .rs-nav { position: static; flex-direction: row; flex-wrap: wrap; }
+  }
+</style>
+
+<script>
+  Page.setup({
+    data: function () {
+      return Object.assign({ current: 'rs-connection', savedJson: '', saving: false, saved: false, error: '' }, this.formFrom(Page.data.settings), { s: Page.data.settings });
+    },
+    computed: {
+      sections: function () {
+        return [
+          { id: 'rs-connection', name: 'JasperServers', icon: 'fas fa-server' },
+          { id: 'rs-policy', name: 'Publishing', icon: 'fas fa-shield-alt' },
+          { id: 'rs-his', name: 'Centrix HIS', icon: 'fas fa-hospital' },
+          { id: 'rs-builder', name: 'Print-Out Builder', icon: 'fas fa-file-pdf' },
+          { id: 'rs-designer', name: 'Designer & Publish', icon: 'fas fa-drafting-compass' },
+          { id: 'rs-studio', name: 'Jaspersoft Studio', icon: 'fas fa-tools' }
+        ];
+      },
+      maxServers: function () { return 10; },
+      readyCount: function () { return (this.s.servers || []).filter(function (sv) { return sv.configured; }).length; },
+      // Saved servers each tool publishes to unless the user picks others.
+      defaultNames: function () {
+        var list = (this.s.servers || []).filter(function (sv) { return sv.configured; });
+        var def = list.filter(function (sv) { return sv.publishByDefault; });
+        return (def.length ? def : list.slice(0, 1)).map(function (sv) { return sv.name; }).join(', ');
+      },
+      // Both deploy zones have a server (the only way to publish when direct publish is off).
+      zonesReady: function () {
+        var z = this.f.servers.map(function (sv) { return sv.zone; });
+        return z.indexOf('uat') >= 0 && z.indexOf('prod') >= 0;
+      },
+      hisReady: function () { return /^[0-9a-f]{24}$/i.test(this.s.interfaceUserUid || ''); },
+      // The saved folder each tool publishes to by default.
+      tools: function () {
+        var s = this.s, designerFolder = s.designerFolder || s.defaultFolder;
+        return [
+          { key: 'builder', name: 'Print-Out Builder', icon: 'fas fa-file-pdf', link: '/reports/print-out-builder', his: true, folder: s.defaultFolder },
+          { key: 'designer', name: 'Jasper Designer', icon: 'fas fa-drafting-compass', link: '/reports/jasper-designer', his: false, folder: designerFolder },
+          { key: 'publish', name: 'Publish Report', icon: 'fas fa-cloud-upload-alt', link: '/reports/publish', his: true, folder: designerFolder }
+        ];
+      },
+      builderControls: function () { return this.lines(this.inputControlsText); },
+      body: function () {
+        return Object.assign({}, this.f, {
+          servers: this.f.servers.map(function (sv) {
+            return { id: sv.id, name: sv.name, url: sv.url, user: sv.user, password: sv.password, clearPassword: sv.clearPassword, allowSelfSigned: sv.allowSelfSigned, publishByDefault: sv.publishByDefault, zone: sv.zone };
+          }),
+          inputControls: this.inputControlsText, designerInputControls: this.designerControlsText
+        });
+      },
+      dirty: function () {
+        var b = this.body;
+        return JSON.stringify(b) !== this.savedJson;
+      }
+    },
+    created: function () { this.savedJson = JSON.stringify(this.body); },
+    mounted: function () {
+      var vm = this;
+      vm._onScroll = function () {
+        var at = vm.sections[0].id;
+        vm.sections.forEach(function (sec) {
+          var el = document.getElementById(sec.id);
+          if (el && el.getBoundingClientRect().top < 140) at = sec.id;
+        });
+        vm.current = at;
+      };
+      window.addEventListener('scroll', vm._onScroll, { passive: true });
+      vm._onUnload = function (e) { if (vm.dirty) { e.preventDefault(); e.returnValue = ''; } };
+      window.addEventListener('beforeunload', vm._onUnload);
+    },
+    beforeDestroy: function () {
+      window.removeEventListener('scroll', this._onScroll);
+      window.removeEventListener('beforeunload', this._onUnload);
+    },
+    methods: {
+      formFrom: function (s) {
+        return {
+          f: {
+            servers: (s.servers || []).map(this.serverForm),
+            defaultFolder: s.defaultFolder, defaultDataSource: s.defaultDataSource,
+            headerSubreport: s.headerSubreport, interfaceUserUid: s.interfaceUserUid, dataAdapter: s.dataAdapter,
+            reportUnit: s.reportUnit, defaultVisitUid: s.defaultVisitUid, defaultOrgUid: s.defaultOrgUid,
+            designerFolder: s.designerFolder || '', designerDataSource: s.designerDataSource || '',
+            designerInputControlsMode: s.designerInputControlsMode === 'custom' ? 'custom' : 'same',
+            allowDirectPublish: s.allowDirectPublish !== false
+          },
+          inputControlsText: (s.inputControls || []).join('\n'),
+          designerControlsText: (s.designerInputControls || []).join('\n')
+        };
+      },
+      serverForm: function (sv) {
+        return {
+          key: sv.id || ('n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)),
+          id: sv.id || '', name: sv.name || '', url: sv.url || '', user: sv.user || '', password: '', clearPassword: false,
+          hasPassword: !!sv.hasPassword, allowSelfSigned: sv.allowSelfSigned !== false, publishByDefault: !!sv.publishByDefault,
+          zone: sv.zone || '', testing: false, testResult: null
+        };
+      },
+      addServer: function () {
+        if (this.f.servers.length >= this.maxServers) return;
+        var first = !this.f.servers.length;
+        this.f.servers.push(this.serverForm({ name: first ? 'Main' : '', publishByDefault: first, allowSelfSigned: true }));
+      },
+      removeServer: function (i) { this.f.servers.splice(i, 1); },
+      moveServer: function (i, d) {
+        var list = this.f.servers, j = i + d;
+        if (j < 0 || j >= list.length) return;
+        list.splice(j, 0, list.splice(i, 1)[0]);
+      },
+      lines: function (text) { return String(text || '').split(/\r?\n|,/).map(function (v) { return v.trim(); }).filter(Boolean); },
+      go: function (id) {
+        var el = document.getElementById(id);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        this.current = id;
+      },
+      reset: function () {
+        Object.assign(this, this.formFrom(this.s));
+        this.error = '';
+      },
+      post: function (url, body) {
+        return fetch(url, {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(body)
+        }).then(function (r) {
+          return r.json().catch(function () { return { error: 'The server answered ' + r.status + '.' }; })
+            .then(function (d) { if (!r.ok || d.error) throw new Error(d.error || ('HTTP ' + r.status)); return d; });
+        });
+      },
+      save: function () {
+        var vm = this;
+        if (vm.saving) return;
+        vm.saving = true; vm.saved = false; vm.error = '';
+        vm.post('/reports/settings', vm.body)
+          .then(function (d) {
+            vm.s = d.settings;
+            Object.assign(vm, vm.formFrom(d.settings));
+            vm.$nextTick(function () { vm.savedJson = JSON.stringify(vm.body); });
+            vm.saved = true;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          })
+          .catch(function (err) { vm.error = err.message; window.scrollTo({ top: 0, behavior: 'smooth' }); })
+          .then(function () { vm.saving = false; });
+      },
+      test: function (sv) {
+        var vm = this;
+        sv.testing = true; sv.testResult = null;
+        vm.post('/reports/settings/test', {
+          id: sv.id, url: sv.url, user: sv.user, password: sv.clearPassword ? '' : sv.password,
+          clearPassword: sv.clearPassword, allowSelfSigned: sv.allowSelfSigned
+        })
+          .then(function (d) { sv.testResult = { ok: true, text: 'Connected' + (d.version ? ' · JasperServer ' + d.version : '') + (d.edition ? ' ' + d.edition : '') }; })
+          .catch(function (err) { sv.testResult = { ok: false, text: err.message }; })
+          .then(function () { sv.testing = false; });
+      }
+    }
+  });
+</script>

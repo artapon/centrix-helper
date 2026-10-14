@@ -1,0 +1,30 @@
+{
+  "id": "querystudio",
+  "name": "Query Studio",
+  "version": "1.0.0",
+  "author": "Centrix HIS Helper Tools",
+  "category": "Data tools",
+  "icon": "fas fa-terminal",
+  "summary": "Run MongoDB shell queries against the connected site, with an audit trail of every query.",
+  "description": "A query editor for the connected Centrix database: find, aggregate, count, distinct and explain in mongo shell syntax, with tree, table and JSON results, lookups of referenced records, saved queries, export, and censoring of patient personal data. Every query is recorded in the Query Studio audit log.",
+  "features": [
+    "Query editor with run selection, explain and cancel",
+    "Tree, table and JSON results with page and whole-collection search",
+    "Lookups of referenced records and Basic Data popup",
+    "Saved queries and CSV / Excel export",
+    "Censoring of patient and organisation personal data",
+    "Audit log of every query, export and setting change"
+  ],
+  "requires": ["MongoDB connection for queries", "SQLite for the audit log and saved queries"],
+  "defaultActive": true,
+  "paths": ["/query-studio", "/query-studio/audit"],
+  "menu": {
+    "header": "Query Studio",
+    "icon": "fas fa-code",
+    "after": "Data Management",
+    "items": [
+      { "text": "Query Data", "icon": "fas fa-terminal", "link": "/query-studio" },
+      { "text": "Query Data Audit", "icon": "fas fa-clipboard-check", "link": "/query-studio/audit" }
+    ]
+  }
+}

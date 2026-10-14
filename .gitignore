@@ -1,0 +1,16 @@
+/logs
+/.vscode
+/node_modules
+config/database.js
+*staging.*
+.env
+schedule-job/node_modules
+.scannerwork/report-task.txt
+.scannerwork/.sonar_lock
+db.config.js
+/data
+/tmp_hl7/**
+Import_log.csv
+menu.config.js
+link.config.js
+.qodo

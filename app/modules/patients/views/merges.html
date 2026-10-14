@@ -1,0 +1,59 @@
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-search" style="color:#2563eb;"></i>
+      <span>Search Patient Merges</span>
+    </div>
+    <div class="card-body">
+      <form method="get" action="/patients/merges" class="form-group">
+        <div class="form-row">
+          <div class="form-group col-sm-3">
+            <label>HN : &nbsp;</label>
+            <input type="text" class="form-control" name="hn" >
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-sm-6">
+          <input type="submit" value="กรองข้อมูล" class="btn btn-success">
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-code-branch" style="color:#2563eb;"></i>
+      <span>Patient Merges</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th class="text-center">Merged No</th>
+              <th class="text-center">Merged Date</th>
+              <th class="text-center">Merged By</th>
+              <th class="text-center">Merged From HN</th>
+              <th class="text-center">Merged To HN</th>
+              <th class="text-center">Is Unmerged</th>
+              <th class="text-center">Reason</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in patientmerges">
+              <td class="text-center" >{{ item.mergeseqno }}</td>
+              <td class="text-center" >{{ item.mergedate }}</td>
+              <td class="text-center" >{{ item.mergedby || "" }}</td>
+              <td class="text-center" ><a v-if="item.isunmerged == true" target="_blank" :href="`/patients/summary?hn=${ item.secmaryhn }`" >{{ item.secmaryhn }}</a><template v-else>{{ item.secmaryhn }}</template></td>
+              <td class="text-center" ><a target="_blank" :href="`/patients/summary?hn=${ item.primaryhn }`" >{{ item.primaryhn }}</a></td>
+              <td class="text-center" :style="item.isunmerged == true ? 'background-color: red; color : white;' : ''" >{{ item.isunmerged }}</td>
+              <td class="text-center" >{{ item.reasonuid || "" }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,40 @@
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-file-alt" style="color:#2563eb;"></i>
+      <span>Jasper Server Reports</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>Report ID</th>
+              <th>Report Description</th>
+              <th>Report Path</th>
+              <th class="text-center">Created Date</th>
+              <th class="text-center">Report Version</th>
+              <th class="text-center">Report Updating</th>
+              <th class="text-center">Event Date</th>
+              <th class="text-center">Updated Date</th>
+              <th class="text-center">Event By</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in reports">
+              <td>{{ item.report_id }}</td>
+              <td>{{ item.title || "" }}</td>
+              <td>{{ item.report_path }}</td>
+              <td class="text-center">{{ item.creation_date }}</td>
+              <td class="text-center">{{ item.version }}</td>
+              <td class="text-center">{{ item.updating }}</td>
+              <td class="text-center">{{ item.event_date }}</td>
+              <td class="text-center">{{ item.update_date }}</td>
+              <td class="text-center">{{ item.update_by }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,1301 @@
+<style>
+  :root {
+    --primary-color: #2563eb;
+    --primary-hover: #1d4ed8;
+    --success-color: #10b981;
+    --warning-color: #f59e0b;
+    --danger-color: #ef4444;
+    --slate-50: #f8fafc;
+    --slate-100: #f1f5f9;
+    --slate-200: #e2e8f0;
+    --slate-300: #cbd5e1;
+    --slate-700: #334155;
+    --slate-800: #1e293b;
+    --border-radius: 12px;
+  }
+
+  .jasper-card {
+    border: none;
+    border-radius: var(--border-radius);
+    box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05), 0 2px 8px -1px rgba(0, 0, 0, 0.03);
+    background: #ffffff;
+    overflow: hidden;
+    margin-bottom: 24px;
+  }
+
+  .jasper-card-header {
+    background: #ffffff;
+    border-bottom: 1px solid var(--slate-100);
+    padding: 18px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .jasper-card-header h3 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--slate-800);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .jasper-card-body {
+    padding: 24px;
+  }
+
+  .form-group label {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--slate-700);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .form-control-custom {
+    display: block;
+    width: 100%;
+    padding: 10px 14px;
+    font-size: 0.9rem;
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--slate-800);
+    background-color: #fff;
+    background-clip: padding-box;
+    border: 1px solid var(--slate-200);
+    border-radius: 8px;
+    transition: border-color .15s ease-in-out, box-shadow .15s ease-in-out;
+  }
+
+  .form-control-custom:focus {
+    border-color: var(--primary-color);
+    outline: 0;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  }
+
+  .btn-custom {
+    padding: 10px 16px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.15s ease-in-out;
+    cursor: pointer;
+    border: 1px solid transparent;
+  }
+
+  .btn-custom-primary {
+    background-color: var(--primary-color);
+    color: #fff;
+  }
+
+  .btn-custom-primary:hover {
+    background-color: var(--primary-hover);
+    color: #fff;
+  }
+
+  .btn-custom-secondary {
+    background-color: #fff;
+    border-color: var(--slate-200);
+    color: var(--slate-700);
+  }
+
+  .btn-custom-secondary:hover {
+    background-color: var(--slate-50);
+    color: var(--slate-800);
+    border-color: var(--slate-300);
+  }
+
+  .btn-custom-danger {
+    background-color: #fee2e2;
+    color: var(--danger-color);
+  }
+
+  .btn-custom-danger:hover {
+    background-color: #fecaca;
+  }
+
+  .param-badge {
+    background: var(--slate-100);
+    color: var(--slate-700);
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  .param-row {
+    background: var(--slate-50);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .param-row input {
+    border: 1px solid var(--slate-200);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 0.85rem;
+    outline: none;
+  }
+
+  .param-row input:focus {
+    border-color: var(--primary-color);
+  }
+
+  .preset-item {
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+    font-size: 0.85rem;
+    color: var(--slate-700);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .preset-item:hover {
+    background: var(--slate-50);
+    color: var(--primary-color);
+  }
+
+  .preview-placeholder {
+    height: 600px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: var(--slate-50);
+    color: var(--slate-700);
+    border: 2px dashed var(--slate-200);
+    border-radius: var(--border-radius);
+    padding: 40px;
+    text-align: center;
+  }
+
+  .preview-placeholder i {
+    font-size: 3rem;
+    color: var(--slate-300);
+    margin-bottom: 16px;
+  }
+
+  /* History list styling */
+  .history-item {
+    font-size: 0.82rem;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--slate-100);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+  }
+
+  .history-item:hover {
+    background: var(--slate-50);
+  }
+
+  .history-item .url-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 250px;
+    color: var(--slate-700);
+  }
+
+  /* Premium Searchable Dropdown widget styling */
+  .searchable-select-container {
+    position: relative;
+    z-index: 9999;
+  }
+
+  .searchable-select-trigger {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    padding: 10px 14px;
+    font-size: 0.88rem;
+    font-weight: 500;
+    color: var(--slate-700);
+    background-color: #fff;
+    border: 1px solid var(--slate-200);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s ease-in-out;
+    outline: none;
+    user-select: none;
+  }
+
+  .searchable-select-trigger:focus,
+  .searchable-select-container.active .searchable-select-trigger {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  }
+
+  .searchable-select-dropdown {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    width: 100%;
+    background: #ffffff;
+    border: 1px solid var(--slate-200);
+    border-radius: 8px;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 16px -6px rgba(0, 0, 0, 0.05);
+    z-index: 100;
+    overflow: hidden;
+    animation: dropdownFadeIn 0.2s ease-out;
+    z-index: 99999;
+  }
+
+  @keyframes dropdownFadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(-5px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .searchable-select-container.active .searchable-select-dropdown {
+    display: block;
+  }
+
+  .searchable-select-search-box {
+    padding: 8px 12px;
+    background: var(--slate-50);
+    border-bottom: 1px solid var(--slate-100);
+  }
+
+  .searchable-select-search-input {
+    width: 100%;
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    border: 1px solid var(--slate-200);
+    border-radius: 6px;
+    outline: none;
+    background: #ffffff;
+    transition: border-color 0.15s;
+  }
+
+  .searchable-select-search-input:focus {
+    border-color: var(--primary-color);
+  }
+
+  .searchable-select-options-list {
+    max-height: 220px;
+    overflow-y: auto;
+  }
+
+  .searchable-select-option {
+    padding: 10px 14px;
+    font-size: 0.85rem;
+    color: var(--slate-700);
+    cursor: pointer;
+    transition: all 0.12s;
+    border-bottom: 1px solid var(--slate-50);
+  }
+
+  .searchable-select-option:last-child {
+    border-bottom: none;
+  }
+
+  .searchable-select-option:hover {
+    background-color: var(--slate-50);
+    color: var(--primary-color);
+  }
+
+  .searchable-select-option.selected {
+    background-color: #eff6ff;
+    color: var(--primary-color);
+    font-weight: 600;
+  }
+
+  .searchable-select-no-results {
+    padding: 16px;
+    text-align: center;
+    color: #94a3b8;
+    font-size: 0.82rem;
+  }
+
+  .jasper-left-panel {
+    overflow-y: auto;
+    overflow-x: visible;
+    max-height: calc(100vh - 100px);
+    position: relative;
+  }
+
+  .template-popup-item{
+  padding:14px 16px;
+  border:1px solid #e2e8f0;
+  border-radius:12px;
+  margin-bottom:10px;
+  cursor:pointer;
+  transition:all .15s ease;
+  background:#fff;
+}
+
+.template-popup-item:hover{
+  border-color:#2563eb;
+  background:#eff6ff;
+  transform:translateY(-1px);
+  box-shadow:0 2px 8px rgba(37,99,235,0.08);
+}
+
+.template-popup-title{
+  font-size:0.9rem;
+  font-weight:700;
+  color:#0f172a;
+}
+
+.template-popup-subtitle{
+  font-size:0.75rem;
+  color:#64748b;
+  margin-top:4px;
+  font-family:monospace;
+}
+
+.template-popup-selector .form-control{
+  border-radius:10px 0 0 10px;
+}
+
+.template-popup-selector .btn{
+  border-radius:0 10px 10px 0;
+}
+
+#templatePopupModal .modal-content{
+  box-shadow:0 10px 40px rgba(0,0,0,0.12);
+}
+
+#templatePopupSearch{
+  border-radius:12px;
+  height:44px;
+}
+
+</style>
+
+<div class="col-12">
+  <div class="row">
+    <!-- Left Column -->
+    <div class="col-lg-5 jasper-left-panel">
+
+      <!-- URL Card -->
+      <div class="card jasper-card">
+        <div class="jasper-card-header">
+          <h3><i class="fas fa-link text-primary"></i> Report URL</h3>
+          <button class="btn btn-xs btn-outline-secondary" onclick="toggleBuilder()" id="builderToggleBtn">
+            <i class="fas fa-tools"></i> Builder
+          </button>
+        </div>
+        <div class="jasper-card-body">
+          <!-- Popup Configured Template Selector -->
+          <div class="form-group mb-3">
+
+            <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">
+              <i class="fas fa-file-invoice text-info mr-1"></i>
+              SELECT CONFIGURED TEMPLATE
+            </label>
+
+            <div class="template-popup-selector">
+
+              <div class="input-group">
+
+                <input
+                  type="text"
+                  id="selectedTemplateLabel"
+                  class="form-control form-control-sm"
+                  placeholder="-- Choose a Configured Template --"
+                  readonly
+                  style="background:#fff;cursor:pointer;"
+                  onclick="openTemplatePopup()">
+
+                <div class="input-group-append">
+
+                  <button
+                    class="btn btn-outline-primary btn-sm"
+                    type="button"
+                    onclick="openTemplatePopup()">
+
+                    <i class="fas fa-search"></i>
+
+                  </button>
+
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
+          <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">FULL JASPER URL</label>
+          <textarea id="reportUrlInput" class="form-control-custom" rows="3"
+            placeholder="https://jasperserver.com:8443/jasperserver/flow.html?_flowId=viewReportFlow&output=pdf&reportUnit=%2Freports%2FMyReport&j_username=jasperadmin&j_password=jasperadmin&patientvisituid=..."
+            oninput="onUrlInputChanged()" style="resize:vertical;font-size:0.78rem;font-family:monospace;"></textarea>
+
+          <!-- URL Builder Panel -->
+          <div id="urlBuilderPanel"
+            style="display:none;border-top:1px solid var(--slate-100);padding-top:14px;margin-top:12px;">
+            <div
+              style="font-size:0.72rem;font-weight:700;color:var(--slate-700);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px;">
+              <i class="fas fa-hammer text-warning mr-1"></i> Build URL from Parts
+            </div>
+            <div class="row mb-2">
+              <div class="col-8">
+                <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">JASPER HOST</label>
+                <input type="text" id="builderHost" class="form-control-custom form-control-sm"
+                  placeholder="https://jasperserver.com:8443">
+              </div>
+              <div class="col-4">
+                <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">OUTPUT</label>
+                <select id="builderOutput" class="form-control form-control-sm"
+                  style="border-radius:8px;border-color:var(--slate-200);">
+                  <option value="pdf">PDF</option>
+                  <option value="xlsx">XLSX</option>
+                  <option value="xls">XLS</option>
+                  <option value="csv">CSV</option>
+                  <option value="html">HTML</option>
+                </select>
+              </div>
+            </div>
+            <div class="mb-2">
+              <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">REPORT UNIT PATH</label>
+              <input type="text" id="builderReportUnit" class="form-control-custom form-control-sm"
+                placeholder="/Medintreports/Lab/labsticker_w5.5_h2.2_visitslip" style="font-family:monospace;">
+            </div>
+            <div class="row mb-2">
+              <div class="col-6">
+                <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">LOCALE</label>
+                <select id="builderLocale" class="form-control form-control-sm"
+                  style="border-radius:8px;border-color:var(--slate-200);">
+                  <option value="th">Thai (th)</option>
+                  <option value="en">English (en)</option>
+                  <option value="en_US">English US</option>
+                </select>
+              </div>
+              <div class="col-6">
+                <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">DECORATE</label>
+                <select id="builderDecorate" class="form-control form-control-sm"
+                  style="border-radius:8px;border-color:var(--slate-200);">
+                  <option value="no">No</option>
+                  <option value="yes">Yes</option>
+                </select>
+              </div>
+            </div>
+            <button class="btn btn-sm btn-primary w-100" onclick="buildUrlFromParts()">
+              <i class="fas fa-magic mr-1"></i> Generate URL
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Auth Card -->
+      <div class="card jasper-card">
+        <div class="jasper-card-header">
+          <h3><i class="fas fa-shield-alt text-primary"></i> Auth &amp; Connection</h3>
+        </div>
+        <div class="jasper-card-body">
+          <div class="row mb-2">
+            <div class="col-6">
+              <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">USERNAME</label>
+              <input type="text" id="jasperUser" class="form-control-custom form-control-sm" value="jasperadmin">
+            </div>
+            <div class="col-6">
+              <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">PASSWORD</label>
+              <input type="password" id="jasperPassword" class="form-control-custom form-control-sm"
+                value="jasperadmin">
+            </div>
+          </div>
+          <div class="custom-control custom-switch mt-2">
+            <input type="checkbox" class="custom-control-input" id="useProxyToggle" checked>
+            <label class="custom-control-label" for="useProxyToggle"
+              style="font-size:0.82rem;font-weight:600;text-transform:none;">
+              Use Server Proxy (Bypass CORS &amp; Self-Signed SSL)
+            </label>
+          </div>
+          <div class="custom-control custom-switch mt-2">
+            <input type="checkbox" class="custom-control-input" id="embedCredToggle" checked>
+            <label class="custom-control-label" for="embedCredToggle"
+              style="font-size:0.82rem;font-weight:600;text-transform:none;">
+              Embed credentials as <code>j_username</code> / <code>j_password</code> in URL
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick-Fill Card -->
+      <div class="card jasper-card">
+        <div class="jasper-card-header">
+          <h3><i class="fas fa-user-tag text-success"></i> Clinical Quick-Fill</h3>
+          <button class="btn btn-xs btn-outline-success" onclick="syncQuickletiables()">
+            <i class="fas fa-sync-alt"></i> Sync
+          </button>
+        </div>
+        <div class="jasper-card-body">
+          <div style="font-size:0.75rem;color:#64748b;margin-bottom:10px;">
+            Auto-populates matching URL parameters: <code>patientuid</code>, <code>patientvisituid</code>,
+            <code>organisationuid</code>, <code>loginuid</code>, <code>parentorguid</code>, <code>hn</code>, etc.
+          </div>
+          <div class="row">
+            <div class="col-6 mb-2">
+              <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">PATIENT UID</label>
+              <input type="text" id="quickPatientUID" class="form-control-custom form-control-sm"
+                placeholder="MongoDB ObjectId" oninput="syncQuickletiables()">
+            </div>
+            <div class="col-6 mb-2">
+              <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">VISIT UID</label>
+              <input type="text" id="quickVN" class="form-control-custom form-control-sm" placeholder="patientvisituid"
+                oninput="syncQuickletiables()">
+            </div>
+            <div class="col-6 mb-2">
+              <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">PATIENT HN / MRN</label>
+              <input type="text" id="quickHN" class="form-control-custom form-control-sm" placeholder="HN000001"
+                oninput="syncQuickletiables()">
+            </div>
+            <div class="col-6 mb-2">
+              <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">LOGIN UID</label>
+              <input type="text" id="quickLoginUID" class="form-control-custom form-control-sm" placeholder="User UID"
+                oninput="syncQuickletiables()">
+            </div>
+            <div class="col-6 mb-2">
+              <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">ORGANISATION UID</label>
+              <input type="text" id="quickOrgUID" class="form-control-custom form-control-sm" placeholder="Org ID"
+                value="" oninput="syncQuickletiables()">
+            </div>
+            <div class="col-6 mb-2">
+              <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">PARENT ORG UID</label>
+              <input type="text" id="quickParentOrgUID" class="form-control-custom form-control-sm"
+                placeholder="Parent Org ID" oninput="syncQuickletiables()">
+            </div>
+            <div class="col-6 mb-2">
+              <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">BILL UID</label>
+              <input type="text" id="quickBillUID" class="form-control-custom form-control-sm" placeholder="Bill ID"
+                oninput="syncQuickletiables()">
+            </div>
+          </div>
+          <!-- Date Range -->
+          <div style="border-top:1px solid var(--slate-100);margin-top:10px;padding-top:10px;">
+            <div
+              style="font-size:0.72rem;font-weight:700;color:var(--slate-700);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">
+              <i class="fas fa-calendar-alt text-primary mr-1"></i> Date Range (fromdate / todate)
+            </div>
+            <div class="row">
+              <div class="col-6 mb-2">
+                <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">FROM DATE</label>
+                <input type="date" id="quickFromDate" class="form-control-custom form-control-sm"
+                  oninput="syncQuickletiables()">
+              </div>
+              <div class="col-6 mb-2">
+                <label style="font-size:0.72rem;font-weight:600;color:var(--slate-700);">TO DATE</label>
+                <input type="date" id="quickToDate" class="form-control-custom form-control-sm"
+                  oninput="syncQuickletiables()">
+              </div>
+            </div>
+            <button class="btn btn-xs btn-outline-primary" onclick="setTodayDateRange()">
+              <i class="fas fa-calendar-day mr-1"></i> Set Today
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Parameters Card -->
+      <div class="card jasper-card">
+        <div class="jasper-card-header">
+          <h3><i class="fas fa-sliders-h text-primary"></i> URL Parameters</h3>
+          <button class="btn btn-sm btn-outline-primary" onclick="addParamRow()">
+            <i class="fas fa-plus"></i> Add
+          </button>
+        </div>
+        <div class="jasper-card-body">
+          <div id="parametersList"></div>
+          <div id="noParamsPlaceholder" style="font-size:0.85rem;color:#94a3b8;text-align:center;padding:20px 0;">
+            No parameters detected. Paste a URL above to parse its parameters.
+          </div>
+        </div>
+      </div>
+
+      <!-- History Card -->
+      <div class="card jasper-card">
+        <div class="jasper-card-header">
+          <h3><i class="fas fa-history text-secondary"></i> View History</h3>
+          <button class="btn btn-xs btn-link text-danger" onclick="clearHistory()">Clear</button>
+        </div>
+        <div class="jasper-card-body p-0" id="historyContainer" style="max-height:200px;overflow-y:auto;"></div>
+      </div>
+    </div>
+
+    <!-- Right Column: Interactive Live Report Viewer -->
+    <div class="col-lg-7">
+      <div class="card jasper-card" style="height: calc(100vh - 120px); min-height: 700px;">
+        <div class="jasper-card-header">
+          <h3><i class="fas fa-file-pdf text-danger"></i> Report Preview</h3>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn-custom btn-custom-secondary btn-sm" onclick="openInNewTab()"><i
+                class="fas fa-external-link-alt"></i> External Open</button>
+            <button class="btn-custom btn-custom-primary btn-sm" onclick="generateReport()"><i class="fas fa-sync"></i>
+              Render Report</button>
+          </div>
+        </div>
+        <div class="jasper-card-body p-0" style="position: relative; height: 100%;">
+          <!-- Loading Overlay -->
+          <div id="loadingOverlay"
+            style="display: none; position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(255,255,255,0.85); z-index:10; flex-direction:column; align-items:center; justify-content:center;">
+            <div class="spinner-border text-primary mb-3" role="status"></div>
+            <div style="font-weight: 600; color: var(--slate-700);">Generating Jasper Report...</div>
+            <div style="font-size: 0.75rem; color: #64748b; margin-top: 4px;">Fetching compiled output from server</div>
+          </div>
+
+          <!-- Viewer Frame -->
+          <iframe id="reportFrame" style="display: none; width:100%; height:100%; border:none;" src=""></iframe>
+
+          <!-- Placeholder -->
+          <div id="previewPlaceholder" class="preview-placeholder" style="margin: 24px;">
+            <i class="far fa-file-pdf"></i>
+            <h4>No Report Rendered Yet</h4>
+            <p class="text-muted" style="max-width: 400px; font-size: 0.85rem;">
+              Paste a Jasper report URL, select a preset, or customize the parameters, then click <strong>Render
+                Report</strong> to preview the output.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- ========================================= -->
+<!-- TEMPLATE POPUP MODAL -->
+<!-- ========================================= -->
+
+<div class="modal fade" id="templatePopupModal" tabindex="-1">
+
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+
+    <div class="modal-content"
+      style="border-radius:16px;border:none;overflow:hidden;">
+
+      <!-- HEADER -->
+      <div class="modal-header">
+
+        <h5 class="modal-title">
+          <i class="fas fa-file-invoice text-primary mr-2"></i>
+          Select Jasper Template
+        </h5>
+
+        <button
+          type="button"
+          class="close"
+          data-dismiss="modal">
+
+          <span>&times;</span>
+
+        </button>
+
+      </div>
+
+      <!-- BODY -->
+      <div class="modal-body">
+
+        <!-- SEARCH -->
+        <div class="mb-3">
+
+          <input
+            type="text"
+            id="templatePopupSearch"
+            class="form-control"
+            placeholder="Search template name or code..."
+            oninput="filterTemplatePopup(this.value)">
+
+        </div>
+
+        <!-- LIST -->
+        <div id="templatePopupList"></div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
+
+
+<script>
+  // --- Server Data (parsed from safe JSON block) ---
+  let _serverData = (function () {
+    let org = Page.data.org;
+    let centrixURL = Page.data.centrixURL;
+    return {
+      reporttemplates: (org && org.reporttemplates) ? org.reporttemplates.map(function (t) {
+        return { _id: String(t._id || ''), name: t.name || '', code: t.code || '', routepath: t.routepath || '', reportlocale: t.reportlocale || '' };
+      }) : [],
+      orgId: org ? String(org._id || '') : '',
+      centrixURL: centrixURL || ''
+    };
+  })();
+
+  let paramsArray = [];
+  let baseUrl = '';
+
+  function selectSearchableOption(element) {
+    let val = element.getAttribute('data-value');
+    let labelText = element.textContent || element.innerText;
+
+    // Update active visual classes
+    let options = document.querySelectorAll('#searchableOptionsList .searchable-select-option');
+    options.forEach(function (opt) {
+      opt.classList.remove('selected');
+    });
+    element.classList.add('selected');
+
+    // Update trigger label
+    document.getElementById('selectedTemplateLabel').textContent = labelText;
+
+    // Close dropdown
+    document.getElementById('templateSearchableSelect').classList.remove('active');
+
+    // Invoke handler
+    onTemplateSelected(val);
+  }
+
+  // Document listener to close dropdowns when clicking outside
+  document.addEventListener('click', function (e) {
+    let select = document.getElementById('templateSearchableSelect');
+    if (select && !select.contains(e.target)) {
+      select.classList.remove('active');
+    }
+  });
+
+  document.addEventListener('DOMContentLoaded', function () {
+    // Set org ID from server data
+    if (_serverData.orgId) {
+      document.getElementById('quickOrgUID').value = _serverData.orgId;
+    }
+
+    // Render template options from server data
+    renderTemplateOptions(_serverData.reporttemplates || []);
+
+    // Pre-fill host builder from session centrix URL
+    let centrixHost = _serverData.centrixURL || '';
+    if (centrixHost) {
+      try {
+        let parsed = new URL(centrixHost);
+        let guessHost = parsed.protocol + '//' + parsed.hostname + ':8443';
+        document.getElementById('builderHost').value = guessHost;
+      } catch (e) { }
+    }
+    // Set today as default date range
+    setTodayDateRange();
+    loadHistoryList();
+  });
+
+  function renderTemplateOptions(templates) {
+    let list = document.getElementById('searchableOptionsList');
+    if (!list) return;
+    // Remove any old options except the placeholder
+    let existing = list.querySelectorAll('.searchable-select-option:not([data-value=""])');
+    existing.forEach(function (el) { el.remove(); });
+    templates.forEach(function (t) {
+      let div = document.createElement('div');
+      div.className = 'searchable-select-option';
+      div.setAttribute('data-value', encodeURIComponent(JSON.stringify(t)));
+      div.setAttribute('data-search', (t.name + ' ' + t.code).toLowerCase());
+      div.setAttribute('onclick', 'selectSearchableOption(this)');
+      div.textContent = t.name + ' (' + t.code + ')';
+      list.appendChild(div);
+    });
+  }
+
+  // --- URL Builder ---
+  function toggleBuilder() {
+    let panel = document.getElementById('urlBuilderPanel');
+    let btn = document.getElementById('builderToggleBtn');
+    if (panel.style.display === 'none') {
+      panel.style.display = 'block';
+      btn.innerHTML = '<i class="fas fa-times"></i> Close';
+    } else {
+      panel.style.display = 'none';
+      btn.innerHTML = '<i class="fas fa-tools"></i> Builder';
+    }
+  }
+
+  function onTemplateSelected(encodedVal) {
+    if (!encodedVal) return;
+    try {
+      let template = JSON.parse(decodeURIComponent(encodedVal));
+
+      // Update Builder Panel fields
+      if (template.routepath) {
+        document.getElementById('builderReportUnit').value = template.routepath;
+      }
+      if (template.reportlocale) {
+        document.getElementById('builderLocale').value = template.reportlocale;
+      }
+
+      // Open the builder panel so the user sees all configuration options
+      let panel = document.getElementById('urlBuilderPanel');
+      let btn = document.getElementById('builderToggleBtn');
+      panel.style.display = 'block';
+      btn.innerHTML = '<i class="fas fa-times"></i> Close';
+
+      // Automatically build the URL
+      buildUrlFromParts();
+    } catch (e) {
+      console.error('Error loading selected template:', e);
+    }
+  }
+
+  function buildUrlFromParts() {
+    let host = document.getElementById('builderHost').value.trim();
+    if (host.endsWith('/')) {
+      host = host.slice(0, -1);
+    }
+    let reportUnit = document.getElementById('builderReportUnit').value.trim();
+    let output = document.getElementById('builderOutput').value;
+    let locale = document.getElementById('builderLocale').value;
+    let decorate = document.getElementById('builderDecorate').value;
+    let user = document.getElementById('jasperUser').value.trim();
+    let pass = document.getElementById('jasperPassword').value.trim();
+
+    if (!host || !reportUnit) {
+      alert('Please fill in Jasper Host and Report Unit Path.');
+      return;
+    }
+
+    // Encode the report unit path
+    let encodedUnit = encodeURIComponent(reportUnit);
+
+    let url = host + '/jasperserver/flow.html' +
+      '?_flowId=viewReportFlow' +
+      '&output=' + output +
+      '&reportUnit=' + encodedUnit +
+      '&j_username=' + encodeURIComponent(user) +
+      '&j_password=' + encodeURIComponent(pass) +
+      '&decorate=' + decorate +
+      '&userLocale=' + locale;
+
+    // Append quick-fill clinical params if set
+    let patientUID = document.getElementById('quickPatientUID').value.trim();
+    let visitUID = document.getElementById('quickVN').value.trim();
+    let orgUID = document.getElementById('quickOrgUID').value.trim();
+    let parentOrgUID = document.getElementById('quickParentOrgUID').value.trim();
+    let loginUID = document.getElementById('quickLoginUID').value.trim();
+    let hn = document.getElementById('quickHN').value.trim();
+    let fromDate = getISODate(document.getElementById('quickFromDate').value, 'start');
+    let toDate = getISODate(document.getElementById('quickToDate').value, 'end');
+
+    if (patientUID) url += '&patientuid=' + encodeURIComponent(patientUID);
+    if (visitUID) url += '&patientvisituid=' + encodeURIComponent(visitUID);
+    if (hn) url += '&hn=' + encodeURIComponent(hn);
+    if (loginUID) url += '&loginuid=' + encodeURIComponent(loginUID);
+    if (orgUID) url += '&organisationuid=' + encodeURIComponent(orgUID);
+    if (parentOrgUID) url += '&parentorguid=' + encodeURIComponent(parentOrgUID);
+    if (fromDate) url += '&fromdate=' + encodeURIComponent(fromDate);
+    if (toDate) url += '&todate=' + encodeURIComponent(toDate);
+
+    document.getElementById('reportUrlInput').value = url;
+    onUrlInputChanged();
+    // Close builder panel
+    document.getElementById('urlBuilderPanel').style.display = 'none';
+    document.getElementById('builderToggleBtn').innerHTML = '<i class="fas fa-tools"></i> Builder';
+  }
+
+  // --- Date Helpers ---
+  function getISODate(dateVal, type) {
+    if (!dateVal) return '';
+    // dateVal is YYYY-MM-DD from date input
+    if (type === 'start') {
+      return dateVal + 'T17:00:00.000Z'; // Thai midnight = UTC-7 from previous day, use 17:00 UTC
+    } else {
+      return dateVal + 'T16:59:59.999Z';
+    }
+  }
+
+  function setTodayDateRange() {
+    let today = new Date();
+    let yyyy = today.getFullYear();
+    let mm = String(today.getMonth() + 1).padStart(2, '0');
+    let dd = String(today.getDate()).padStart(2, '0');
+    let todayStr = yyyy + '-' + mm + '-' + dd;
+    document.getElementById('quickFromDate').value = todayStr;
+    document.getElementById('quickToDate').value = todayStr;
+    syncQuickletiables();
+  }
+
+  // --- URL Parsing ---
+  function onUrlInputChanged() {
+    let inputVal = document.getElementById('reportUrlInput').value.trim();
+    if (!inputVal) {
+      baseUrl = '';
+      paramsArray = [];
+      renderParams();
+      return;
+    }
+
+    try {
+      let parsedUrl = new URL(inputVal);
+      baseUrl = parsedUrl.origin + parsedUrl.pathname;
+      paramsArray = [];
+      parsedUrl.searchParams.forEach(function (value, key) {
+        paramsArray.push({ key: key, value: value });
+      });
+
+      // Auto-populate quick-fill from detected params
+      autoPopulateQuickFill();
+    } catch (e) {
+      baseUrl = inputVal.split('?')[0];
+      let queryStr = inputVal.split('?')[1] || '';
+      paramsArray = [];
+      if (queryStr) {
+        queryStr.split('&').forEach(function (pair) {
+          let eqIdx = pair.indexOf('=');
+          if (eqIdx > -1) {
+            let k = pair.substring(0, eqIdx);
+            let v = decodeURIComponent(pair.substring(eqIdx + 1));
+            if (k) paramsArray.push({ key: k, value: v });
+          }
+        });
+        autoPopulateQuickFill();
+      }
+    }
+
+    renderParams();
+  }
+
+  // Auto-populate quick-fill fields when URL is pasted
+  function autoPopulateQuickFill() {
+    paramsArray.forEach(function (p) {
+      let k = p.key.toLowerCase();
+      if (k === 'patientuid') document.getElementById('quickPatientUID').value = p.value;
+      if (k === 'patientvisituid') document.getElementById('quickVN').value = p.value;
+      if (k === 'hn' || k === 'mrn') document.getElementById('quickHN').value = p.value;
+      if (k === 'loginuid') document.getElementById('quickLoginUID').value = p.value;
+      if (k === 'organisationuid' || k === 'orguid') document.getElementById('quickOrgUID').value = p.value;
+      if (k === 'parentorguid') document.getElementById('quickParentOrgUID').value = p.value;
+      if (k === 'billuid' || k === 'billid') document.getElementById('quickBillUID').value = p.value;
+      if (k === 'j_username') document.getElementById('jasperUser').value = p.value;
+      if (k === 'j_password') document.getElementById('jasperPassword').value = p.value;
+    });
+  }
+
+  // --- Parameter Rendering ---
+  function renderParams() {
+    let container = document.getElementById('parametersList');
+    let placeholder = document.getElementById('noParamsPlaceholder');
+    container.innerHTML = '';
+
+    if (paramsArray.length === 0) {
+      placeholder.style.display = 'block';
+      return;
+    }
+    placeholder.style.display = 'none';
+
+    paramsArray.forEach(function (param, index) {
+      let isCredential = (param.key === 'j_username' || param.key === 'j_password');
+      let row = document.createElement('div');
+      row.className = 'param-row';
+      if (isCredential) row.style.background = '#fef3c7';
+      row.innerHTML =
+        '<input type="text" class="form-control form-control-sm" style="flex:2;font-weight:600;font-family:monospace;" value="' + param.key + '" placeholder="Key" oninput="updateParamKey(' + index + ', this.value)">' +
+        '<input type="' + (isCredential && param.key === 'j_password' ? 'password' : 'text') + '" class="form-control form-control-sm" style="flex:3;font-family:monospace;" value="' + param.value + '" placeholder="Value" oninput="updateParamValue(' + index + ', this.value)">' +
+        '<button class="btn btn-sm btn-custom-danger" style="padding:4px 8px;flex-shrink:0;" onclick="removeParam(' + index + ')"><i class="fas fa-trash"></i></button>';
+      container.appendChild(row);
+    });
+  }
+
+  function updateParamKey(index, val) {
+    paramsArray[index].key = val.trim();
+    rebuildUrlFromParams();
+  }
+
+  function updateParamValue(index, val) {
+    paramsArray[index].value = val;
+    rebuildUrlFromParams();
+  }
+
+  function addParamRow() {
+    paramsArray.push({ key: '', value: '' });
+    renderParams();
+  }
+
+  function removeParam(index) {
+    paramsArray.splice(index, 1);
+    renderParams();
+    rebuildUrlFromParams();
+  }
+
+  // --- Quick Fill Sync ---
+  function syncQuickletiables() {
+    let qPatient = document.getElementById('quickPatientUID').value.trim();
+    let qVN = document.getElementById('quickVN').value.trim();
+    let qHN = document.getElementById('quickHN').value.trim();
+    let qLogin = document.getElementById('quickLoginUID').value.trim();
+    let qOrg = document.getElementById('quickOrgUID').value.trim();
+    let qParent = document.getElementById('quickParentOrgUID').value.trim();
+    let qBill = document.getElementById('quickBillUID').value.trim();
+    let fromDate = getISODate(document.getElementById('quickFromDate').value, 'start');
+    let toDate = getISODate(document.getElementById('quickToDate').value, 'end');
+
+    paramsArray.forEach(function (p) {
+      let k = p.key.toLowerCase();
+      if (qPatient && k === 'patientuid') p.value = qPatient;
+      if (qVN && k === 'patientvisituid') p.value = qVN;
+      if (qHN && (k === 'hn' || k === 'mrn')) p.value = qHN;
+      if (qLogin && k === 'loginuid') p.value = qLogin;
+      if (qOrg && (k === 'organisationuid' || k === 'orguid')) p.value = qOrg;
+      if (qParent && k === 'parentorguid') p.value = qParent;
+      if (qBill && (k === 'billuid' || k === 'billid')) p.value = qBill;
+      if (fromDate && k === 'fromdate') p.value = fromDate;
+      if (toDate && k === 'todate') p.value = toDate;
+    });
+
+    renderParams();
+    rebuildUrlFromParams();
+  }
+
+  // --- URL Reconstruction ---
+  function rebuildUrlFromParams() {
+    if (!baseUrl) return;
+    let queryParts = [];
+    paramsArray.forEach(function (p) {
+      if (p.key) queryParts.push(p.key + '=' + encodeURIComponent(p.value));
+    });
+    let fullUrl = baseUrl + (queryParts.length > 0 ? '?' + queryParts.join('&') : '');
+    document.getElementById('reportUrlInput').value = fullUrl;
+  }
+
+  function getConstructedUrl() {
+    let url = document.getElementById('reportUrlInput').value.trim();
+    // If embed credentials is checked, ensure j_username/j_password are in the URL params
+    let embedCred = document.getElementById('embedCredToggle').checked;
+    if (embedCred && url) {
+      let user = document.getElementById('jasperUser').value.trim();
+      let pass = document.getElementById('jasperPassword').value.trim();
+      if (user && pass && paramsArray.length > 0) {
+        // Update existing j_username / j_password params, or append them
+        let hasUser = paramsArray.some(function (p) { return p.key === 'j_username'; });
+        let hasPass = paramsArray.some(function (p) { return p.key === 'j_password'; });
+        if (!hasUser) paramsArray.push({ key: 'j_username', value: user });
+        if (!hasPass) paramsArray.push({ key: 'j_password', value: pass });
+        paramsArray.forEach(function (p) {
+          if (p.key === 'j_username') p.value = user;
+          if (p.key === 'j_password') p.value = pass;
+        });
+        rebuildUrlFromParams();
+        url = document.getElementById('reportUrlInput').value.trim();
+      }
+    }
+    return url;
+  }
+
+  // --- Report Rendering ---
+  function generateReport() {
+    let finalUrl = getConstructedUrl();
+    if (!finalUrl) {
+      alert('Please enter a Jasper Report URL.');
+      return;
+    }
+    saveToHistory(finalUrl);
+
+    document.getElementById('loadingOverlay').style.display = 'flex';
+    document.getElementById('previewPlaceholder').style.display = 'none';
+
+    let frame = document.getElementById('reportFrame');
+    let useProxy = document.getElementById('useProxyToggle').checked;
+    let targetSrc = finalUrl;
+
+    if (useProxy) {
+      let user = document.getElementById('jasperUser').value.trim();
+      let pass = document.getElementById('jasperPassword').value.trim();
+      targetSrc = '/reports/viewer/proxy?url=' + encodeURIComponent(finalUrl);
+      if (user && pass) {
+        targetSrc += '&username=' + encodeURIComponent(user) + '&password=' + encodeURIComponent(pass);
+      }
+    }
+
+    frame.src = targetSrc;
+    frame.style.display = 'block';
+    frame.onload = function () {
+      document.getElementById('loadingOverlay').style.display = 'none';
+    };
+  }
+
+  function openInNewTab() {
+    let finalUrl = getConstructedUrl();
+    if (!finalUrl) {
+      alert('Please enter a Jasper Report URL.');
+      return;
+    }
+    let useProxy = document.getElementById('useProxyToggle').checked;
+    if (useProxy) {
+      let user = document.getElementById('jasperUser').value.trim();
+      let pass = document.getElementById('jasperPassword').value.trim();
+      let targetSrc = '/reports/viewer/proxy?url=' + encodeURIComponent(finalUrl);
+      if (user && pass) {
+        targetSrc += '&username=' + encodeURIComponent(user) + '&password=' + encodeURIComponent(pass);
+      }
+      window.open(targetSrc, '_blank');
+    } else {
+      window.open(finalUrl, '_blank');
+    }
+  }
+
+  // --- History ---
+  function saveToHistory(url) {
+    let history = [];
+    try { history = JSON.parse(localStorage.getItem('jasper_viewer_history') || '[]'); } catch (e) { }
+    history = history.filter(function (item) { return item !== url; });
+    history.unshift(url);
+    if (history.length > 15) history.pop();
+    localStorage.setItem('jasper_viewer_history', JSON.stringify(history));
+    loadHistoryList();
+  }
+
+  function loadHistoryList() {
+    let container = document.getElementById('historyContainer');
+    container.innerHTML = '';
+    let history = [];
+    try { history = JSON.parse(localStorage.getItem('jasper_viewer_history') || '[]'); } catch (e) { }
+    if (history.length === 0) {
+      container.innerHTML = '<div style="font-size:0.78rem;color:#94a3b8;text-align:center;padding:16px;">No recent history.</div>';
+      return;
+    }
+    history.forEach(function (url) {
+      let item = document.createElement('div');
+      item.className = 'history-item';
+      item.onclick = function () {
+        document.getElementById('reportUrlInput').value = url;
+        onUrlInputChanged();
+      };
+      item.innerHTML =
+        '<div class="url-text" title="' + url + '"><i class="fas fa-link mr-1 text-muted"></i> ' + url + '</div>' +
+        '<i class="fas fa-chevron-right text-muted" style="font-size:0.7rem;"></i>';
+      container.appendChild(item);
+    });
+  }
+
+  function clearHistory() {
+    localStorage.removeItem('jasper_viewer_history');
+    loadHistoryList();
+  }
+
+  // =========================================
+  // TEMPLATE POPUP FUNCTIONS
+  // =========================================
+
+  function openTemplatePopup() {
+
+    renderTemplatePopup('');
+
+    $('#templatePopupModal').modal('show');
+
+    setTimeout(function () {
+
+      let input = document.getElementById('templatePopupSearch');
+
+      if (input) {
+        input.focus();
+      }
+
+    }, 300);
+  }
+
+  function filterTemplatePopup(query) {
+
+    renderTemplatePopup(query);
+  }
+
+  function renderTemplatePopup(query) {
+
+    query = (query || '').toLowerCase().trim();
+
+    let container = document.getElementById('templatePopupList');
+
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    let templates = _serverData.reporttemplates || [];
+
+    let filtered = templates.filter(function (t) {
+
+      return (
+        (t.name || '').toLowerCase().includes(query) ||
+        (t.code || '').toLowerCase().includes(query)
+      );
+
+    });
+
+    // NO RESULT
+    if (filtered.length === 0) {
+
+      container.innerHTML =
+        '<div class="text-center text-muted py-4">' +
+        'No matching templates found.' +
+        '</div>';
+
+      return;
+    }
+
+    // RENDER ITEMS
+    filtered.forEach(function (t) {
+
+      let item = document.createElement('div');
+
+      item.className = 'template-popup-item';
+
+      item.innerHTML =
+
+        '<div class="template-popup-title">' +
+          escapeHtml(t.name || '-') +
+        '</div>' +
+
+        '<div class="template-popup-subtitle">' +
+          escapeHtml(t.code || '') +
+        '</div>';
+
+      item.onclick = function () {
+
+        // UPDATE LABEL
+        document.getElementById('selectedTemplateLabel').value =
+          (t.name || '') + ' (' + (t.code || '') + ')';
+
+        // CLOSE MODAL
+        $('#templatePopupModal').modal('hide');
+
+        // SELECT TEMPLATE
+        onTemplateSelected(
+          encodeURIComponent(JSON.stringify(t))
+        );
+      };
+
+      container.appendChild(item);
+
+    });
+  }
+
+  // =========================================
+  // ESCAPE HTML
+  // =========================================
+
+  function escapeHtml(str) {
+
+    return String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+</script>

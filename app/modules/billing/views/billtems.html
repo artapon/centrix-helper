@@ -1,0 +1,338 @@
+<div class="col-sm-12">
+
+  <!-- ── Toolbar Card ─────────────────────────────────────────────── -->
+  <div class="card mb-3">
+    <div class="card-body" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+
+      <!-- Grouping -->
+      <span style="font-size:.75rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-right:4px;">Group by:</span>
+      <button id="formatTableButton"    class="btn btn-sm btn-outline-primary"><i class="fas fa-layer-group mr-1"></i>Billing Group</button>
+      <button id="groupByOrderItemCode" class="btn btn-sm btn-outline-primary"><i class="fas fa-barcode mr-1"></i>Order Item Code</button>
+      <button id="groupByOrderNumber"   class="btn btn-sm btn-outline-primary"><i class="fas fa-list-ol mr-1"></i>Order Number</button>
+
+      <div style="width:1px;height:24px;background:#e2e8f0;margin:0 4px;"></div>
+
+      <!-- Reset + Toggle -->
+      <button id="resetTable"         class="btn btn-sm btn-outline-secondary"><i class="fas fa-undo mr-1"></i>Reset</button>
+      <button onclick="toggleCells()" class="btn btn-sm btn-outline-secondary"><i class="fas fa-eye mr-1"></i>Toggle Extra Columns</button>
+
+      <div style="width:1px;height:24px;background:#e2e8f0;margin:0 4px;"></div>
+
+      <!-- Inline search -->
+      <div style="display:flex;align-items:center;gap:6px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:4px 10px;">
+        <i class="fas fa-search" style="color:#94a3b8;font-size:.8rem;"></i>
+        <input id="findInput" type="text" placeholder="Search in table…"
+          style="border:none;background:transparent;outline:none;font-size:.83rem;width:180px;color:#334155;">
+        <span id="findCounter" style="font-size:.72rem;color:#94a3b8;white-space:nowrap;min-width:36px;">0 / 0</span>
+        <button id="findPrev" class="btn btn-sm" style="padding:1px 6px;color:#64748b;" title="Previous (Shift+Enter)"><i class="fas fa-chevron-up"></i></button>
+        <button id="findNext" class="btn btn-sm" style="padding:1px 6px;color:#64748b;" title="Next (Enter)"><i class="fas fa-chevron-down"></i></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Summary Totals ────────────────────────────────────────────── -->
+  <div class="card mb-3">
+    <div class="card-body" style="display:flex;flex-wrap:wrap;gap:12px;">
+      <div style="flex:1;min-width:180px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px 16px;">
+        <div style="font-size:.7rem;font-weight:700;color:#16a34a;text-transform:uppercase;letter-spacing:.05em;">Net Amount</div>
+        <div style="font-size:1.4rem;font-weight:700;color:#15803d;">{{ totalnetamount || 0 }}</div>
+      </div>
+      <div style="flex:1;min-width:180px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 16px;">
+        <div style="font-size:.7rem;font-weight:700;color:#2563eb;text-transform:uppercase;letter-spacing:.05em;">Total Price</div>
+        <div style="font-size:1.4rem;font-weight:700;color:#1d4ed8;">{{ totalprice || 0 }}</div>
+      </div>
+      <div style="flex:1;min-width:180px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px 16px;">
+        <div style="font-size:.7rem;font-weight:700;color:#ea580c;text-transform:uppercase;letter-spacing:.05em;">Total Discount</div>
+        <div style="font-size:1.4rem;font-weight:700;color:#c2410c;">{{ totaldiscount || 0 }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Data Table ─────────────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-table" style="color:#2563eb;"></i>
+      <span>Bill Items</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table id="billItemTable" class="table mb-0" style="font-size:.82rem;">
+          <thead>
+            <tr>
+              <!-- Core diagnostic columns (always visible) -->
+              <th>Seq Number</th>
+              <th>Order Item Code</th>
+              <th>Order Item Name</th>
+              <th>Billing Group</th>
+              <th>Billing Sub-group</th>
+              <th>Order Number</th>
+              <th>Category</th>
+              <th>Sub-category</th>
+              <th>Charge Code Type</th>
+              <th class="text-center">QTY</th>
+              <th class="text-right">Unit Price</th>
+              <th class="text-right">Total Price</th>
+              <th class="text-right">Net Amount</th>
+              <th class="text-center">Overridden</th>
+              <th>Charge Date</th>
+              <!-- Extra / hideable columns -->
+              <th class="hideable text-right">DF Share</th>
+              <th class="hideable text-center">Is DF Share Item</th>
+              <th class="hideable text-right">Payor Discount</th>
+              <th class="hideable text-right">Special Discount</th>
+              <th class="hideable text-right">Tax Amount</th>
+              <th class="hideable text-right">Unit Cost</th>
+              <th class="hideable text-right">Profitability</th>
+              <th class="hideable">Order Start Date</th>
+              <th class="hideable">Order End Date</th>
+              <th class="hideable text-center">Order QTY</th>
+              <th class="hideable text-right">Order Unit Price</th>
+              <th class="hideable text-right">Order Total Price</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="({ item, calcTotal, priceMismatch, negativeQty }, index) in resultRows">
+                <td><a target="_blank" :href="`/billing/bill-items/${item.sequencenumber}`">{{ item.sequencenumber }}</a></td>
+                <td>
+                  <a v-if="item.chargecodetype !== 'PATIENTORDER'" target="_blank" :href="`/patients/package-items/${item.orderitemcode}`">{{ item.orderitemcode }}</a><template v-else>{{ item.orderitemcode }}</template>
+                </td>
+                <td>
+                  <a v-if="item.chargecodetype !== 'PATIENTORDER'" target="_blank" :href="`/patients/package-items/${item.orderitemcode}`">{{ item.orderitemname }}</a><template v-else>{{ item.orderitemname }}</template>
+                </td>
+                <td>{{ item.billinggroup || '' }}</td>
+                <td>{{ item.billingsubgroup || '' }}</td>
+                <td>
+                  <a v-if="item.chargecodetype !== 'PATIENTORDER'" target="_blank" :href="`/patients/package-items/${item.orderitemcode}`">{{ item.ordernumber }}</a><template v-else>{{ item.ordernumber }}</template>
+                </td>
+                <td>{{ item.ordercat || '' }}</td>
+                <td>{{ item.ordersubcat || '' }}</td>
+                <td>
+                  <span :style="item.chargecodetype !== 'PATIENTORDER' ? 'background:#16a34a;color:#fff;padding:2px 6px;border-radius:4px;font-size:.75rem;' : ''">{{ item.chargecodetype || '' }}</span>
+                </td>
+                <td class="text-center" :style="negativeQty ? 'background:#fee2e2;color:#991b1b;font-weight:700;' : ''"><strong>{{ item.quantity }}</strong></td>
+                <td class="text-right">{{ item.unitprice }}</td>
+                <td class="text-right" :style="priceMismatch ? 'background:#fef9c3;color:#92400e;font-weight:700;' : ''">{{ calcTotal }}</td>
+                <td class="text-right"><strong>{{ item.netamount }}</strong></td>
+                <td class="text-center" :style="item.overriddenprice ? 'background:#d1fae5;color:#065f46;' : ''">{{ item.overriddenprice || '' }}</td>
+                <td>{{ item.chargedate || '' }}</td>
+                <!-- Extra columns -->
+                <td class="hideable text-right" :style="item.doctorshare > 0 ? 'background:#d1fae5;color:#065f46;' : ''">{{ item.doctorshare || 0 }}</td>
+                <td class="hideable text-center" :style="item.doctorshare > 0 && item.isdoctorshareitem ? 'background:#d1fae5;color:#065f46;' : ''">{{ item.isdoctorshareitem || '' }}</td>
+                <td class="hideable text-right">{{ item.payordiscount }}</td>
+                <td class="hideable text-right">{{ item.specialdiscount }}</td>
+                <td class="hideable text-right">{{ item.taxamount }}</td>
+                <td class="hideable text-right">{{ item.unitcost }}</td>
+                <td class="hideable text-right">{{ item.profitability }}</td>
+                <td class="hideable">{{ item.startdate || '' }}</td>
+                <td class="hideable">{{ item.enddate || '' }}</td>
+                <td class="hideable text-center">{{ item.odquantity || '' }}</td>
+                <td class="hideable text-right">{{ item.odunitprice || '' }}</td>
+                <td class="hideable text-right" :style="priceMismatch ? 'background:#fee2e2;color:#991b1b;' : ''">{{ item.oddertotalprice || '' }}</td>
+              </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<style>
+  #billItemTable thead th {
+    background: #f8fafc;
+    color: #475569;
+    font-size: .72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    border-bottom: 2px solid #e2e8f0;
+    white-space: nowrap;
+    padding: 10px 10px;
+  }
+  #billItemTable tbody tr:hover { background: #f1f5f9 !important; }
+  #billItemTable tbody td { vertical-align: middle; padding: 7px 10px; border-color: #f1f5f9; }
+  .group-header td {
+    background: #dbeafe !important;
+    color: #1e40af;
+    font-weight: 700;
+    font-size: .82rem;
+    padding: 8px 12px;
+  }
+  .total-row td {
+    background: #f0fdf4 !important;
+    color: #166534;
+    font-weight: 700;
+    font-size: .82rem;
+    padding: 8px 12px;
+    border-top: 2px solid #bbf7d0;
+  }
+  /* Find-bar highlight */
+  .find-match {
+    background: #fef08a !important;
+    outline: 2px solid #eab308;
+    border-radius: 2px;
+  }
+  .find-match-current {
+    background: #fb923c !important;
+    outline: 2px solid #ea580c;
+    color: #fff;
+    border-radius: 2px;
+  }
+  #findInput:focus { border-color:#2563eb; }
+</style>
+
+<script>
+  var originalRows = [];
+
+  document.addEventListener('DOMContentLoaded', function () {
+    var tableBody = document.querySelector('#billItemTable tbody');
+    if (tableBody) {
+      originalRows = Array.from(tableBody.querySelectorAll('tr'));
+    }
+
+    var numberFormatter = new Intl.NumberFormat('en-US', {
+      style: 'decimal', minimumFractionDigits: 2, maximumFractionDigits: 2
+    });
+
+    function restoreRows() {
+      var tb = document.querySelector('#billItemTable tbody');
+      tb.innerHTML = '';
+      originalRows.forEach(function (row) { tb.appendChild(row.cloneNode(true)); });
+    }
+
+    function groupBy(cellIndex, labelPrefix) {
+      restoreRows();
+      var tb   = document.querySelector('#billItemTable tbody');
+      var rows = Array.from(tb.querySelectorAll('tr'));
+
+      // Visible column indices:
+      // 0=seqnum, 1=orderitemcode, 2=orderitemname, 3=billinggroup, 4=billingsubgroup
+      // 5=ordernumber, 6=cat, 7=subcat, 8=chargecodetype, 9=QTY, 10=unitprice
+      // 11=totalprice, 12=netamount
+      var QTY_IDX    = 9;
+      var AMOUNT_IDX = 12;
+
+      var groups = {};
+      rows.forEach(function (row) {
+        var key       = row.cells[cellIndex]?.innerText.trim();
+        var qty       = parseFloat(row.cells[QTY_IDX]?.innerText.trim()) || 0;
+        var netAmount = parseFloat(row.cells[AMOUNT_IDX]?.innerText.trim()) || 0;
+        if (!key) return;
+        if (!groups[key]) groups[key] = { rows: [], total: 0, totalQty: 0 };
+        groups[key].rows.push(row);
+        groups[key].total    += netAmount;
+        groups[key].totalQty += qty;
+      });
+
+      tb.innerHTML = '';
+      Object.keys(groups).sort().forEach(function (key) {
+        var g = groups[key];
+
+        var hRow  = document.createElement('tr');
+        hRow.className = 'group-header';
+        var hCell = document.createElement('td');
+        hCell.colSpan = rows[0]?.cells.length || 30;
+        hCell.innerHTML =
+          '<i class="fas fa-layer-group mr-2"></i>' +
+          labelPrefix + ': <strong>' + key + '</strong>' +
+          '&nbsp;&nbsp;|&nbsp;&nbsp;Qty: <strong>' + g.totalQty + '</strong>' +
+          '&nbsp;&nbsp;|&nbsp;&nbsp;Net Amount: <strong>' + numberFormatter.format(g.total) + '</strong>';
+        hRow.appendChild(hCell);
+        tb.appendChild(hRow);
+
+        g.rows.forEach(function (row) { tb.appendChild(row); });
+
+        var tRow  = document.createElement('tr');
+        tRow.className = 'total-row';
+        var tCell = document.createElement('td');
+        tCell.colSpan = rows[0]?.cells.length || 30;
+        tCell.innerHTML =
+          '&#x2211; Total Quantity: <strong>' + g.totalQty + '</strong>' +
+          '&nbsp;&nbsp;|&nbsp;&nbsp;Total Net Amount: <strong>' + numberFormatter.format(g.total) + '</strong>';
+        tRow.appendChild(tCell);
+        tb.appendChild(tRow);
+      });
+    }
+
+    document.getElementById('resetTable').addEventListener('click', restoreRows);
+    document.getElementById('formatTableButton').addEventListener('click',    function () { groupBy(3, 'BILLING GROUP'); });
+    document.getElementById('groupByOrderItemCode').addEventListener('click', function () { groupBy(1, 'ORDER ITEM CODE'); });
+    document.getElementById('groupByOrderNumber').addEventListener('click',   function () { groupBy(5, 'ORDER NUMBER'); });
+
+    // ── Inline Find ──────────────────────────────────────────────────
+    var findInput   = document.getElementById('findInput');
+    var findCounter = document.getElementById('findCounter');
+    var findMatches = [];
+    var findCurrent = -1;
+
+    function clearHighlights() {
+      findMatches.forEach(function (m) {
+        m.cell.classList.remove('find-match', 'find-match-current');
+      });
+      findMatches = [];
+      findCurrent = -1;
+      findCounter.textContent = '0 / 0';
+    }
+
+    function runSearch(query) {
+      clearHighlights();
+      if (!query) return;
+      var lq = query.toLowerCase();
+      document.querySelectorAll('#billItemTable tbody td').forEach(function (cell) {
+        if (cell.innerText.toLowerCase().includes(lq)) {
+          cell.classList.add('find-match');
+          findMatches.push({ cell: cell });
+        }
+      });
+      if (findMatches.length) {
+        findCurrent = 0;
+        goToMatch(0);
+      } else {
+        findCounter.textContent = '0 / 0';
+        findInput.style.background = '#fee2e2';
+      }
+    }
+
+    function goToMatch(idx) {
+      if (!findMatches.length) return;
+      if (findCurrent >= 0 && findMatches[findCurrent]) {
+        findMatches[findCurrent].cell.classList.remove('find-match-current');
+        findMatches[findCurrent].cell.classList.add('find-match');
+      }
+      findCurrent = (idx + findMatches.length) % findMatches.length;
+      var cur = findMatches[findCurrent].cell;
+      cur.classList.remove('find-match');
+      cur.classList.add('find-match-current');
+      cur.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      findCounter.textContent = (findCurrent + 1) + ' / ' + findMatches.length;
+      findInput.style.background = '';
+    }
+
+    findInput.addEventListener('input', function () { runSearch(findInput.value.trim()); });
+    findInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (e.shiftKey) goToMatch(findCurrent - 1);
+        else            goToMatch(findCurrent + 1);
+      }
+      if (e.key === 'Escape') { findInput.value = ''; clearHighlights(); }
+    });
+    document.getElementById('findNext').addEventListener('click', function () { goToMatch(findCurrent + 1); });
+    document.getElementById('findPrev').addEventListener('click', function () { goToMatch(findCurrent - 1); });
+  });
+</script>
+<script>
+  Page.setup({
+    computed: {
+      // per-row display values for the items table
+      resultRows: function () {
+        return this.results.map(function (item) {
+          const calcTotal    = item.quantity * item.unitprice;
+          const priceMismatch = item.oddertotalprice !== calcTotal;
+          const negativeQty  = item.quantity < 0;
+          return { item: item, calcTotal: calcTotal, priceMismatch: priceMismatch, negativeQty: negativeQty };
+        });
+      }
+    }
+  });
+</script>

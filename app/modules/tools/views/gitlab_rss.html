@@ -1,0 +1,136 @@
+<div class="col-sm-12">
+    <div class="card">
+      <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+        <i class="fas fa-rocket" style="color:#d97706;"></i>
+        <span>เตรียม Deploy Production</span>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th class="text-center" >CN Number</th>
+              <th class="text-center" >INC Number</th>
+              <th>Milestone Version</th>
+              <th class="text-center">Dev Team</th>
+              <th>Updated Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in milestones" :style="`background-color: ${item.color};`" >
+              <td><a target="_blank" :href="item.href">{{ item.title }}</a></td>
+              <td class="text-center" >{{ item.cn || "" }}</td>
+              <td class="text-center" ><a target="_blank" :href="`https://support.medcury.health/helpdesk/tickets/${item.inc_code}`">{{ item.inc || "" }}</a></td>
+              <td>{{ item.milestone.replace('Deployed ', '') || "" }}</td>
+              <td class="text-center" >{{ item.team }}</td>
+              <td>{{ item.updated }}</td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+        <i class="fas fa-code-branch" style="color:#2563eb;"></i>
+        <span>Opened (ยังไม่ได้ Merged)</span>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th class="text-center" >CN Number</th>
+              <th class="text-center" >INC Number</th>
+              <th>Deployed Status</th>
+              <th>Versions</th>
+              <th class="text-center">Dev Team</th>
+              <th>Updated Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in resultOpens" :style="`background-color: ${item.color};`" >
+              <td><a target="_blank" :href="item.href">{{ item.title }}</a> &nbsp;<span v-if="item.conflicts == 'Conflicts'" class="badge badge-danger">Conflicts (รวม code ไม่ได้)</span></td>
+              <td class="text-center" >{{ item.cn || "" }}</td>
+              <td class="text-center" ><a target="_blank" :href="`https://support.medcury.health/helpdesk/tickets/${item.inc_code}`">{{ item.inc || "" }}</a></td>
+              <td>{{ item.status || "" }}</td>
+              <td>{{ item.version || "" }}</td>
+              <td class="text-center" >{{ item.team }}</td>
+              <td>{{ item.updated }}</td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+        <i class="fas fa-check-circle" style="color:#059669;"></i>
+        <span>Merged</span>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th class="text-center" >CN Number</th>
+              <th class="text-center" >INC Number</th>
+              <th>Deployed Status</th>
+              <th>Versions</th>
+              <th class="text-center">Dev Team</th>
+              <th>Updated Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in resultMergeds" :style="`background-color: ${item.color};`" >
+              <td><a target="_blank" :href="item.href">{{ item.title }}</a> &nbsp;<span v-if="item.conflicts == 'Conflicts'" class="badge badge-danger">Conflicts (รวม code ไม่ได้)</span></td>
+              <td class="text-center" >{{ item.cn || "" }}</td>
+              <td class="text-center" ><a target="_blank" :href="`https://support.medcury.health/helpdesk/tickets/${item.inc_code}`">{{ item.inc || "" }}</a></td>
+              <td>{{ item.status || "" }}</td>
+              <td>{{ item.version || "" }}</td>
+              <td class="text-center" >{{ item.team }}</td>
+              <td>{{ item.updated }}</td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+        <i class="fas fa-list" style="color:#2563eb;"></i>
+        <span>Top 60 All Merge Requests Status</span>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th class="text-center" >CN Number</th>
+              <th class="text-center" >INC Number</th>
+              <th>Deployed Status</th>
+              <th>Versions</th>
+              <th class="text-center">Dev Team</th>
+              <th>Updated Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in results" :style="`background-color: ${item.color};`" >
+              <td><a target="_blank" :href="item.href">{{ item.title }}</a> &nbsp;<span v-if="item.conflicts == 'Conflicts'" class="badge badge-danger">Conflicts (รวม code ไม่ได้)</span></td>
+              <td class="text-center" >{{ item.cn || "" }}</td>
+              <td class="text-center" ><a target="_blank" :href="`https://support.medcury.health/helpdesk/tickets/${item.inc_code}`">{{ item.inc || "" }}</a></td>
+              <td>{{ item.status || "" }}</td>
+              <td>{{ item.version || "" }}</td>
+              <td class="text-center" >{{ item.team }}</td>
+              <td>{{ item.updated }}</td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </div>
+    </div>
+  </div>

@@ -1,0 +1,100 @@
+<div class="col-sm-12 mb-3">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-calendar-alt" style="color:#2563eb;"></i>
+      <span>Filter</span>
+    </div>
+    <div class="card-body">
+      <form method="get" action="/billing/df-check">
+        <div class="form-row align-items-end">
+          <div class="form-group col-sm-3">
+            <label>วันที่</label>
+            <input type="text" class="datetimepicker2 form-control" name="date">
+          </div>
+          <div class="form-group col-sm-3">
+            <input type="submit" class="btn btn-success" value="เลือกวันที่">
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <i class="fas fa-file-invoice-dollar" style="color:#2563eb;"></i>
+      <span>DF Data</span>
+      <span style="margin-left:auto;">
+        <a target="_blank" :href="downloadUrl" class="btn btn-info btn-sm"><i class="fas fa-download mr-1"></i>ดาวน์โหลดรายวัน</a>
+        <a target="_blank" :href="downloadUrl2" class="btn btn-info btn-sm"><i class="fas fa-download mr-1"></i>ดาวน์โหลดทั้งเดือน</a>
+      </span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>No</th>
+              <th>OrderTime</th>
+              <th>OrderDate</th>
+              <th>OrderNumber</th>
+              <th>HN</th>
+              <th>EN</th>
+              <th>Type</th>
+              <th>Name</th>
+              <th>OrderCode</th>
+              <th>OrderName</th>
+              <th>OrderType</th>
+              <th>DrCode</th>
+              <th>DrName</th>
+              <th>BillTime</th>
+              <th>BillDate</th>
+              <th>BillNumber</th>
+              <th>BillAmount</th>
+              <th>ItemPrice</th>
+              <th>Payor</th>
+              <th>FirstName</th>
+              <th>LastName</th>
+              <th>BillingSubGroup</th>
+              <th>Location</th>
+              <th>Department</th>
+              <th>OrderByCode</th>
+              <th>OrderByName</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in results">
+              <td :style="!item.No ? 'background-color: red; color : white;' : ''">{{ item.No }}</td>
+              <td :style="!item.OrderTime ? 'background-color: red; color : white;' : ''">{{ item.OrderTime }}</td>
+              <td :style="!item.OrderDate ? 'background-color: red; color : white;' : ''">{{ item.OrderDate }}</td>
+              <td :style="!item.OrderNumber ? 'background-color: red; color : white;' : ''">{{ item.OrderNumber }}</td>
+              <td :style="!item.HN ? 'background-color: red; color : white;' : ''"><a target="_blank" :href="`/patients/summary?hn=${ item.HN }`">{{ item.HN }}</a></td>
+              <td :style="!item.EN ? 'background-color: red; color : white;' : ''"><a target="_blank" :href="`/patients/summary?vn=${ item.EN }`">{{ item.EN }}</a></td>
+              <td :style="!item.Type ? 'background-color: red; color : white;' : ''">{{ item.Type }}</td>
+              <td :style="!item.Name ? 'background-color: red; color : white;' : ''">{{ item.Name }}</td>
+              <td :style="!item.OrderCode ? 'background-color: red; color : white;' : ''">{{ item.OrderCode }}</td>
+              <td :style="!item.OrderName ? 'background-color: red; color : white;' : ''">{{ item.OrderName }}</td>
+              <td :style="!item.OrderType ? 'background-color: red; color : white;' : ''">{{ item.OrderType }}</td>
+              <td :style="!item.DrCode ? 'background-color: red; color : white;' : ''">{{ item.DrCode }}</td>
+              <td :style="!item.DrName ? 'background-color: red; color : white;' : ''">{{ item.DrName }}</td>
+              <td :style="!item.BillTime ? 'background-color: red; color : white;' : ''">{{ item.BillTime }}</td>
+              <td :style="!item.BillDate ? 'background-color: red; color : white;' : ''">{{ item.BillDate }}</td>
+              <td :style="!item.BillNumber ? 'background-color: red; color : white;' : ''"><a :href="`/billing/bill-df-items/${item.BillNumber}`">{{ item.BillNumber }}</a></td>
+              <td :style="!item.BillAmount ? 'background-color: red; color : white;' : ''">{{ item.BillAmount }}</td>
+              <td :style="!item.ItemPrice ? 'background-color: red; color : white;' : ''">{{ item.ItemPrice }}</td>
+              <td :style="!item.Payor ? 'background-color: red; color : white;' : ''">{{ item.Payor }}</td>
+              <td :style="!item.FirstName ? 'background-color: red; color : white;' : ''">{{ item.FirstName }}</td>
+              <td :style="!item.LastName ? 'background-color: red; color : white;' : ''">{{ item.LastName }}</td>
+              <td :style="!item.BillingSubGroup ? 'background-color: red; color : white;' : ''">{{ item.BillingSubGroup }}</td>
+              <td :style="!item.Location ? 'background-color: red; color : white;' : ''">{{ item.Location }}</td>
+              <td :style="!item.Department ? 'background-color: red; color : white;' : ''">{{ item.Department }}</td>
+              <td :style="!item.OrderByCode ? 'background-color: red; color : white;' : ''">{{ item.OrderByCode }}</td>
+              <td :style="!item.OrderByName ? 'background-color: red; color : white;' : ''">{{ item.OrderByName }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

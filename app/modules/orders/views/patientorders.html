@@ -1,0 +1,324 @@
+  <div class="col-sm-12">
+    <div class="card">
+      <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+        <i class="fas fa-filter" style="color:#2563eb;"></i>
+        <span>Filter Patient Orders</span>
+      </div>
+      <div class="card-body">
+        <form method="get" action="/billing/patient-orders" class="form-group">
+          <div class="form-row">
+            <div class="form-group col-sm-3">
+              <label>VN / AN : &nbsp;</label>
+              <input type="text" class="form-control" name="vn">
+            </div>
+            <div class="form-group col-sm-3">
+              <label>HN : &nbsp;</label>
+              <input type="text" class="form-control" name="mrn">
+            </div>
+            <div class="form-group col-sm-3">
+              <label>Order Category Type : &nbsp;</label>
+              <select name="ordercattype" class="form-control">
+                <option value="">ทั้งหมด</option>
+                <option value="LAB">LAB</option>
+                <option value="RADIOLOGY">RADIOLOGY</option>
+                <option value="MEDICINE">MEDICINE</option>
+                <option value="MEDICINE NONSTOCK">MEDICINE NONSTOCK</option>
+                <option value="SUPPLY">SUPPLY</option>
+                <option value="DIET">DIET</option>
+                <option value="DENTAL">DENTAL</option>
+                <option value="DOCTORFEE">DOCTORFEE</option>
+                <option value="ROOMRENT">ROOMRENT</option>
+                <option value="EQUIPMENT">EQUIPMENT</option>
+                <option value="OTHERS">OTHERS</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group col-sm-3">
+              <input type="submit" value="กรองข้อมูล" class="btn btn-success">
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-sm-12 mt-2">
+    <div class="card mb-3">
+      <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+        <i class="fas fa-search" style="color:#2563eb;"></i>
+        <span>Search in results</span>
+        <span class="po-muted ml-auto">{{ resultText }}</span>
+      </div>
+      <div class="card-body po-search">
+        <div class="po-search-row">
+          <input type="search" class="form-control po-quick" v-model.trim="quick" placeholder="Search every column…" aria-label="Search every column">
+          <button type="button" class="btn btn-outline-primary" @click="toggleAdvanced" :aria-expanded="advanced ? 'true' : 'false'">
+            <i class="fas fa-sliders-h mr-1"></i>Advanced search<span v-if="activeConditions.length" class="po-count">{{ activeConditions.length }}</span>
+          </button>
+          <button type="button" class="btn btn-light" v-if="isFiltered" @click="clearSearch"><i class="fas fa-times mr-1"></i>Clear search</button>
+        </div>
+
+        <div v-if="advanced" class="po-advanced">
+          <div class="po-match">
+            Show rows that match
+            <select class="form-control form-control-sm" v-model="matchAll" aria-label="Match all or any condition">
+              <option :value="true">all</option>
+              <option :value="false">any</option>
+            </select>
+            of these conditions:
+          </div>
+          <div class="po-cond" v-for="(c, i) in conditions" :key="c.id">
+            <select class="form-control form-control-sm po-cond-col" v-model="c.key" :aria-label="'Condition ' + (i + 1) + ' column'">
+              <option v-for="col in COLUMNS" :key="col.key" :value="col.key">{{ col.label }}</option>
+            </select>
+            <select class="form-control form-control-sm po-cond-op" v-model="c.op" :aria-label="'Condition ' + (i + 1) + ' operator'">
+              <option v-for="op in OPERATORS" :key="op.value" :value="op.value">{{ op.label }}</option>
+            </select>
+            <template v-if="!noValue(c.op)">
+              <input class="form-control form-control-sm po-cond-val" v-model.trim="c.value" :list="'po-values-' + c.key" placeholder="value" :aria-label="'Condition ' + (i + 1) + ' value'">
+              <datalist :id="'po-values-' + c.key"><option v-for="v in valuesOf(c.key)" :key="v" :value="v"></option></datalist>
+            </template>
+            <button type="button" class="btn btn-sm btn-light" @click="removeCondition(i)" :aria-label="'Remove condition ' + (i + 1)"><i class="fas fa-trash-alt"></i></button>
+          </div>
+          <button type="button" class="btn btn-sm btn-outline-primary" @click="addCondition"><i class="fas fa-plus mr-1"></i>Add condition</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-body" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+        <button type="button" class="btn" :class="groupBy === 'orderdate' ? 'btn-primary' : 'btn-success'" @click="setGroup('orderdate')">Group By Order Date</button>
+        <button type="button" class="btn" :class="groupBy === 'orderitemcode' ? 'btn-primary' : 'btn-success'" @click="setGroup('orderitemcode')">Group by Order Item Code</button>
+        <button type="button" class="btn" :class="groupBy === 'ordernumber' ? 'btn-primary' : 'btn-success'" @click="setGroup('ordernumber')">Group by Order Number</button>
+        <button type="button" class="btn" :class="errorsOnly ? 'btn-primary' : 'btn-success'" @click="errorsOnly = true" title="Rows whose order item is not in the patient's charge codes">Show Errors Rows</button>
+        <button type="button" class="btn btn-success" @click="showAll">Show All Rows</button>
+      </div>
+    </div>
+
+    <!-- This page has its own search (above), so the shared table filter is off here. -->
+    <div class="card" data-table-filter="off">
+      <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+        <i class="fas fa-table" style="color:#2563eb;"></i>
+        <span>Patient Orders</span>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table id="patientOrderTable" class="table mb-0">
+            <thead>
+              <tr>
+                <th v-for="col in COLUMNS" :key="col.key" :class="col.center ? 'text-center' : ''">{{ col.label }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template v-for="g in groups">
+                <tr v-if="g.label" :key="'h:' + g.key"><td :colspan="COLUMNS.length" class="group-header"><strong>{{ g.label }} : {{ g.key }} ( {{ money(g.total) }} )</strong></td></tr>
+                <tr v-for="item in g.rows" :key="item.__row">
+                  <td v-for="col in COLUMNS" :key="col.key" :class="col.center ? 'text-center' : ''" :style="cellStyle(col.key, item)">
+                    <a v-if="col.link && item[col.key]" target="_blank" :href="col.link + encodeURIComponent(item[col.key])">{{ item[col.key] }}</a>
+                    <template v-else>{{ text(item[col.key]) }}</template>
+                  </td>
+                </tr>
+                <tr v-if="g.label" :key="'t:' + g.key"><td :colspan="COLUMNS.length" class="total-row"><strong>Total: {{ money(g.total) }}</strong></td></tr>
+              </template>
+              <tr v-if="!shown.length">
+                <td :colspan="COLUMNS.length" class="text-center po-muted py-4">{{ rows.length ? 'No orders match this search.' : 'No orders.' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    .group-header { background-color: #d0f7f7; }
+    .po-muted { color: #64748b; font-size: 13px; font-variant-numeric: tabular-nums; }
+    .po-search { display: flex; flex-direction: column; gap: 12px; }
+    .po-search-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .po-quick { flex: 1 1 260px; max-width: 420px; }
+    .po-count { margin-left: 6px; background: #2563eb; color: #fff; border-radius: 9px; padding: 0 7px; font-size: 12px; }
+    .po-advanced { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
+    .po-match { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; color: #334155; }
+    .po-match select { width: auto; }
+    .po-cond { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .po-cond-col { flex: 0 1 200px; }
+    .po-cond-op { flex: 0 1 160px; }
+    .po-cond-val { flex: 1 1 180px; max-width: 280px; }
+  </style>
+
+  <script>
+    (function () {
+      // Every column of the table; `link` columns open the patient summary.
+      var COLUMNS = [
+        { key: 'visitid', label: 'VN', center: true, link: '/patients/summary?vn=' },
+        { key: 'hn', label: 'HN', center: true, link: '/patients/summary?hn=' },
+        { key: 'orderdate', label: 'Order Date' },
+        { key: 'startdate', label: 'Start Date' },
+        { key: 'enddate', label: 'End Date' },
+        { key: 'ordernumber', label: 'Ordernumber' },
+        { key: 'orderitemcode', label: 'Code' },
+        { key: 'orderitemname', label: 'Order Item' },
+        { key: 'quantity', label: 'QTY', center: true, number: true },
+        { key: 'quantityUOM', label: 'Quantity UOM', center: true },
+        { key: 'unitprice', label: 'Unit Price', center: true, number: true },
+        { key: 'tariffunitprice', label: 'Tariff Price', center: true, number: true },
+        { key: 'payordiscount', label: 'Payor Discount', center: true, number: true },
+        { key: 'specialdiscount', label: 'SP Discount', center: true, number: true },
+        { key: 'totalprice', label: 'Total', center: true, number: true },
+        { key: 'dosage', label: 'Dosage', center: true },
+        { key: 'quantityperdose', label: 'QTY Per Dosage', center: true },
+        { key: 'dosageUOM', label: 'Dosage UOM', center: true },
+        { key: 'volume', label: 'Volume', center: true },
+        { key: 'ordercattype', label: 'Cate Type', center: true },
+        { key: 'billintType', label: 'Billing Type', center: true },
+        { key: 'ordercatname', label: 'Cate Name', center: true },
+        { key: 'ordersubcatname', label: 'Sub Cate Name', center: true },
+        { key: 'statusuid', label: 'Order Status', center: true },
+        { key: 'visitstatus', label: 'Visit Status', center: true },
+        { key: 'orderdepartment', label: 'From Department', center: true },
+        { key: 'ordertodepartment', label: 'To Department', center: true },
+        { key: 'careprovider', label: 'Careprovider', center: true },
+        { key: 'isactive', label: 'Is Active', center: true },
+        { key: 'iscontinuousorder', label: 'Is Continuousorder', center: true },
+        { key: 'isipfillallowed', label: 'Is Ipfillallowed', center: true },
+        { key: 'ispom', label: 'Is POM', center: true },
+        { key: 'createdat', label: 'Createdat' },
+        { key: 'createdby', label: 'Createdby' },
+        { key: 'modifiedat', label: 'Modifiedat' },
+        { key: 'modifiedby', label: 'Modifiedby' }
+      ];
+      var BY_KEY = {};
+      COLUMNS.forEach(function (c) { BY_KEY[c.key] = c; });
+      var GROUP_LABELS = { orderdate: 'Order Date', orderitemcode: 'ORDERITEMCODE', ordernumber: 'ORDERNUMBER' };
+      var OPERATORS = [
+        { value: 'contains', label: 'contains' },
+        { value: 'notcontains', label: 'does not contain' },
+        { value: 'eq', label: 'equals' },
+        { value: 'ne', label: 'does not equal' },
+        { value: 'starts', label: 'starts with' },
+        { value: 'ends', label: 'ends with' },
+        { value: 'gt', label: '> greater than' },
+        { value: 'gte', label: '≥ at least' },
+        { value: 'lt', label: '< less than' },
+        { value: 'lte', label: '≤ at most' },
+        { value: 'empty', label: 'is empty' },
+        { value: 'notempty', label: 'is not empty' }
+      ];
+      var NO_VALUE = { empty: true, notempty: true };
+      var RED = 'background-color: red; color : white;', GREEN = 'background-color: green; color : white;';
+      var money = new Intl.NumberFormat('en-US', { style: 'decimal', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      var nextId = 1;
+
+      // Missing values show as empty text, never "undefined" or "null".
+      function text(v) { return v === undefined || v === null ? '' : String(v); }
+      // Numbers for > < comparisons: plain numbers, or dd/mm/yyyy [hh:mm] dates.
+      function comparable(v) {
+        var s = text(v).trim();
+        var d = /^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/.exec(s);
+        if (d) return Date.UTC(+d[3], +d[2] - 1, +d[1], +(d[4] || 0), +(d[5] || 0));
+        var n = Number(s.replace(/,/g, ''));
+        return s !== '' && isFinite(n) ? n : NaN;
+      }
+      function test(op, cell, value) {
+        var a = text(cell).toLowerCase(), b = text(value).toLowerCase();
+        switch (op) {
+          case 'contains': return a.indexOf(b) !== -1;
+          case 'notcontains': return a.indexOf(b) === -1;
+          case 'eq': return a === b;
+          case 'ne': return a !== b;
+          case 'starts': return a.lastIndexOf(b, 0) === 0;
+          case 'ends': return b === '' || a.slice(-b.length) === b;
+          case 'empty': return a.trim() === '';
+          case 'notempty': return a.trim() !== '';
+          default:
+            var x = comparable(cell), y = comparable(value);
+            if (isNaN(x) || isNaN(y)) return false;
+            return op === 'gt' ? x > y : op === 'gte' ? x >= y : op === 'lt' ? x < y : x <= y;
+        }
+      }
+
+      Page.setup({
+        data: function () {
+          return {
+            COLUMNS: COLUMNS, OPERATORS: OPERATORS,
+            rows: (Page.data.orders || []).map(function (o, i) { return Object.freeze(Object.assign({ __row: i }, o)); }),
+            quick: '', advanced: false, matchAll: true, conditions: [],
+            groupBy: '', errorsOnly: false
+          };
+        },
+        computed: {
+          activeConditions: function () {
+            return this.conditions.filter(function (c) { return c.key && (NO_VALUE[c.op] || c.value !== ''); });
+          },
+          isFiltered: function () { return !!(this.quick || this.activeConditions.length || this.errorsOnly); },
+          shown: function () {
+            var q = this.quick.toLowerCase(), conds = this.activeConditions, all = this.matchAll, errorsOnly = this.errorsOnly;
+            return this.rows.filter(function (row) {
+              if (errorsOnly && row.isInchargeCode) return false;
+              if (q && !COLUMNS.some(function (c) { return text(row[c.key]).toLowerCase().indexOf(q) !== -1; })) return false;
+              if (!conds.length) return true;
+              var hit = function (c) { return test(c.op, row[c.key], c.value); };
+              return all ? conds.every(hit) : conds.some(hit);
+            });
+          },
+          // Rows in groups (one unlabelled group when not grouping), each with its total price.
+          groups: function () {
+            var by = this.groupBy, rows = this.shown;
+            var sum = function (list) { return list.reduce(function (t, r) { var n = parseFloat(r.totalprice); return t + (isFinite(n) ? n : 0); }, 0); };
+            if (!by) return rows.length ? [{ key: '', label: '', rows: rows, total: 0 }] : [];
+            var order = [], map = {};
+            rows.forEach(function (r) {
+              var k = text(r[by]).trim();
+              if (!k) return;   // as before: rows without the grouped value are left out of the groups
+              if (!map[k]) { map[k] = []; order.push(k); }
+              map[k].push(r);
+            });
+            return order.map(function (k) { return { key: k, label: GROUP_LABELS[by], rows: map[k], total: sum(map[k]) }; });
+          },
+          resultText: function () {
+            var n = function (v) { return v.toLocaleString('en-US'); };
+            return this.isFiltered ? 'Showing ' + n(this.shown.length) + ' of ' + n(this.rows.length) + ' orders' : n(this.rows.length) + ' orders';
+          }
+        },
+        methods: {
+          text: text,
+          money: function (v) { return money.format(v || 0); },
+          noValue: function (op) { return !!NO_VALUE[op]; },
+          // Up to 200 distinct values of a column, as suggestions for the condition value.
+          valuesOf: function (key) {
+            var seen = {}, out = [];
+            for (var i = 0; i < this.rows.length && out.length < 200; i++) {
+              var v = text(this.rows[i][key]).trim();
+              if (v && !seen[v]) { seen[v] = true; out.push(v); }
+            }
+            return out.sort();
+          },
+          toggleAdvanced: function () {
+            this.advanced = !this.advanced;
+            if (this.advanced && !this.conditions.length) this.addCondition();
+          },
+          addCondition: function () { this.conditions.push({ id: nextId++, key: 'orderitemcode', op: 'contains', value: '' }); },
+          removeCondition: function (i) { this.conditions.splice(i, 1); },
+          clearSearch: function () { this.quick = ''; this.conditions = []; this.errorsOnly = false; if (this.advanced) this.addCondition(); },
+          setGroup: function (key) { this.groupBy = this.groupBy === key ? '' : key; },
+          showAll: function () { this.errorsOnly = false; this.groupBy = ''; },
+          // The same cell highlights as before.
+          cellStyle: function (key, item) {
+            switch (key) {
+              case 'quantity': return item.quantity < 1 ? RED : '';
+              case 'unitprice': case 'totalprice': return item.unitprice == '' ? RED : '';
+              case 'dosage': case 'volume': case 'ordercattype': return item[key] == '' ? RED : '';
+              case 'statusuid':
+                if (item.statusuid == 'Cancelled' || item.statusuid == 'Discontinued') return RED;
+                return item.statusuid == 'Report Authorised' ? GREEN : '';
+              case 'visitstatus': return item.visitstatus == 'Medical Discharge' || item.visitstatus == 'Financial Discharge' ? RED : '';
+              case 'isactive': return item.isactive == false ? RED : GREEN;
+              case 'iscontinuousorder': case 'isipfillallowed': case 'ispom': return item[key] ? GREEN : '';
+              default: return '';
+            }
+          }
+        }
+      });
+    })();
+  </script>

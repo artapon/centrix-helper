@@ -1,0 +1,167 @@
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-search" style="color:#2563eb;"></i>
+      <span>Search Inventory Transactions</span>
+    </div>
+    <div class="card-body">
+      <form method="get" action="/inventory/tracking" class="form-group">
+          <div class="form-row">
+          <div class="form-group col-sm-3">
+          <label>TRANSACTION_TYPE : &nbsp;</label>
+          <select name="transactiontype" class="form-control" onchange="disableInput()" id="transactiontype">
+            <option value="INVENTORIES.GOODSRECEIVE" >GOODSRECEIVE (Ex. RA - RCVPUR)</option>
+            <option value="INVENTORIES.CANCELTRANSFER" >CANCELTRANSFER</option>
+            <option value="INVENTORIES.TRANSFEROUT" >TRANSFEROUT (TRN- OUT)</option>
+            <option value="INVENTORIES.TRANSFERIN" >TRANSFERIN (TRN- IN)</option>
+            <option value="INVENTORIES.STOCKISSUE" >STOCKISSUE (IS-)</option>
+            <option value="INVENTORIES.STOCKDISPENSE" >STOCKDISPENSE (SD-)</option>
+            <option value="PHARMACYMASTER.CANCELDISPENSE" >CANCELDISPENSE (SD-)</option>
+            <option value="PHARMACYMASTER.IPFILL" >IPFILL (SD-)</option>
+            <option value="COMMON.DISPENSERETURN" >DISPENSERETURN (DR)</option>
+            <option value="INVENTORIES.VENDORRETURN" >VENDORRETURN</option>
+            <option value="INVENTORIES.STOCKADJUST" >STOCKADJUST (ADJ-)</option>
+            <option value="INVENTORIES.MANUFACTURING" >MANUFACTURING</option>
+            <option value="INVENTORIES.REPACKING" >REPACKING</option>
+            <option value="INVENTORIES.MANUFACUTINGREPACKING" >MANUFACUTINGREPACKING</option>
+            <option value="INVENTORIES.STOCKTRANSFERRETURN" >STOCKTRANSFERRETURN</option>
+          </select>
+          </div>
+          <div class="form-group col-sm-3">
+            <label>วันที่เริม : &nbsp;</label>
+            <input type="text" class="datetimepicker2 form-control" name="date">
+          </div>
+          <div class="form-group col-sm-3">
+            <label>วันที่สิ้นสุด : &nbsp;</label>
+            <input type="text" class="datetimepicker2 form-control" name="date2">
+          </div>
+          </div>
+          <div class="form-row">
+          <div class="form-group col-sm-3">
+            <label>HN : &nbsp;</label>
+            <input type="text" class="form-control" name="mrn" >
+          </div>
+          <div class="form-group col-sm-3">
+            <label>ORDER NO : &nbsp;</label>
+            <input type="text" class="form-control" name="orderno" id="orderno">
+          </div>
+          <div class="form-group col-sm-3">
+            <label>ITEM NO : &nbsp;</label>
+            <input type="text" class="form-control" name="itemno" >
+          </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group col-sm-3">
+              <label>REFERENCE_NO : &nbsp;</label>
+              <input type="text" class="form-control" name="refno">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group col-sm-6">
+            <input type="submit" value="กรองข้อมูล" class="btn btn-success">
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+      <span style="display:flex;align-items:center;gap:8px;">
+        <i class="fas fa-sync" style="color:#2563eb;"></i>
+        Inventory Transactions
+      </span>
+      <div style="display:flex;gap:8px;">
+        <a :href="`/inventory/tracking?mrn=${mrn}&itemno=${itemno}&date=${selectdate}&date2=${selectdate2}&transactiontype=${transactiontype}&page=${lastpage}`" class="btn btn-primary btn-sm" > < ก่อนหน้า</a>
+        <a :href="`/inventory/tracking?mrn=${mrn}&itemno=${itemno}&date=${selectdate}&date2=${selectdate2}&transactiontype=${transactiontype}&page=${nextpage}`" class="btn btn-primary btn-sm" > ถัดไป ></a>
+      </div>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>TRANSACTION_DATE</th>
+              <th>HN</th>
+              <th>ORDER_NO</th>
+              <th>TRANSACTION_TYPE</th>
+              <th>TRANSACTION_TYPE_CODE</th>
+              <th>ITEM_CODE</th>
+              <th>ITEM_NAME</th>
+              <th>UNIT_OF_MEASURE</th>
+              <th>ADJUST_TYPE</th>
+              <th>QTY</th>
+              <th>ACTUAL_COST</th>
+              <th>BUSINESS_UNIT</th>
+              <th>STORE_CODE</th>
+              <th>TO_STORE_CODE</th>
+              <th>EXPIRE_DATE</th>
+              <th>BATCHID</th>
+              <th>PATIENTTYPE</th>
+              <th>REFERENCE_NO</th>
+              <th>DEBUG</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in results">
+              <td>{{ item.ledgerdetails.transactiondate }}</td>
+              <td>
+                {{ item.mrn || "" }} 
+              </td>
+              <td>
+                {{ item.ledgerdetails.transactionrefuid.stocktransfernumber || "" }} 
+                {{ item.ledgerdetails.transactionrefuid.vendorreturnnumber || "" }}
+                {{ item.ledgerdetails.transactionrefuid.manufacturingnumber || "" }}
+                {{ item.ledgerdetails.transactionrefuid.stockdispensenumber || "" }}
+                {{ item.ledgerdetails.transactionrefuid.stockadjustnumber || "" }}
+                {{ item.ledgerdetails.transactionrefuid.grnnumber || "" }}
+                {{ item.ledgerdetails.transactionrefuid.dispensereturnnumber || "" }}
+                {{ item.ledgerdetails.transactionrefuid.returnnumber || "" }}
+              </td>
+              <td>{{ item.ledgerdetails.transactiontype }}</td>
+              <td>{{ item.grntypeuid ? item.grntypeuid.valuecode : "" }}</td>
+              <td>{{ item.itemmasteruid.code }}</td>
+              <td>{{ item.itemmasteruid.name }}</td>
+              <td class="text-center" >{{ item.ledgerdetails.quantityuom ? item.ledgerdetails.quantityuom.valuecode : "" }}</td>
+              <td class="text-center" :style="item.ledgerdetails.quantity < 0  ? 'background-color: red; color : white;' : 'background-color: green; color : white;'" >{{ item.ledgerdetails.quantity < 0 ? "D (ตัดออก)" : "I (รับเข้า)" }}</td>
+              <td class="text-center" :style="item.ledgerdetails.quantity < 0  ? 'background-color: red; color : white;' : 'background-color: green; color : white;'" >{{ item.ledgerdetails.quantity < 0 ? item.ledgerdetails.quantity * -1 : item.ledgerdetails.quantity }}</td>
+              <td :style="item.ledgerdetails.transactionrefuid.itemdetails[0].unitprice <= 0 ? 'background-color: red; color : white;' : ''"  class="text-right">{{ item.ledgerdetails.transactionrefuid.itemdetails[0].unitprice || 0 }}</td>
+              <td class="text-center">{{ item.orguid.code }}</td>
+              <td class="text-center" >{{ item.storeuid.code }}</td>
+              <td class="text-center" > {{ item.ledgerdetails.transactiontype == "INVENTORIES.TRANSFERIN"
+                && item.ledgerdetails.transactionrefuid.tostoreuid
+                ? item.ledgerdetails.transactionrefuid.tostoreuid.code  : "" }} 
+                
+                {{ item.ledgerdetails.transactiontype == "INVENTORIES.TRANSFEROUT"
+                && item.ledgerdetails.transactionrefuid.fromstoreuid
+                ? item.ledgerdetails.transactionrefuid.fromstoreuid.code  : "" }}</td>
+              
+              <td>{{ item.expirydate }}</td>
+              <td class="text-center" >{{ item.batchid }}</td>
+              <td class="text-center" >{{ item.entypeuid || "" }}</td>
+              <td>{{ item.referencedispense || "" }}</td>
+              <td>{{ isDebug == "true"  ? JSON.stringify(item.ledgerdetails)  : "" }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card-footer" style="display:flex;justify-content:flex-end;gap:8px;">
+      <a :href="`/inventory/tracking?mrn=${mrn}&itemno=${itemno}&date=${selectdate}&date2=${selectdate2}&transactiontype=${transactiontype}&page=${lastpage}`" class="btn btn-primary btn-sm" > < ก่อนหน้า</a>
+      <a :href="`/inventory/tracking?mrn=${mrn}&itemno=${itemno}&date=${selectdate}&date2=${selectdate2}&transactiontype=${transactiontype}&page=${nextpage}`" class="btn btn-primary btn-sm" > ถัดไป ></a>
+    </div>
+  </div>
+</div>
+
+<script>
+  function disableInput() {
+    var select = document.getElementById("transactiontype");
+    var input = document.getElementById("orderno");
+    if (select.value == "INVENTORIES.STOCKDISPENSE") {
+      input.disabled = true;
+    } else {
+      input.disabled = false;
+    }
+  }
+</script>

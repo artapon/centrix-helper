@@ -1,0 +1,616 @@
+<div class="col-sm-12">
+
+  <!-- ── Toolbar Card ─────────────────────────────────────────────── -->
+  <div class="card mb-3">
+    <div class="card-body" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+
+      <!-- Grouping -->
+      <span
+        style="font-size:.75rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-right:4px;">Group
+        by:</span>
+      <button id="formatTableButton" class="btn btn-sm btn-outline-primary"><i
+          class="fas fa-layer-group mr-1"></i>Billing Group</button>
+      <button id="groupByOrderItemCode" class="btn btn-sm btn-outline-primary"><i class="fas fa-barcode mr-1"></i>Order
+        Item Code</button>
+      <button id="groupByOrderNumber" class="btn btn-sm btn-outline-primary"><i class="fas fa-list-ol mr-1"></i>Order
+        Number</button>
+
+      <div style="width:1px;height:24px;background:#e2e8f0;margin:0 4px;"></div>
+
+      <!-- Reset + Toggle -->
+      <button id="resetTable" class="btn btn-sm btn-outline-secondary"><i class="fas fa-undo mr-1"></i>Reset</button>
+      <button onclick="toggleCells()" class="btn btn-sm btn-outline-secondary"><i class="fas fa-eye mr-1"></i>Toggle
+        Extra Columns</button>
+
+      <div style="width:1px;height:24px;background:#e2e8f0;margin:0 4px;"></div>
+
+      <!-- Item flag filter (filled in by the script below from the flags in the data) -->
+      <span
+        style="font-size:.75rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-right:4px;">Item
+        flag:</span>
+      <div id="itemFlagFilter" class="btn-group btn-group-sm flag-filter" role="group" aria-label="Filter by item flag"></div>
+
+      <div style="width:1px;height:24px;background:#e2e8f0;margin:0 4px;"></div>
+
+      <!-- Inline search -->
+      <div
+        style="display:flex;align-items:center;gap:6px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:4px 10px;">
+        <i class="fas fa-search" style="color:#94a3b8;font-size:.8rem;"></i>
+        <input id="findInput" type="text" placeholder="Search in table…"
+          style="border:none;background:transparent;outline:none;font-size:.83rem;width:180px;color:#334155;">
+        <span id="findCounter" style="font-size:.72rem;color:#94a3b8;white-space:nowrap;min-width:36px;">0 / 0</span>
+        <button id="findPrev" class="btn btn-sm" style="padding:1px 6px;color:#64748b;"
+          title="Previous (Shift+Enter)"><i class="fas fa-chevron-up"></i></button>
+        <button id="findNext" class="btn btn-sm" style="padding:1px 6px;color:#64748b;" title="Next (Enter)"><i
+            class="fas fa-chevron-down"></i></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Summary Totals ────────────────────────────────────────────── -->
+  <div class="card mb-3">
+    <div class="card-body" style="display:flex;flex-wrap:wrap;gap:12px;">
+      <div
+        style="flex:1;min-width:180px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px 16px;">
+        <div style="font-size:.7rem;font-weight:700;color:#16a34a;text-transform:uppercase;letter-spacing:.05em;">Active
+          Items Total</div>
+        <div style="font-size:1.4rem;font-weight:700;color:#15803d;">{{ totalnetamountA }}</div>
+      </div>
+      <div
+        style="flex:1;min-width:180px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px 16px;">
+        <div style="font-size:.7rem;font-weight:700;color:#ea580c;text-transform:uppercase;letter-spacing:.05em;">
+          Inactive Items Total</div>
+        <div style="font-size:1.4rem;font-weight:700;color:#c2410c;">{{ totalnetamountD }}</div>
+      </div>
+      <div
+        style="flex:1;min-width:180px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 16px;">
+        <div style="font-size:.7rem;font-weight:700;color:#2563eb;text-transform:uppercase;letter-spacing:.05em;">Grand
+          Total (All)</div>
+        <div style="font-size:1.4rem;font-weight:700;color:#1d4ed8;">{{ totalamountAD }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Data Table ─────────────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-table" style="color:#2563eb;"></i>
+      <span>Unbilled Items</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table id="orderTable" class="table mb-0" style="font-size:.82rem;">
+          <thead>
+            <tr>
+              <!-- Core diagnostic columns (always visible) -->
+              <th class="text-center" style="width:44px;">#</th>
+              <th>Charge Date</th>
+              <th>Order Item Code</th>
+              <th>Order Item Name</th>
+              <th>Billing Group</th>
+              <th>Billing Sub-group</th>
+              <th>Order Number</th>
+              <th>Charge Code Type</th>
+              <th class="text-center">QTY</th>
+              <th class="hideable text-center">Org QTY</th>
+              <th class="text-right">Unit Price</th>
+              <th class="text-right">Total Price</th>
+              <th class="text-right">Net Amount</th>
+              <th class="text-center">Billed?</th>
+              <th class="text-center">Order Flag</th>
+              <th class="text-center">Item Flag</th>
+              <!-- Extra / hideable columns -->
+
+              <th class="hideable text-right">Tariff Unit Price</th>
+              <th class="hideable text-right">Payor Discount</th>
+              <th class="hideable">Special Discount</th>
+              <th class="hideable text-right">Payor Alloc.</th>
+              <th class="hideable text-right">Overridden Price</th>
+              <th class="hideable">Split?</th>
+              <th class="hideable">Continuous?</th>
+              <th class="hideable">Order Date</th>
+              <th class="hideable">Order Created At</th>
+              <th class="hideable">Order Modified At</th>
+              <th class="hideable">Created At</th>
+              <th class="hideable">Modified At</th>
+              <th class="hideable">UID</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="({ item, isCancelled, isDiscontinued, isInactive, rowClass, calcTotal, priceMismatch }, index) in resultRows"
+                :class="rowClass" :data-item-flag="item.itemstatusflag || ''"
+                :title="isInactive ? 'Item flag D (inactive charge code)' : null">
+              <td class="text-center" :style="isCancelled ? 'background:#ef4444;color:#fff;font-weight:700;' : ''">
+                {{ isCancelled ? 'C' : '' }} {{ index + 1 }}</td>
+              <td style="white-space:nowrap;">{{ item.chargedate || '' }}</td>
+              <td>
+                <a v-if="item.chargecodetype !== 'PATIENTORDER'" target="_blank" :href="`/patients/package-items/${item.orderitemcode}`">{{ item.orderitemcode }}</a><template v-else>{{ item.orderitemcode }}</template>
+              </td>
+              <td>{{ item.orderitemname || '' }}</td>
+              <td>{{ item.billinggroup || '' }}</td>
+              <td>{{ item.billingsubgroup || '' }}</td>
+              <td>
+                <a v-if="item.chargecodetype !== 'PATIENTORDER'" target="_blank" :href="`/patients/package-items/${item.orderitemcode}`">{{ item.ordernumber }}</a><template v-else>{{ item.ordernumber }}</template>
+              </td>
+              <td>
+                <span
+                  :style="item.chargecodetype !== 'PATIENTORDER' ? 'background:#16a34a;color:#fff;padding:2px 6px;border-radius:4px;font-size:.75rem;' : ''">{{ item.chargecodetype
+                  || '' }}</span>
+              </td>
+              <td class="text-center"><strong>{{ item.quantity }}</strong></td>
+              <td class="hideable text-center">{{ item.orgquantity || '' }}</td>
+              <td class="text-right">{{ item.unitprice }}</td>
+              <td class="text-right"
+                :style="priceMismatch ? 'background:#fef9c3;color:#92400e;font-weight:700;' : ''">{{ calcTotal }}</td>
+              <td class="text-right"><strong>{{ item.netamount }}</strong></td>
+              <td class="text-center">
+                <a v-if="item.isbilled" target="_blank" :href="`/billing/bill-items/${item.billednumber}`"
+                  style="background:#16a34a;color:#fff;padding:2px 6px;border-radius:4px;font-size:.75rem;">{{ item.billednumber
+                  || 'Billed' }}</a><span v-else style="color:#94a3b8;font-size:.75rem;">—</span>
+              </td>
+              <td class="text-center">
+                <span
+                  :style="`padding:2px 6px;border-radius:4px;font-size:.75rem;background:${isCancelled ? '#ef4444' : isDiscontinued ? '#f97316' : '#e2e8f0'};color:${isCancelled || isDiscontinued ? '#fff' : '#475569'};`">
+                  {{ item.orderitemstatus || '' }}
+                </span>
+              </td>
+              <td class="text-center">
+                <span
+                  :style="`padding:2px 6px;border-radius:4px;font-size:.75rem;background:${isInactive ? '#ef4444' : '#dcfce7'};color:${isInactive ? '#fff' : '#166534'};`">
+                  {{ item.itemstatusflag || '' }}
+                </span>
+              </td>
+              <!-- Extra columns -->
+              <td class="hideable text-right"
+                :style="item.tariffunitprice === '' ? 'background:#fee2e2;color:#991b1b;' : ''">
+                {{ item.tariffunitprice }}</td>
+              <td class="hideable text-right">{{ item.payordiscount || '' }}</td>
+              <td class="hideable">{{ item.specialdiscount || '' }}</td>
+              <td class="hideable text-right">{{ item.alocatepayor || '' }}</td>
+              <td class="hideable text-center"
+                :style="item.overriddenprice ? 'background:#d1fae5;color:#065f46;' : ''">{{ item.overriddenprice || '' }}
+              </td>
+              <td class="hideable text-center" :style="item.issplit ? 'background:#d1fae5;color:#065f46;' : ''">
+                {{ item.issplit || '' }}</td>
+              <td class="hideable text-center"
+                :style="item.iscontinuousorder ? 'background:#d1fae5;color:#065f46;' : ''">{{ item.iscontinuousorder ||
+                '' }}</td>
+              <td class="hideable">{{ item.orderdate || '' }}</td>
+              <td class="hideable">{{ item.ordercreateat || '' }}</td>
+              <td class="hideable">{{ item.ordermodifiedat || '' }}</td>
+              <td class="hideable">{{ item.createdat || '' }}</td>
+              <td class="hideable">{{ item.modifiedat || '' }}</td>
+              <td class="hideable" style="font-size:.7rem;color:#94a3b8;">{{ item._id }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div id="loadSentinel" style="height:1px;" aria-hidden="true"></div>
+      </div>
+    </div>
+    <!-- Batch loading (driven by the script below) -->
+    <div class="card-footer loader-bar">
+      <span id="loaderSpinner" hidden><i class="fas fa-spinner fa-spin"></i></span>
+      <span id="loaderStatus" aria-live="polite"></span>
+      <span id="loaderPartialNote" class="loader-note" hidden>
+        <i class="fas fa-info-circle"></i> Grouping and the item flag filter apply to the loaded items only.
+        <button id="loaderPartialLoadAll" type="button" class="btn btn-link btn-sm p-0">Load all</button>
+      </span>
+      <span id="loaderError" class="text-danger" hidden></span>
+      <span class="loader-actions">
+        <button id="loadMore" type="button" class="btn btn-sm btn-secondary"><i class="fas fa-chevron-down"></i> Load next 100</button>
+        <button id="loadAll" type="button" class="btn btn-sm btn-outline-primary"><i class="fas fa-angle-double-down"></i> Load all</button>
+      </span>
+    </div>
+  </div>
+
+</div>
+
+<style>
+  /* Row states. Backgrounds go on the cells: the table's striping colours cells, which would hide a row background. */
+  #orderTable tbody tr.row-discontinued td { background: #fff7ed !important; }
+  #orderTable tbody tr.row-flag-d td { background: #ffe4e6 !important; }
+  #orderTable tbody tr.row-flag-d td:first-child { box-shadow: inset 4px 0 0 #e11d48; }
+  #orderTable tbody tr.row-cancelled td { background: #fee2e2 !important; }
+  #orderTable tbody tr.row-flag-d:hover td,
+  #orderTable tbody tr.row-cancelled:hover td { background: #fecdd3 !important; }
+  #orderTable tbody tr.is-flag-hidden { display: none; }
+
+  .loader-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: .82rem; color: var(--text-2); }
+  .loader-note { color: #92400e; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 2px 8px; }
+  .loader-actions { margin-left: auto; display: flex; gap: 6px; }
+
+  .flag-filter .btn { height: 30px; padding: 0 10px; font-size: .78rem; }
+  .flag-filter .flag-count { display: inline-block; min-width: 18px; margin-left: 4px; padding: 0 5px; border-radius: 9px; background: rgba(100, 116, 139, .15); font-size: .7rem; }
+  .flag-filter .btn-primary .flag-count { background: rgba(255, 255, 255, .25); }
+  .flag-filter .btn-outline-secondary.flag-d { color: #be123c; border-color: #fda4af; }
+
+  #orderTable thead th {
+    background: #f8fafc;
+    color: #475569;
+    font-size: .72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    border-bottom: 2px solid #e2e8f0;
+    white-space: nowrap;
+    padding: 10px 10px;
+  }
+
+  #orderTable tbody tr:hover {
+    background: #f1f5f9 !important;
+  }
+
+  #orderTable tbody td {
+    vertical-align: middle;
+    padding: 7px 10px;
+    border-color: #f1f5f9;
+  }
+
+  .group-header td {
+    background: #dbeafe !important;
+    color: #1e40af;
+    font-weight: 700;
+    font-size: .82rem;
+    padding: 8px 12px;
+  }
+
+  .total-row td {
+    background: #f0fdf4 !important;
+    color: #166534;
+    font-weight: 700;
+    font-size: .82rem;
+    padding: 8px 12px;
+    border-top: 2px solid #bbf7d0;
+  }
+
+  /* Find-bar highlight */
+  .find-match {
+    background: #fef08a !important;
+    outline: 2px solid #eab308;
+    border-radius: 2px;
+  }
+
+  .find-match-current {
+    background: #fb923c !important;
+    outline: 2px solid #ea580c;
+    color: #fff;
+    border-radius: 2px;
+  }
+
+  #findBar {
+    display: none;
+  }
+
+  #findBar.open {
+    display: flex !important;
+  }
+
+  #findInput:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, .15);
+  }
+</style>
+
+<script>
+  var originalRows = [];
+
+  document.addEventListener('DOMContentLoaded', function () {
+    var tableBody = document.querySelector('#orderTable tbody');
+    if (tableBody) {
+      originalRows = Array.from(tableBody.querySelectorAll('tr'));
+    }
+
+    var numberFormatter = new Intl.NumberFormat('en-US', {
+      style: 'decimal', minimumFractionDigits: 2, maximumFractionDigits: 2
+    });
+
+    // ── Item flag filter ────────────────────────────────────────────
+    // Works on the row elements (like grouping), so it survives Group by / Reset.
+    var activeFlag = '';
+    var flagMatches = function (row) { return !activeFlag || row.getAttribute('data-item-flag') === activeFlag; };
+
+    function applyFlagFilter() {
+      var tableBody = document.querySelector('#orderTable tbody');
+      Array.from(tableBody.querySelectorAll('tr[data-item-flag]')).forEach(function (row) {
+        row.classList.toggle('is-flag-hidden', !flagMatches(row));
+      });
+      // Group header/total rows are rebuilt by groupBy; regroup so totals match the filter.
+      if (currentGroup) groupBy(currentGroup.index, currentGroup.label);
+      updateLoader();
+    }
+
+    // Counts cover all items (server summary), not only the batches loaded so far.
+    function renderFlagFilter() {
+      var counts = Page.vm.flagCounts || {};
+      var flags = Object.keys(counts).sort();
+      var options = [{ value: '', label: 'All', count: Page.vm.totalItems }].concat(flags.map(function (flag) {
+        return { value: flag, label: flag || '(none)', count: counts[flag] };
+      }));
+      var container = document.getElementById('itemFlagFilter');
+      container.innerHTML = '';
+      options.forEach(function (opt) {
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'btn ' + (opt.value === activeFlag ? 'btn-primary' : 'btn-outline-secondary') + (opt.value === 'D' ? ' flag-d' : '');
+        button.setAttribute('aria-pressed', opt.value === activeFlag ? 'true' : 'false');
+        button.innerHTML = opt.label + ' <span class="flag-count">' + opt.count + '</span>';
+        button.addEventListener('click', function () {
+          activeFlag = opt.value;
+          renderFlagFilter();
+          applyFlagFilter();
+        });
+        container.appendChild(button);
+      });
+    }
+
+    var currentGroup = null;
+
+    // Puts the original row elements back in their original order (no copies: Vue still owns
+    // these elements and appends the next batch after them).
+    function restoreRows() {
+      var tableBody = document.querySelector('#orderTable tbody');
+      Array.from(tableBody.querySelectorAll('tr.group-header, tr.total-row')).forEach(function (row) { row.remove(); });
+      originalRows.forEach(function (row) {
+        row.classList.toggle('is-flag-hidden', !flagMatches(row));
+        tableBody.appendChild(row);
+      });
+    }
+
+    function groupBy(cellIndex, labelPrefix) {
+      currentGroup = { index: cellIndex, label: labelPrefix };
+      restoreRows();
+      var tableBody = document.querySelector('#orderTable tbody');
+      // Only rows passing the item flag filter are grouped and totalled
+      var rows = Array.from(tableBody.querySelectorAll('tr')).filter(flagMatches);
+
+      // Column indices for visible columns (after re-ordering):
+      // 0=#, 1=chargedate, 2=orderitemcode, 3=orderitemname, 4=billinggroup, 5=billingsubgroup
+      // 6=ordernumber, 7=chargecodetype, 8=QTY, 9=unitprice, 10=totalprice, 11=netamount
+      var QTY_IDX = 8;
+      var AMOUNT_IDX = 11;
+
+      var groups = {};
+      rows.forEach(function (row) {
+        var key = row.cells[cellIndex]?.innerText.trim();
+        var qty = parseFloat(row.cells[QTY_IDX]?.innerText.trim()) || 0;
+        var netAmount = parseFloat(row.cells[AMOUNT_IDX]?.innerText.trim()) || 0;
+        if (!key) return;
+        if (!groups[key]) groups[key] = { rows: [], total: 0, totalQty: 0 };
+        groups[key].rows.push(row);
+        groups[key].total += netAmount;
+        groups[key].totalQty += qty;
+      });
+
+      while (tableBody.firstChild) tableBody.removeChild(tableBody.firstChild);
+      Object.keys(groups).sort().forEach(function (key) {
+        var g = groups[key];
+
+        // Header row
+        var hRow = document.createElement('tr');
+        hRow.className = 'group-header';
+        var hCell = document.createElement('td');
+        hCell.colSpan = rows[0]?.cells.length || 30;
+        hCell.innerHTML =
+          '<i class="fas fa-layer-group mr-2"></i>' +
+          labelPrefix + ': <strong>' + key + '</strong>' +
+          '&nbsp;&nbsp;|&nbsp;&nbsp;Qty: <strong>' + g.totalQty + '</strong>' +
+          '&nbsp;&nbsp;|&nbsp;&nbsp;Net Amount: <strong>' + numberFormatter.format(g.total) + '</strong>';
+        hRow.appendChild(hCell);
+        tableBody.appendChild(hRow);
+
+        g.rows.forEach(function (row) { tableBody.appendChild(row); });
+
+        // Footer row
+        var tRow = document.createElement('tr');
+        tRow.className = 'total-row';
+        var tCell = document.createElement('td');
+        tCell.colSpan = rows[0]?.cells.length || 30;
+        tCell.innerHTML =
+          '&#x2211; Total Quantity: <strong>' + g.totalQty + '</strong>' +
+          '&nbsp;&nbsp;|&nbsp;&nbsp;Total Net Amount: <strong>' + numberFormatter.format(g.total) + '</strong>';
+        tRow.appendChild(tCell);
+        tableBody.appendChild(tRow);
+      });
+    }
+
+    document.getElementById('resetTable').addEventListener('click', function () { currentGroup = null; restoreRows(); updateLoader(); });
+    document.getElementById('formatTableButton').addEventListener('click', function () { groupBy(4, 'BILLING GROUP'); updateLoader(); });
+    document.getElementById('groupByOrderItemCode').addEventListener('click', function () { groupBy(2, 'ORDER ITEM CODE'); updateLoader(); });
+    document.getElementById('groupByOrderNumber').addEventListener('click', function () { groupBy(6, 'ORDER NUMBER'); updateLoader(); });
+    renderFlagFilter();
+
+    // ── Batch loading ───────────────────────────────────────────────
+    // The page starts with the first pageSize items; more are fetched from rowsUrl and
+    // appended through Vue, then grouping / flag filter / search are re-applied.
+    var loading = false;
+    var loaderStatus = document.getElementById('loaderStatus');
+    var loaderError = document.getElementById('loaderError');
+    var loadMoreButton = document.getElementById('loadMore');
+    var loadAllButton = document.getElementById('loadAll');
+    var loaderSpinner = document.getElementById('loaderSpinner');
+    var loaderPartialNote = document.getElementById('loaderPartialNote');
+
+    var loadedCount = function () { return Page.vm.results.length; };
+    var allLoaded = function () { return loadedCount() >= Page.vm.totalItems; };
+
+    function updateLoader() {
+      var loaded = loadedCount();
+      var total = Page.vm.totalItems;
+      loaderStatus.textContent = allLoaded()
+        ? 'All ' + total.toLocaleString() + ' items loaded'
+        : 'Showing ' + loaded.toLocaleString() + ' of ' + total.toLocaleString() + ' items';
+      loadMoreButton.hidden = loadAllButton.hidden = allLoaded();
+      loadMoreButton.disabled = loadAllButton.disabled = loading;
+      loaderSpinner.hidden = !loading;
+      loaderPartialNote.hidden = allLoaded() || (!currentGroup && !activeFlag);
+      var nextBatch = Math.min(Page.vm.pageSize, total - loaded);
+      loadMoreButton.lastChild.textContent = ' Load next ' + nextBatch;
+    }
+
+    function fetchBatch(limit) {
+      var url = Page.vm.rowsUrl + '?offset=' + loadedCount() + '&limit=' + limit;
+      return fetch(url, { headers: { Accept: 'application/json' } }).then(function (res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      });
+    }
+
+    function appendRows(rows) {
+      restoreRows();                                   // DOM back to Vue's rows before Vue appends
+      Page.vm.results = Page.vm.results.concat(rows);
+      return Page.vm.$nextTick().then(function () {
+        originalRows = Array.from(document.querySelectorAll('#orderTable tbody tr[data-item-flag]'));
+        applyFlagFilter();                             // also regroups when grouped
+        if (findInput.value.trim()) runSearch(findInput.value.trim());
+      });
+    }
+
+    // Loads one batch (pageSize), or everything left in batches of up to 500 when all is true.
+    function load(all) {
+      if (loading || allLoaded()) return Promise.resolve();
+      loading = true;
+      loaderError.hidden = true;
+      updateLoader();
+      var step = function () {
+        var limit = all ? Math.min(500, Page.vm.totalItems - loadedCount()) : Page.vm.pageSize;
+        return fetchBatch(limit).then(function (data) {
+          if (!data.rows.length) { Page.vm.totalItems = loadedCount(); return null; }  // fewer items than counted
+          return appendRows(data.rows).then(function () {
+            updateLoader();
+            if (all && !allLoaded()) return step();
+            return null;
+          });
+        });
+      };
+      return step()
+        .catch(function (err) {
+          loaderError.textContent = 'Could not load more items (' + err.message + '). ';
+          loaderError.hidden = false;
+        })
+        .then(function () { loading = false; updateLoader(); });
+    }
+
+    loadMoreButton.addEventListener('click', function () { load(false); });
+    loadAllButton.addEventListener('click', function () { load(true); });
+    document.getElementById('loaderPartialLoadAll').addEventListener('click', function () { load(true); });
+
+    // Auto-load the next batch when the end of the table scrolls into view (not while grouped,
+    // where rows are reordered and the end of the table is not the end of the data).
+    var sentinel = document.getElementById('loadSentinel');
+    if ('IntersectionObserver' in window && sentinel) {
+      new IntersectionObserver(function (entries) {
+        if (entries[0].isIntersecting && !currentGroup) load(false);
+      }, { root: sentinel.closest('.table-responsive'), rootMargin: '0px 0px 200px 0px' }).observe(sentinel);
+    }
+    updateLoader();
+
+    // ── In-page Find Bar ────────────────────────────────────────────
+    var findBar = document.getElementById('findBar');
+    var findInput = document.getElementById('findInput');
+    var findCounter = document.getElementById('findCounter');
+    var findMatches = [];   // { cell, originalBg }
+    var findCurrent = -1;
+
+    function clearHighlights() {
+      findMatches.forEach(function (m) {
+        m.cell.classList.remove('find-match', 'find-match-current');
+      });
+      findMatches = [];
+      findCurrent = -1;
+      findCounter.textContent = '0 / 0';
+    }
+
+    function runSearch(query) {
+      clearHighlights();
+      if (!query) return;
+      var lq = query.toLowerCase();
+      var cells = document.querySelectorAll('#orderTable tbody td');
+      cells.forEach(function (cell) {
+        if (cell.parentElement.classList.contains('is-flag-hidden')) return;
+        if (cell.innerText.toLowerCase().includes(lq)) {
+          cell.classList.add('find-match');
+          findMatches.push({ cell: cell });
+        }
+      });
+      if (findMatches.length) {
+        findCurrent = 0;
+        goToMatch(0);
+      } else {
+        findCounter.textContent = '0 / 0';
+        findInput.style.background = '#fee2e2';
+      }
+    }
+
+    function goToMatch(idx) {
+      if (!findMatches.length) return;
+      // Deactivate previous
+      if (findCurrent >= 0 && findMatches[findCurrent]) {
+        findMatches[findCurrent].cell.classList.remove('find-match-current');
+        findMatches[findCurrent].cell.classList.add('find-match');
+      }
+      findCurrent = (idx + findMatches.length) % findMatches.length;
+      var cur = findMatches[findCurrent].cell;
+      cur.classList.remove('find-match');
+      cur.classList.add('find-match-current');
+      cur.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      findCounter.textContent = (findCurrent + 1) + ' / ' + findMatches.length;
+      findInput.style.background = '';
+    }
+
+    function openFindBar() {
+      findBar.classList.add('open');
+      findInput.focus();
+      findInput.select();
+    }
+
+    function closeFindBar() {
+      findBar.classList.remove('open');
+      clearHighlights();
+      findInput.value = '';
+    }
+
+    // Live search as user types
+    findInput.addEventListener('input', function () {
+      runSearch(findInput.value.trim());
+    });
+
+    // Enter = next, Shift+Enter = prev
+    findInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (e.shiftKey) goToMatch(findCurrent - 1);
+        else goToMatch(findCurrent + 1);
+      }
+      if (e.key === 'Escape') {
+        findInput.value = '';
+        clearHighlights();
+      }
+    });
+
+    document.getElementById('findNext').addEventListener('click', function () { goToMatch(findCurrent + 1); });
+    document.getElementById('findPrev').addEventListener('click', function () { goToMatch(findCurrent - 1); });
+  });
+</script>
+<script>
+  Page.setup({
+    computed: {
+      // per-row display values for the items table
+      resultRows: function () {
+        return this.results.map(function (item) {
+          const isCancelled = (item.orderitemstatus || '').toLowerCase() === 'cancelled';
+          const isDiscontinued = (item.orderitemstatus || '').toLowerCase() === 'discontinued';
+          const isInactive = item.itemstatusflag === 'D';
+          // Classes, not inline row styles: the table's cell backgrounds would cover a row background
+          const rowClass = {
+            'row-flag-d': isInactive,
+            'row-cancelled': isCancelled,
+            'row-discontinued': isDiscontinued && !isInactive && !isCancelled
+          };
+          const calcTotal = item.unitprice * item.quantity;
+          const priceMismatch = item.oddertotalprice !== calcTotal;
+          return { item: item, isCancelled: isCancelled, isDiscontinued: isDiscontinued, isInactive: isInactive, rowClass: rowClass, calcTotal: calcTotal, priceMismatch: priceMismatch };
+        });
+      }
+    }
+  });
+</script>

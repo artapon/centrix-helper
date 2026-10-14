@@ -1,0 +1,33 @@
+const mongoose = require("mongoose");
+exports.get{name} = async function (data = {} ) {
+  let orguid = process.env.ORG_UID;
+  let initfilter = {};
+
+  initfilter.statusflag = 'A';
+  initfilter.orguid =  mongoose.Types.ObjectId(orguid);
+
+  let data = await mongoose.connection.db
+      .collection("{dcollection}")
+      .aggregate(
+        [
+            {
+                $match : initfilter
+            },
+            {
+                $project : {
+                    {fields}
+                }
+            }
+        ],
+    { allowDiskUse: true }
+  )
+  .toArray()
+  .then(function (res) {
+    return res;
+  }).catch(function (err) {
+    console.log(err);
+  });
+
+  return data;
+}
+            

@@ -1,0 +1,7 @@
+let router = require('express').Router();
+let {name}Controller = require('../../controllers/api/{name}Controller');
+
+
+router.{medthod}('/{name}Data', {name}Controller.get{name}Data);
+
+module.exports = router;

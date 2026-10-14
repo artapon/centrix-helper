@@ -1,0 +1,56 @@
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-user-md" style="color:#2563eb;"></i>
+      <span>Doctor Visits</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th class="text-center">VisitID</th>
+              <th class="text-center">HN</th>
+              <th class="text-center">First Department</th>
+              <th class="text-center">Med Department</th>
+              <th class="text-center">Last Department</th>
+              <th class="text-center">Entype</th>
+              <th class="text-center">Visit Status</th>
+              <th>Isreadmission</th>
+              <th>Is Anonymous</th>
+              <th>Is Pregnant</th>
+              <th>Is lactaion</th>
+              <th>Showprecaution</th>
+              <th class="text-center">Startdate</th>
+              <th class="text-center">Enddate</th>
+              <th class="text-center">Createdby</th>
+              <th class="text-center">Modifiedby</th>
+              <th class="text-center">Modifiedat</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in visits">
+              <td><a target="_blank" :href="`/patients/summary?vn=${ item.visitid }`" >{{ item.visitid }}</a></td>
+              <td><a target="_blank" :href="`/patients/summary?hn=${ item.hn }`" >{{ item.hn }}</a></td>
+              <td class="text-center" >{{ item.fdepartment }}</td>
+              <td class="text-center" >{{ item.mdepartmentjourney || "" }}</td>
+              <td class="text-center" >{{ item.ldepartment }}</td>
+              <td>{{ item.entype }}</td>
+              <td class="text-center" :style="item.visitstatus == 'Medical Discharge' || item.visitstatus == 'Financial Discharge' ? 'background-color: red; color : white;' : ''" >{{ item.visitstatus || "" }}</td>
+              <td class="text-center" :style="item.isreadmission == true ? 'background-color: green; color : white;' : ''" >{{ item.isreadmission }}</td>
+              <td class="text-center" :style="item.isvisitanonymous == true ? 'background-color: green; color : white;' : ''" >{{ item.isvisitanonymous }}</td>
+              <td class="text-center" :style="item.ispatientpregnant == true ? 'background-color: green; color : white;' : ''" >{{ item.ispatientpregnant }}</td>
+              <td class="text-center" :style="item.ispatientlactaion == true ? 'background-color: green; color : white;' : ''" >{{ item.ispatientlactaion }}</td>
+              <td class="text-center" :style="item.showprecaution == 'true' ? 'background-color: green; color : white;' : ''" >{{ item.showprecaution }}</td>
+              <td>{{ item.startdate }}</td>
+              <td>{{ item.enddate || "" }}</td>
+              <td class="text-center" >{{ item.createdby }}</td>
+              <td class="text-center" >{{ item.modifiedby }}</td>
+              <td class="text-center" >{{ item.modifiedat }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

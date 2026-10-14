@@ -1,0 +1,65 @@
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-search" style="color:#2563eb;"></i>
+      <span>Search Available Items</span>
+    </div>
+    <div class="card-body">
+      <form method="get" action="/inventory/available-items" class="form-group">
+        <div class="form-row">
+          <div class="form-group col-sm-3">
+            <label>ITEM Code : &nbsp;</label>
+            <input type="text" class="form-control" name="itemno" >
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-sm-6">
+          <input type="submit" value="กรองข้อมูล" class="btn btn-success">
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-boxes" style="color:#2563eb;"></i>
+      <span>Available Items</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Name</th>
+              <th class="text-center">Available Quantity</th>
+              <th class="text-center">Type</th>
+              <th class="text-center">UOM Code</th>
+              <th class="text-center">UOM</th>
+              <th class="text-center">Store Code</th>
+              <th class="text-center">Store</th>
+              <th class="text-center">BatchID</th>
+              <th class="text-center">Expirydate</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in items">
+              <td>{{ item.code }}</td>
+              <td>{{ item.name }}</td>
+              <td class="text-center">{{ item.quantity }}</td>
+              <td class="text-center">{{ item.type }}</td>
+              <td class="text-center">{{ item.uom_code }}</td>
+              <td class="text-center">{{ item.uom }}</td>
+              <td class="text-center">{{ item.store_code }}</td>
+              <td class="text-center">{{ item.store }}</td>
+              <td class="text-center">{{ item.batchid }}</td>
+              <td class="text-center">{{ item.expirydate }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

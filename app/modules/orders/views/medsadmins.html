@@ -1,0 +1,357 @@
+<style>
+  .Dispensed {
+    background-color: green;
+    color:white;
+  }
+  .Cancelled,.Closed {
+    background-color: red;
+    color:white;
+  }
+</style>
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-search" style="color:#2563eb;"></i>
+      <span>Search Medication Administrations</span>
+    </div>
+    <div class="card-body">
+      <form method="get" action="/pharmacy/meds-admin" class="form-group">
+        <div class="form-row">
+          <div class="form-group col-sm-3">
+            <label>VN / AN : &nbsp;</label>
+            <input type="text" class="form-control" name="vn">
+          </div>
+          <div class="form-group col-sm-3">
+            <label>HN : &nbsp;</label>
+            <input type="text" class="form-control" name="mrn">
+          </div>
+          <div class="form-group col-sm-3">
+            <label>Ordernumber : &nbsp;</label>
+            <input type="text" class="form-control" name="ordernumber">
+          </div>
+        </div>
+        <div class="form-group col-sm-6">
+          <input type="submit" value="กรองข้อมูล" class="btn btn-success">
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<div class="col-sm-12 mt-2">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-pills" style="color:#2563eb;"></i>
+      <span>Medication Administrations</span>
+    </div>
+    <div class="card-body">
+      <button id="groupByOrderNumber" class="btn btn-success" >Group By Order Number</button>
+      <button id="groupByOrderItemCode" class="btn btn-success">Group by Order Item Code</button>
+      <button id="groupByDosageDate" class="btn btn-success">Group by Dosage Date</button>
+    </div>
+    <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+      <table class="table mb-0" id="medadminTable">
+        <thead>
+          <tr>
+            <th class="text-center">HN</th>
+            <th class="text-center">VN</th>
+            <th>Order Date</th>
+            <th>Ordernumber</th>
+            <th class="text-center">Order Type</th>
+            <th>Item Code</th>
+            <th>Item Name</th>
+            <th class="text-center">Admin Quantity</th>
+            <th class="text-center">Quantity UOM</th>
+            <th class="text-center">Admin Date</th>
+            <th class="text-center">Admin Status</th>
+            <th class="text-center">Dosage</th>
+            <th class="text-center">Dosage UOM</th>
+            <th class="text-center">Dosage Date</th>
+            <th class="text-center">Volume</th>
+            <th class="text-center">Is POM</th>
+            <th class="text-center">Is Ivinfusion</th>
+            <th class="text-center">Is PRN</th>
+            <th class="text-center">Is Stat</th>
+            <th class="text-center">Is Dosage not applicable</th>
+            <th class="text-center">Is Active</th>
+            <th class="text-center">Status</th>
+            <th class="text-center">Modifiedat</th>
+            <th class="text-center">Modifiedby</th>
+            <th class="text-left">Debug</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="item in orders">
+            <td class="text-center" ><a target="_blank" :href="`/patients/summary?hn=${ item.HN }`" >{{ item.HN }}</a></td>
+            <td class="text-center" ><a target="_blank" :href="`/patients/summary?vn=${ item.VN }`" >{{ item.VN }}</a></td>
+            <td>{{ item.orderdate }}</td>
+            <td>{{ item.ordernumber || "" }}</td>
+            <td class="text-center" >{{ item.ordertype }}</td>
+            <td>{{ item.ordercode || "" }}</td>
+            <td>
+              {{ item.ordername || "" }} <br>
+            <small>{{ item.frequency || "" }}</small></td>
+            <td class="text-center" >{{ item.adminqty || "0" }}</td>
+            <td class="text-center" >{{ item.quantityUOM }}</td>
+            <td class="text-center" >{{ item.admindate || "" }}</td>
+            <td class="text-center" >{{ item.medsadminstatus || "" }}</td>
+            <td class="text-center" >{{ item.dosage || "" }}</td>
+            <td class="text-center" >{{ item.dosageUOM || "" }}</td>
+            <td class="text-center" >{{ item.dosagedate || "" }} <span class="badge badge-info"><h6>{{ item.dosagetime || "" }}</h6></span></td>
+            <td class="text-center" >{{ item.volume || "" }}</td>
+            <td class="text-center" :style="item.ispom ? 'background-color: green; color : white;' : ''" >{{ item.ispom || "" }}</td>
+            <td class="text-center" :style="item.isivinfusion ? 'background-color: green; color : white;' : ''" >{{ item.isivinfusion || "" }}</td>
+            <td class="text-center" :style="item.isprnorder ? 'background-color: green; color : white;' : ''" >{{ item.isprnorder || "" }}</td>
+            <td class="text-center" :style="item.isstatorder ? 'background-color: green; color : white;' : ''" >{{ item.isstatorder || "" }}</td>
+            <td class="text-center" :style="item.isdosagenotapplicable ? 'background-color: green; color : white;' : ''" >{{ item.isdosagenotapplicable || "" }}</td>
+            <td class="text-center" :style="item.isactive ? 'background-color: green; color : white;' : ''" >{{ item.isactive || "" }}</td>
+            <td v-if="item.orderstatus == 'Checked in'" class="text-center " style='background-color: green; color : white;' >{{ item.orderstatus }}</td><td v-else-if="item.orderstatus == 'Cancelled' || item.orderstatus ==  'Discontinued' || item.orderstatus ==  'Closed'" class="text-center " style='background-color: red; color : white;' >{{ item.orderstatus }}</td><td v-else class="text-center" >{{ item.orderstatus }}</td>
+            <td class="text-center" >{{ item.modifiedat || "" }}</td>
+            <td class="text-center" >{{ item.modifiedby || "" }}</td>
+            <td class="text-left" ><code>{{ isDebug == "true"  ?  JSON.stringify(item.UID) || "" : "" }}</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Variable to store original rows
+  var originalRows = [];
+
+  document.addEventListener('DOMContentLoaded', function() {
+    // Get the table body
+
+    var tableBody = document.querySelector('#medadminTable tbody');
+  
+    // Store original rows
+    if (tableBody) {
+      originalRows = Array.from(tableBody.querySelectorAll('tr'));
+    }
+
+    document.getElementById('groupByOrderItemCode').addEventListener('click', function() {
+      // Get the table body
+      var tableBody = document.querySelector('#medadminTable tbody');
+
+      // Check if table body exists before proceeding
+      if (!tableBody) {
+        console.error("Table body not found!");
+        return; // Exit if table body is not found
+      }
+
+      // Restore original rows
+      tableBody.innerHTML = '';
+      originalRows.forEach(function(row) {
+        tableBody.appendChild(row.cloneNode(true));
+      });
+
+      var rows = Array.from(tableBody.querySelectorAll('tr'));
+
+      // Object to group rows by ORDERITEMCODE and calculate sums
+      var groups = {};
+
+      rows.forEach(function(row) {
+        // Find the "ORDERITEMCODE" cell (the 14th cell in the row)
+        var orderItemCode = row.cells[5]?.innerText.trim(); // Adjust cell index for ORDERITEMCODE
+        var adminqty = row.cells[7]?.innerText.trim() != 'true' ? parseFloat(row.cells[7]?.innerText.trim()) || 0 : 0; // Assuming NETAMOUNT is in the 21st cell
+
+        if (!orderItemCode) return; // Skip rows without valid ORDERITEMCODE
+
+        // If the group doesn't exist, create an object for it
+        if (!groups[orderItemCode]) {
+          groups[orderItemCode] = { rows: [], total: 0 };
+        }
+
+        // Add the row to the corresponding ORDERITEMCODE group
+        groups[orderItemCode].rows.push(row);
+        groups[orderItemCode].total += adminqty;
+      });
+
+      // Clear the existing rows
+      tableBody.innerHTML = '';
+
+      // Create a number formatter for currency format with commas
+      var numberFormatter = new Intl.NumberFormat('en-US', {
+        style: 'decimal',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+
+      // Append rows grouped by ORDERITEMCODE
+      Object.keys(groups).forEach(function(orderItemCode) {
+        // Add a row to label the ORDERITEMCODE group
+        var groupRow = document.createElement('tr');
+        var groupCell = document.createElement('td');
+        groupCell.colSpan = rows[0].cells.length; // Full row span
+        groupCell.className = 'group-header';
+        groupCell.innerHTML = '<strong>ORDERITEMCODE: ' + orderItemCode + ' : Total Admin QTY : ' + groups[orderItemCode].total + '</strong>';
+        groupRow.appendChild(groupCell);
+        tableBody.appendChild(groupRow);
+
+        // Append each row in the group
+        groups[orderItemCode].rows.forEach(function(row) {
+          tableBody.appendChild(row);
+        });
+
+        // Add a row for total amount of the group
+        var totalRow = document.createElement('tr');
+        var totalCell = document.createElement('td');
+        totalCell.colSpan = rows[0].cells.length; // Full row span
+        totalCell.className = 'total-row';
+        totalCell.innerHTML = '<strong>Total Admin QTY : ' + groups[orderItemCode].total + '</strong>';
+        totalRow.appendChild(totalCell);
+        tableBody.appendChild(totalRow);
+      });
+    });
+
+    document.getElementById('groupByOrderNumber').addEventListener('click', function() {
+      // Get the table body
+      var tableBody = document.querySelector('#medadminTable tbody');
+
+      // Check if table body exists before proceeding
+      if (!tableBody) {
+        console.error("Table body not found!");
+        return; // Exit if table body is not found
+      }
+
+      // Restore original rows
+      tableBody.innerHTML = '';
+      originalRows.forEach(function(row) {
+        tableBody.appendChild(row.cloneNode(true));
+      });
+
+      var rows = Array.from(tableBody.querySelectorAll('tr'));
+
+      // Object to group rows by ORDERNUMBER and calculate sums
+      var groups = {};
+
+      rows.forEach(function(row) {
+        // Find the "ORDERNUMBER" cell (the 13th cell in the row)
+        var orderNumber = row.cells[3]?.innerText.trim(); // Adjust cell index for ORDERNUMBER
+        var adminqty = row.cells[7]?.innerText.trim() != 'true' ? parseFloat(row.cells[7]?.innerText.trim()) || 0 : 0; // Assuming NETAMOUNT is in the 21st cell
+
+        if (!orderNumber) return; // Skip rows without valid ORDERNUMBER
+
+        // If the group doesn't exist, create an object for it
+        if (!groups[orderNumber]) {
+          groups[orderNumber] = { rows: [], total: 0 };
+        }
+
+        // Add the row to the corresponding ORDERNUMBER group
+        groups[orderNumber].rows.push(row);
+        groups[orderNumber].total += adminqty;
+      });
+
+      // Clear the existing rows
+      tableBody.innerHTML = '';
+
+      // Create a number formatter for currency format with commas
+      var numberFormatter = new Intl.NumberFormat('en-US', {
+        style: 'decimal',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+
+      // Append rows grouped by ORDERNUMBER
+      Object.keys(groups).forEach(function(orderNumber) {
+        // Add a row to label the ORDERNUMBER group
+        var groupRow = document.createElement('tr');
+        var groupCell = document.createElement('td');
+        groupCell.colSpan = rows[0].cells.length; // Full row span
+        groupCell.className = 'group-header';
+        groupCell.innerHTML = '<strong>ORDERNUMBER: ' + orderNumber + ' : Total Admin QTY : ' + groups[orderNumber].total + '</strong>';
+        groupRow.appendChild(groupCell);
+        tableBody.appendChild(groupRow);
+
+        // Append each row in the group
+        groups[orderNumber].rows.forEach(function(row) {
+          tableBody.appendChild(row);
+        });
+
+        // Add a row for total amount of the group
+        var totalRow = document.createElement('tr');
+        var totalCell = document.createElement('td');
+        totalCell.colSpan = rows[0].cells.length; // Full row span
+        totalCell.className = 'total-row';
+        totalCell.innerHTML = '<strong>Total Total Admin QTY : ' + groups[orderNumber].total + '</strong>';
+        totalRow.appendChild(totalCell);
+        tableBody.appendChild(totalRow);
+      });
+    });
+
+    document.getElementById('groupByDosageDate').addEventListener('click', function() {
+      // Get the table body
+      var tableBody = document.querySelector('#medadminTable tbody');
+
+      // Check if table body exists before proceeding
+      if (!tableBody) {
+        console.error("Table body not found!");
+        return; // Exit if table body is not found
+      }
+
+      // Restore original rows
+      tableBody.innerHTML = '';
+      originalRows.forEach(function(row) {
+        tableBody.appendChild(row.cloneNode(true));
+      });
+
+      var rows = Array.from(tableBody.querySelectorAll('tr'));
+
+      // Object to group rows by ORDERNUMBER and calculate sums
+      var groups = {};
+
+      rows.forEach(function(row) {
+        // Find the "ORDERNUMBER" cell (the 13th cell in the row)
+        var dosageDate = row.cells[12]?.innerText.trim(); // Adjust cell index for ORDERNUMBER
+        var adminqty = row.cells[7]?.innerText.trim() != 'true' ? parseFloat(row.cells[7]?.innerText.trim()) || 0 : 0; // Assuming NETAMOUNT is in the 21st cell
+
+        if (!dosageDate) return; // Skip rows without valid ORDERNUMBER
+
+        // If the group doesn't exist, create an object for it
+        if (!groups[dosageDate]) {
+          groups[dosageDate] = { rows: [], total: 0 };
+        }
+
+        // Add the row to the corresponding ORDERNUMBER group
+        groups[dosageDate].rows.push(row);
+        groups[dosageDate].total += adminqty;
+      });
+
+      // Clear the existing rows
+      tableBody.innerHTML = '';
+
+      // Create a number formatter for currency format with commas
+      var numberFormatter = new Intl.NumberFormat('en-US', {
+        style: 'decimal',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+
+      // Append rows grouped by ORDERNUMBER
+      Object.keys(groups).forEach(function(dosageDate) {
+        // Add a row to label the ORDERNUMBER group
+        var groupRow = document.createElement('tr');
+        var groupCell = document.createElement('td');
+        groupCell.colSpan = rows[0].cells.length; // Full row span
+        groupCell.className = 'group-header';
+        groupCell.innerHTML = '<strong>Dosage Date Time : ' + dosageDate + ' : Total Admin QTY : ' + groups[dosageDate].total + '</strong>';
+        groupRow.appendChild(groupCell);
+        tableBody.appendChild(groupRow);
+
+        // Append each row in the group
+        groups[dosageDate].rows.forEach(function(row) {
+          tableBody.appendChild(row);
+        });
+
+        // Add a row for total amount of the group
+        var totalRow = document.createElement('tr');
+        var totalCell = document.createElement('td');
+        totalCell.colSpan = rows[0].cells.length; // Full row span
+        totalCell.className = 'total-row';
+        totalCell.innerHTML = '<strong>Total Total Admin QTY : ' + groups[dosageDate].total + '</strong>';
+        totalRow.appendChild(totalCell);
+        tableBody.appendChild(totalRow);
+      });
+    });
+  });
+</script>

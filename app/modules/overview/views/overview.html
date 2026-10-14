@@ -1,0 +1,1018 @@
+<div class="col-12 mb-3 ov-toolbar">
+  <span class="text-muted">
+    <i class="fas fa-database"></i> <b>{{ status.host || '-' }}</b>
+    <span v-if="status.version"> · MongoDB {{ status.version }}</span>
+    <span v-if="status.storageEngine"> · {{ status.storageEngine }}</span>
+    · db <b>{{ dbName }}</b>
+    · <i class="far fa-clock"></i> {{ lastPoll }}
+    <span v-if="pollError" class="text-danger"> · <i class="fas fa-exclamation-triangle"></i> {{ pollError }}</span>
+  </span>
+  <div class="ov-controls">
+    <div class="custom-control custom-switch ov-live-switch" title="Poll the server automatically">
+      <input type="checkbox" class="custom-control-input" id="liveSwitch" v-model="liveEnabled">
+      <label class="custom-control-label" for="liveSwitch">
+        Live data
+        <span v-if="liveEnabled" class="ov-live-dot" title="Live"></span>
+        <span v-else class="badge badge-secondary">OFF</span>
+      </label>
+    </div>
+    <select v-model.number="interval" class="form-control form-control-sm" title="Refresh interval" :disabled="!liveEnabled">
+      <option v-for="s in [2, 5, 10, 30]" :value="s">Every {{ s }}s</option>
+    </select>
+    <button class="btn btn-sm btn-secondary" @click="refreshAll" :disabled="loadingDetails"
+            :title="liveEnabled ? 'Reload sizes, replica set, profiler and log' : 'Take one sample now'">
+      <i class="fas fa-sync-alt" :class="{ 'fa-spin': loadingDetails }"></i> {{ liveEnabled ? 'Refresh details' : 'Refresh now' }}
+    </button>
+  </div>
+</div>
+
+<div v-if="status.error" class="col-12">
+  <div class="alert alert-danger">Server status unavailable: {{ status.error }} — the database user needs the <code>clusterMonitor</code> role.</div>
+</div>
+
+<!-- Server Status -->
+<div class="col-xl-2 col-md-4 col-6">
+  <div class="card ov-kpi"><div class="card-body">
+    <div class="ov-kpi-icon" style="background:#dbeafe;color:#1d4ed8;"><i class="fas fa-plug"></i></div>
+    <div>
+      <div class="ov-kpi-label">Connections</div>
+      <div class="ov-kpi-value">{{ number(status.connections && status.connections.current) }}</div>
+      <div class="ov-kpi-sub">{{ number(status.connections && status.connections.available) }} available</div>
+    </div>
+  </div></div>
+</div>
+<div class="col-xl-2 col-md-4 col-6">
+  <div class="card ov-kpi"><div class="card-body">
+    <div class="ov-kpi-icon" style="background:#ede9fe;color:#6d28d9;"><i class="fas fa-bolt"></i></div>
+    <div>
+      <div class="ov-kpi-label">Ops / sec</div>
+      <div class="ov-kpi-value">{{ rates ? number(Math.round(rates.totalOps)) : '…' }}</div>
+      <div class="ov-kpi-sub">all opcounters</div>
+    </div>
+  </div></div>
+</div>
+<div class="col-xl-2 col-md-4 col-6">
+  <div class="card ov-kpi"><div class="card-body">
+    <div class="ov-kpi-icon" :style="slowOps ? 'background:#fee2e2;color:#b91c1c;' : 'background:#d1fae5;color:#065f46;'"><i class="fas fa-running"></i></div>
+    <div>
+      <div class="ov-kpi-label">In-progress ops</div>
+      <div class="ov-kpi-value">{{ opsList.length }}</div>
+      <div class="ov-kpi-sub">{{ slowOps }} &gt; 5s · {{ lockWaitOps }} waiting lock</div>
+    </div>
+  </div></div>
+</div>
+<div class="col-xl-2 col-md-4 col-6">
+  <div class="card ov-kpi"><div class="card-body">
+    <div class="ov-kpi-icon" style="background:#fef3c7;color:#92400e;"><i class="fas fa-memory"></i></div>
+    <div>
+      <div class="ov-kpi-label">Resident memory</div>
+      <div class="ov-kpi-value">{{ mb(status.mem && status.mem.resident) }}</div>
+      <div class="ov-kpi-sub">virtual {{ mb(status.mem && status.mem.virtual) }}</div>
+    </div>
+  </div></div>
+</div>
+<div class="col-xl-2 col-md-4 col-6">
+  <div class="card ov-kpi"><div class="card-body">
+    <div class="ov-kpi-icon" style="background:#cffafe;color:#0e7490;"><i class="fas fa-layer-group"></i></div>
+    <div>
+      <div class="ov-kpi-label">WT cache used</div>
+      <div class="ov-kpi-value">{{ status.cache ? pct(status.cache.used, status.cache.max) : '-' }}</div>
+      <div class="ov-kpi-sub" v-if="status.cache">{{ bytes(status.cache.used) }} of {{ bytes(status.cache.max) }}</div>
+    </div>
+  </div></div>
+</div>
+<div class="col-xl-2 col-md-4 col-6">
+  <div class="card ov-kpi"><div class="card-body">
+    <div class="ov-kpi-icon" style="background:#f1f5f9;color:#334155;"><i class="fas fa-hourglass-half"></i></div>
+    <div>
+      <div class="ov-kpi-label">Uptime</div>
+      <div class="ov-kpi-value ov-kpi-value-sm">{{ duration(status.uptime) }}</div>
+      <div class="ov-kpi-sub">{{ status.repl ? (status.repl.isWritablePrimary ? 'PRIMARY' : 'SECONDARY') + ' · ' + status.repl.setName : 'standalone' }}</div>
+    </div>
+  </div></div>
+</div>
+
+<!-- Centrix logins today (moved from DB Monitor) -->
+<div class="col-12">
+  <div class="card">
+    <div class="card-header">
+      <i class="fas fa-user-clock ov-ic"></i> Today Centrix Login Session ( {{ number(loginTotal) }} )
+      <span class="ov-head-aside" v-if="loginPeak">busiest {{ loginPeak.label }}–{{ loginPeak.end }} · {{ number(loginPeak.count) }} sessions · per 30 minutes</span>
+    </div>
+    <div class="card-body">
+      <div class="ov-chart ov-chart-sm">
+        <canvas id="loginChart"></canvas>
+        <div v-if="details.logins && details.logins.error" class="ov-empty ov-empty-overlay is-error">
+          <i class="fas fa-exclamation-triangle"></i>
+          <div class="ov-empty-title">Login sessions unavailable</div>
+          <div class="ov-empty-sub">{{ details.logins.error }}</div>
+        </div>
+        <div v-else-if="!loginTotal" class="ov-empty ov-empty-overlay">
+          <i class="fas fa-user-clock"></i>
+          <div class="ov-empty-title">No login activity yet today</div>
+          <div class="ov-empty-sub">Centrix sessions appear here by their last activity time.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Mongostat -->
+<div class="col-lg-8 ov-col">
+  <div class="card ov-fill">
+    <div class="card-header"><i class="fas fa-chart-line ov-ic"></i> Mongostat — operations per second</div>
+    <div class="card-body">
+      <div class="ov-chart">
+        <canvas id="opsChart"></canvas>
+        <div v-if="!rateSamples" class="ov-empty ov-empty-overlay">
+          <i class="fas fa-hourglass-half"></i>
+          <div class="ov-empty-title">Measuring rates…</div>
+          <div class="ov-empty-sub">{{ liveEnabled ? 'Rates appear after the second sample.' : 'Live data is off. Click Refresh now to measure rates.' }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="col-lg-4 ov-col">
+  <div class="card ov-fill">
+    <div class="card-header"><i class="fas fa-plug ov-ic"></i> Connections</div>
+    <div class="card-body"><div class="ov-chart"><canvas id="connChart"></canvas></div></div>
+  </div>
+</div>
+
+<div class="col-lg-4 ov-col">
+  <div class="card ov-fill">
+    <div class="card-header"><i class="fas fa-exchange-alt ov-ic"></i> Network (KB/s)</div>
+    <div class="card-body">
+      <div class="ov-chart ov-chart-sm">
+        <canvas id="netChart"></canvas>
+        <div v-if="!rateSamples" class="ov-empty ov-empty-overlay">
+          <i class="fas fa-hourglass-half"></i>
+          <div class="ov-empty-title">Measuring traffic…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="col-lg-4 ov-col">
+  <div class="card ov-fill">
+    <div class="card-header"><i class="fas fa-lock ov-ic"></i> Lock status — queued &amp; active clients</div>
+    <div class="card-body"><div class="ov-chart ov-chart-sm"><canvas id="lockChart"></canvas></div></div>
+  </div>
+</div>
+<div class="col-lg-4 ov-col">
+  <div class="card ov-fill">
+    <div class="card-header"><i class="fas fa-layer-group ov-ic"></i> WiredTiger cache (% of max)</div>
+    <div class="card-body">
+      <div class="ov-chart ov-chart-sm">
+        <canvas id="cacheChart"></canvas>
+        <div v-if="!status.cache" class="ov-empty ov-empty-overlay">
+          <i class="fas fa-layer-group"></i>
+          <div class="ov-empty-title">No WiredTiger cache</div>
+          <div class="ov-empty-sub">This server does not report cache statistics.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Mongotop / Database sizes -->
+<div class="col-lg-6 ov-col">
+  <div class="card ov-fill">
+    <div class="card-header">
+      <i class="fas fa-tachometer-alt ov-ic"></i> Mongotop — read / write time per collection (ms/s)
+      <span class="ov-head-aside" v-if="topRows.length">top {{ topRows.length }}</span>
+    </div>
+    <div class="card-body">
+      <div class="ov-chart">
+        <canvas id="topChart"></canvas>
+        <div v-if="top.error" class="ov-empty ov-empty-overlay is-error">
+          <i class="fas fa-exclamation-triangle"></i>
+          <div class="ov-empty-title">Collection activity unavailable</div>
+          <div class="ov-empty-sub">{{ top.error }}</div>
+        </div>
+        <div v-else-if="top.collecting" class="ov-empty ov-empty-overlay">
+          <i class="fas fa-hourglass-half"></i>
+          <div class="ov-empty-title">Collecting first sample…</div>
+          <div class="ov-empty-sub">{{ liveEnabled ? 'Activity appears after the next refresh.' : 'Live data is off. Click Refresh now to measure activity.' }}</div>
+        </div>
+        <div v-else-if="!topRows.length" class="ov-empty ov-empty-overlay">
+          <i class="fas fa-mug-hot"></i>
+          <div class="ov-empty-title">No collection activity</div>
+          <div class="ov-empty-sub">No collection used measurable read or write time in the last {{ top.seconds }}s.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="col-lg-6 ov-col">
+  <div class="card ov-fill">
+    <div class="card-header">
+      <i class="fas fa-hdd ov-ic"></i> Database name &amp; storage size
+      <span class="ov-head-aside" v-if="dbList.length">{{ sizeUnit }} · total on disk {{ bytes(sumOf(dbList, 'sizeOnDisk')) }}</span>
+    </div>
+    <div class="card-body">
+      <div class="ov-chart">
+        <canvas id="dbSizeChart"></canvas>
+        <div v-if="details.databases.error" class="ov-empty ov-empty-overlay is-error">
+          <i class="fas fa-exclamation-triangle"></i>
+          <div class="ov-empty-title">Database sizes unavailable</div>
+          <div class="ov-empty-sub">{{ details.databases.error }}</div>
+        </div>
+        <div v-else-if="!dbList.length" class="ov-empty ov-empty-overlay">
+          <i class="fas fa-database"></i>
+          <div class="ov-empty-title">No databases</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="col-12" v-if="dbList.length">
+  <div class="card" data-table-filter="off">
+    <div class="card-header">
+      <i class="fas fa-database ov-ic"></i> Databases
+      <span class="ov-head-aside">{{ dbList.length }} databases</span>
+    </div>
+    <div class="card-body p-0 table-responsive">
+      <table class="table table-sm table-hover mb-0 ov-table">
+        <thead><tr><th>Database</th><th class="text-right">Collections</th><th class="text-right">Documents</th><th class="text-right">Data size</th><th class="text-right">Storage size</th><th class="text-right">Index size</th><th class="text-right">Size on disk</th></tr></thead>
+        <tbody>
+          <tr v-for="d in dbList" :class="{ 'ov-row-current': d.name === dbName }">
+            <td><b>{{ d.name }}</b> <span v-if="d.name === dbName" class="badge badge-primary">connected</span></td>
+            <td class="text-right">{{ number(d.collections) }}</td>
+            <td class="text-right">{{ number(d.objects) }}</td>
+            <td class="text-right">{{ bytes(d.dataSize) }}</td>
+            <td class="text-right">{{ bytes(d.storageSize) }}</td>
+            <td class="text-right">{{ bytes(d.indexSize) }}</td>
+            <td class="text-right">{{ bytes(d.sizeOnDisk) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- In-progress operations -->
+<div class="col-12">
+  <div class="card" data-table-filter="off">
+    <div class="card-header">
+      <i class="fas fa-running ov-ic"></i> In-progress operations for this instance
+      <span class="ov-head-aside">
+        {{ opsList.length }} active
+        <span v-if="slowOps" class="badge badge-danger">{{ slowOps }} over 5s</span>
+        <span v-if="lockWaitOps" class="badge badge-warning">{{ lockWaitOps }} waiting lock</span>
+      </span>
+    </div>
+    <div class="card-body p-0 table-responsive ov-scroll">
+      <div v-if="ops.error" class="ov-empty is-error">
+        <i class="fas fa-exclamation-triangle"></i>
+        <div class="ov-empty-title">Operations unavailable</div>
+        <div class="ov-empty-sub">{{ ops.error }}</div>
+      </div>
+      <div v-else-if="!opsList.length" class="ov-empty">
+        <i class="fas fa-check-circle"></i>
+        <div class="ov-empty-title">No active operations</div>
+        <div class="ov-empty-sub">Nothing is running on this instance right now.</div>
+      </div>
+      <table v-else class="table table-sm table-hover mb-0 ov-table">
+        <thead><tr><th>OpId</th><th class="text-right">Running</th><th>Op</th><th>Namespace</th><th>Client</th><th>App</th><th>Plan</th><th class="text-right"><span class="sr-only">Command</span></th></tr></thead>
+        <tbody>
+          <tr v-for="o in opsList" :key="o.opid">
+            <td class="ov-num">{{ o.opid }}</td>
+            <td class="text-right text-nowrap">
+              <span :class="o.secs >= 5 ? 'badge badge-danger' : (o.secs >= 1 ? 'badge badge-warning' : '')">{{ runTime(o.micros) }}</span>
+              <i v-if="o.waitingForLock" class="fas fa-lock text-danger" title="Waiting for lock"></i>
+            </td>
+            <td>{{ o.op }}</td>
+            <td class="text-nowrap">{{ o.ns }}</td>
+            <td class="text-nowrap">{{ o.client }}<div class="text-muted small" v-if="o.user">{{ o.user }}</div></td>
+            <td>{{ o.appName || o.desc }}</td>
+            <td class="small" :class="{ 'text-danger': o.planSummary.indexOf('COLLSCAN') >= 0 }">{{ o.planSummary }}</td>
+            <td class="text-right">
+              <button type="button" class="btn btn-sm btn-outline-primary ov-view-btn" @click="showCommand(o)"
+                      :title="'View command of op ' + o.opid" :aria-label="'View command of op ' + o.opid">
+                <i class="fas fa-code"></i> View
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Lock status | Replica set + Sharding -->
+<div class="col-lg-6 ov-col">
+  <div class="card ov-fill" data-table-filter="off">
+    <div class="card-header">
+      <i class="fas fa-lock ov-ic"></i> Check the lock status
+      <span class="ov-head-aside" v-if="lockWaits">{{ number(lockWaits) }} waits since start</span>
+    </div>
+    <div class="card-body p-0 table-responsive">
+      <div v-if="!status.locks || !status.locks.length" class="ov-empty">
+        <i class="fas fa-lock-open"></i>
+        <div class="ov-empty-title">No lock statistics</div>
+      </div>
+      <table v-else class="table table-sm mb-0 ov-table">
+        <thead><tr><th>Resource</th><th class="text-right">Acquired</th><th class="text-right">Waits</th><th class="text-right">Time waiting</th></tr></thead>
+        <tbody>
+          <tr v-for="l in status.locks">
+            <td>{{ l.name }}</td>
+            <td class="text-right">{{ number(l.acquire) }}</td>
+            <td class="text-right"><span :class="{ 'text-danger font-weight-bold': l.wait > 0 }">{{ number(l.wait) }}</span></td>
+            <td class="text-right">{{ runTime(l.waitMicros) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<div class="col-lg-6 ov-col">
+  <div class="card" data-table-filter="off">
+    <div class="card-header">
+      <i class="fas fa-server ov-ic"></i> Replica set status
+      <span class="ov-head-aside" v-if="details.replicaSet.set">{{ details.replicaSet.set }} · {{ (details.replicaSet.members || []).length }} members</span>
+    </div>
+    <div class="card-body p-0 table-responsive">
+      <div v-if="details.replicaSet.error" class="ov-empty ov-empty-sm">
+        <i class="fas fa-server"></i>
+        <div class="ov-empty-title">Not a replica set</div>
+        <div class="ov-empty-sub">{{ details.replicaSet.error }}</div>
+      </div>
+      <table v-else class="table table-sm mb-0 ov-table">
+        <thead><tr><th>Member</th><th>State</th><th>Health</th><th class="text-right">Lag</th><th class="text-right">Ping</th><th>Sync source</th></tr></thead>
+        <tbody>
+          <tr v-for="m in details.replicaSet.members">
+            <td class="text-nowrap">{{ m.name }} <span v-if="m.self" class="badge badge-light">this</span></td>
+            <td><span :class="'badge ' + stateClass(m.state)">{{ m.state }}</span></td>
+            <td class="text-nowrap"><i :class="m.health ? 'fas fa-check-circle text-success' : 'fas fa-times-circle text-danger'"></i> {{ m.health ? 'up' : 'down' }}</td>
+            <td class="text-right"><span :class="{ 'text-danger font-weight-bold': m.lagSecs > 10 }">{{ m.lagSecs == null ? '-' : m.lagSecs + 's' }}</span></td>
+            <td class="text-right">{{ m.pingMs == null ? '-' : m.pingMs + ' ms' }}</td>
+            <td class="small">{{ m.syncSource || '-' }}<div class="text-danger" v-if="m.message">{{ m.message }}</div></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card ov-fill">
+    <div class="card-header"><i class="fas fa-sitemap ov-ic"></i> Sharding status</div>
+    <div v-if="details.sharding.error" class="ov-empty ov-empty-sm is-error">
+      <i class="fas fa-exclamation-triangle"></i>
+      <div class="ov-empty-title">Sharding status unavailable</div>
+      <div class="ov-empty-sub">{{ details.sharding.error }}</div>
+    </div>
+    <div v-else-if="!details.sharding.sharded" class="ov-empty ov-empty-sm">
+      <i class="fas fa-sitemap"></i>
+      <div class="ov-empty-title">Not sharded</div>
+      <div class="ov-empty-sub">Not connected to a mongos router.</div>
+    </div>
+    <div v-else class="card-body p-0 table-responsive">
+      <div class="ov-subhead" v-if="details.sharding.balancer">Balancer <b>{{ details.sharding.balancer.mode }}</b>
+        <span v-if="details.sharding.balancer.inBalancerRound" class="badge badge-info">balancing</span></div>
+      <table class="table table-sm mb-0 ov-table">
+        <thead><tr><th>Shard</th><th>Host</th></tr></thead>
+        <tbody><tr v-for="s in details.sharding.shards"><td>{{ s.id }}</td><td class="small">{{ s.host }}</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Profiler | Server info -->
+<div class="col-lg-6 ov-col">
+  <div class="card ov-fill" data-table-filter="off">
+    <div class="card-header">
+      <i class="fas fa-user-clock ov-ic"></i> Database profiler
+      <span class="ov-head-aside" v-if="!details.profiler.error">
+        {{ details.profiler.db }} · level {{ details.profiler.level }} · slowms {{ details.profiler.slowms }}
+      </span>
+    </div>
+    <div v-if="details.profiler.error" class="ov-empty is-error">
+      <i class="fas fa-exclamation-triangle"></i>
+      <div class="ov-empty-title">Profiler unavailable</div>
+      <div class="ov-empty-sub">{{ details.profiler.error }}</div>
+    </div>
+    <div v-else-if="!details.profiler.level" class="ov-empty">
+      <i class="fas fa-power-off"></i>
+      <div class="ov-empty-title">Profiler is off</div>
+      <div class="ov-empty-sub">Turn it on for {{ details.profiler.db }} to record slow operations:</div>
+      <code class="ov-empty-code">db.setProfilingLevel(1, { slowms: {{ details.profiler.slowms || 100 }} })</code>
+    </div>
+    <div v-else-if="!details.profiler.ops.length" class="ov-empty">
+      <i class="fas fa-check-circle"></i>
+      <div class="ov-empty-title">No profiled operations</div>
+      <div class="ov-empty-sub">Nothing has run slower than {{ details.profiler.slowms }} ms.</div>
+    </div>
+    <div v-else class="card-body p-0 table-responsive ov-scroll-sm">
+      <table class="table table-sm mb-0 ov-table">
+        <thead><tr><th>Time</th><th>Op</th><th>Namespace</th><th class="text-right">ms</th></tr></thead>
+        <tbody><tr v-for="p in details.profiler.ops">
+          <td class="text-nowrap small">{{ time(p.ts) }}</td><td>{{ p.op }}</td><td class="small">{{ p.ns }}</td>
+          <td class="text-right"><span :class="{ 'text-danger font-weight-bold': p.millis >= 1000 }">{{ number(p.millis) }}</span></td>
+        </tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<div class="col-lg-6 ov-col">
+  <div class="card ov-fill">
+    <div class="card-header"><i class="fas fa-info-circle ov-ic"></i> More server info</div>
+    <div v-if="details.serverInfo.error" class="ov-empty is-error">
+      <i class="fas fa-exclamation-triangle"></i>
+      <div class="ov-empty-title">Server info unavailable</div>
+      <div class="ov-empty-sub">{{ details.serverInfo.error }}</div>
+    </div>
+    <div v-else class="card-body ov-kv-grid">
+      <div class="ov-kv-item"><span>Version</span><b>{{ details.serverInfo.version || '-' }}</b>
+        <span v-for="m in details.serverInfo.modules" class="badge badge-light">{{ m }}</span></div>
+      <div class="ov-kv-item"><span>Host</span><b>{{ details.serverInfo.hostname || '-' }}</b></div>
+      <div class="ov-kv-item"><span>OS</span><b>{{ details.serverInfo.os || '-' }}</b></div>
+      <div class="ov-kv-item"><span>CPU</span><b>{{ details.serverInfo.cpuCores ? details.serverInfo.cpuCores + ' cores' : '-' }}</b> <small class="text-muted">{{ details.serverInfo.cpuArch }}</small></div>
+      <div class="ov-kv-item"><span>Memory</span><b>{{ details.serverInfo.memSizeMB ? mb(details.serverInfo.memSizeMB) : '-' }}</b></div>
+      <div class="ov-kv-item"><span>Storage engine</span><b>{{ status.storageEngine || '-' }}</b></div>
+      <div class="ov-kv-item ov-kv-wide"><span>Asserts</span><b class="ov-kv-small">{{ assertsText || '-' }}</b></div>
+    </div>
+  </div>
+</div>
+
+<!-- Log viewer -->
+<div class="col-12">
+  <div class="card" data-table-filter="off">
+    <div class="card-header ov-log-header">
+      <span><i class="fas fa-file-alt ov-ic"></i> Log viewer — most recent mongod events</span>
+      <div class="ov-controls">
+        <select v-model="logSeverity" class="form-control form-control-sm" id="logSeverity" aria-label="Severity">
+          <option value="">All severities</option>
+          <option value="E">Errors / fatal</option>
+          <option value="W">Warnings +</option>
+        </select>
+        <div class="custom-control custom-checkbox ov-check">
+          <input type="checkbox" class="custom-control-input" id="logSlowOnly" v-model="logSlowOnly">
+          <label class="custom-control-label" for="logSlowOnly">Slow queries only</label>
+        </div>
+        <div class="ov-search">
+          <i class="fas fa-search"></i>
+          <input v-model="logSearch" id="logSearch" type="search" class="form-control form-control-sm" placeholder="Search message, client, app, detail…">
+        </div>
+        <span class="ov-head-count">{{ logRows.length }} / {{ logAll.length }}</span>
+      </div>
+    </div>
+    <div class="card-body p-0 table-responsive ov-scroll">
+      <div v-if="details.log.error" class="ov-empty is-error">
+        <i class="fas fa-exclamation-triangle"></i>
+        <div class="ov-empty-title">Log unavailable</div>
+        <div class="ov-empty-sub">{{ details.log.error }}</div>
+      </div>
+      <div v-else-if="!logRows.length" class="ov-empty">
+        <i class="fas fa-filter"></i>
+        <div class="ov-empty-title">No matching events</div>
+        <div class="ov-empty-sub">Change the severity, slow-query or search filters.</div>
+      </div>
+      <table v-else class="table table-sm table-hover mb-0 ov-table">
+        <thead><tr><th>Time</th><th>Sev</th><th>Component</th><th>Message</th><th class="text-right">ms</th><th>Client</th><th>App</th><th class="text-right"><span class="sr-only">Detail</span></th></tr></thead>
+        <tbody>
+          <tr v-for="e in logRows">
+            <td class="text-nowrap small">{{ time(e.t) }}</td>
+            <td><span :class="'badge ' + sevClass(e.s)">{{ e.s }}</span></td>
+            <td class="small">{{ e.c }}</td>
+            <td class="ov-msg">{{ e.msg }}<div class="text-muted small" v-if="e.ns">{{ e.ns }}</div></td>
+            <td class="text-right text-nowrap"><span :class="{ 'text-danger font-weight-bold': e.durationMillis >= 1000 }">{{ e.durationMillis == null ? '' : number(e.durationMillis) }}</span></td>
+            <td class="text-nowrap small">{{ e.client || '-' }}</td>
+            <td class="small">
+              <span v-if="e.appName">{{ e.appName }}</span>
+              <span v-else class="text-muted">{{ /^conn\d+$/.test(e.ctx) ? '-' : e.ctx }}</span>
+            </td>
+            <td class="text-right">
+              <button v-if="e.attr" type="button" class="btn btn-sm btn-outline-primary ov-view-btn" @click="showLogEntry(e)"
+                      :title="'View detail of ' + e.msg" :aria-label="'View detail of ' + e.msg">
+                <i class="fas fa-code"></i> View
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- JSON popup: an operation's command or a log event's detail -->
+<div v-if="popup" class="ov-modal-backdrop" @click.self="closePopup">
+  <div class="ov-modal" role="dialog" aria-modal="true" aria-labelledby="ovPopupTitle">
+    <div class="ov-modal-head">
+      <div class="ov-modal-title" id="ovPopupTitle">
+        <span :class="'badge ' + popup.badgeClass">{{ popup.badge }}</span>
+        <b>{{ popup.title }}</b>
+        <span class="text-muted" v-if="popup.subtitle">· {{ popup.subtitle }}</span>
+      </div>
+      <button type="button" class="ov-modal-close" @click="closePopup" aria-label="Close" ref="popupClose"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="ov-modal-meta">
+      <span v-for="m in popup.meta" :class="{ 'text-danger': m.danger }"><i :class="m.icon"></i> {{ m.text }}</span>
+    </div>
+    <div class="ov-modal-body">
+      <pre class="ov-json" v-html="popupHtml"></pre>
+    </div>
+    <div class="ov-modal-foot">
+      <span class="text-muted small">
+        <span v-if="popup.truncated"><i class="fas fa-cut"></i> Too large; showing the first 50,000 characters. · </span>
+        {{ popup.note }}
+      </span>
+      <div class="ov-controls">
+        <button type="button" class="btn btn-sm btn-secondary" @click="copyPopup">
+          <i :class="copied ? 'fas fa-check' : 'far fa-copy'"></i> {{ copied ? 'Copied' : 'Copy JSON' }}
+        </button>
+        <button type="button" class="btn btn-sm btn-primary" @click="closePopup">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .ov-toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+  .ov-controls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .ov-controls .form-control { width: auto; }
+  /* Toolbar controls share one height so the dropdown and button line up. */
+  .ov-toolbar .form-control, .ov-toolbar .btn { height: 32px; font-size: 0.82rem; }
+  .ov-toolbar .btn { display: inline-flex; align-items: center; gap: 6px; padding: 0 12px !important; line-height: 1; }
+  .ov-toolbar .form-control { padding-top: 0; padding-bottom: 0; }
+  .ov-kpi .card-body { display: flex; align-items: center; gap: 14px; }
+  .ov-kpi-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; flex-shrink: 0; }
+  .ov-kpi-label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #64748b; }
+  .ov-kpi-value { font-size: 1.5rem; font-weight: 800; color: #0f172a; line-height: 1.2; font-variant-numeric: tabular-nums; }
+  .ov-kpi-value-sm { font-size: 1.15rem; }
+  .ov-kpi-sub { font-size: 0.76rem; color: #94a3b8; }
+  .ov-ic { color: #2563eb; }
+  .ov-chart { position: relative; height: 280px; }
+  .ov-chart-sm { height: 200px; }
+  .ov-table { font-size: 0.82rem; }
+  .ov-table td, .ov-table th { vertical-align: middle; }
+  .ov-scroll { max-height: 420px; overflow-y: auto; }
+  .ov-scroll-sm { max-height: 220px; overflow-y: auto; }
+  .ov-live-switch { margin-right: 6px; white-space: nowrap; }
+  .ov-live-switch .custom-control-label { cursor: pointer; font-size: 0.85rem; }
+  .ov-live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #16a34a; margin-left: 4px; vertical-align: middle; animation: ov-pulse 1.6s infinite; }
+  @keyframes ov-pulse { 0% { box-shadow: 0 0 0 0 rgba(22,163,74,0.6); } 70% { box-shadow: 0 0 0 6px rgba(22,163,74,0); } 100% { box-shadow: 0 0 0 0 rgba(22,163,74,0); } }
+  .ov-view-btn { padding: 2px 10px !important; font-size: 0.75rem; white-space: nowrap; }
+  .ov-modal-backdrop { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 1060; background: rgba(15, 23, 42, 0.55); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .ov-modal { background: #fff; border-radius: 12px; box-shadow: 0 20px 50px rgba(15, 23, 42, 0.35); width: 100%; max-width: 920px; max-height: calc(100vh - 32px); display: flex; flex-direction: column; overflow: hidden; }
+  .ov-modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; }
+  .ov-modal-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; word-break: break-all; }
+  .ov-modal-close { background: none; border: 0; font-size: 1.1rem; color: #64748b; width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0; }
+  .ov-modal-close:hover { background: #f1f5f9; color: #0f172a; }
+  .ov-modal-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 8px 16px; font-size: 0.78rem; color: #475569; background: #f8fafc; border-bottom: 1px solid #e2e8f0; }
+  .ov-modal-meta i { color: #94a3b8; margin-right: 3px; }
+  .ov-modal-body { overflow: auto; flex: 1; min-height: 0; background: #0f172a; }
+  .ov-json { margin: 0; padding: 14px 16px; font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, 'Courier New', monospace; font-size: 0.8rem; line-height: 1.55; color: #e2e8f0; white-space: pre; tab-size: 2; }
+  .ov-json .j-key { color: #7dd3fc; }
+  .ov-json .j-op { color: #fda4af; }
+  .ov-json .j-str { color: #86efac; }
+  .ov-json .j-num { color: #fbbf24; }
+  .ov-json .j-bool { color: #c4b5fd; }
+  .ov-json .j-null { color: #f9a8d4; }
+  .ov-modal-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 10px 16px; border-top: 1px solid #e2e8f0; }
+  .ov-log-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+
+  /* Cards side by side share one height; in a stacked column the last card takes the rest. */
+  .ov-col { display: flex; flex-direction: column; }
+  .ov-col > .ov-fill { flex: 1 1 auto; }
+  .ov-col > .card:not(.ov-fill) { flex: 0 0 auto; }
+  .ov-head-aside { margin-left: auto; font-size: 0.78rem; font-weight: 500; color: var(--muted, #64748b); display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .ov-head-count { font-size: 0.75rem; color: var(--muted, #64748b); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .ov-subhead { padding: 8px 12px; font-size: 0.82rem; border-bottom: 1px solid var(--border, #e2e8f0); }
+  .ov-num { font-variant-numeric: tabular-nums; }
+  .ov-msg { min-width: 200px; }
+  .ov-row-current td { background: #eff6ff; }
+  .ov-check { font-size: 0.82rem; white-space: nowrap; }
+  .ov-check .custom-control-label { cursor: pointer; }
+  .ov-search { position: relative; }
+  .ov-search i { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); font-size: 0.72rem; color: var(--muted, #94a3b8); }
+  .ov-search .form-control { padding-left: 26px; width: 240px !important; max-width: 100%; }
+
+  /* Empty / error states */
+  .ov-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 4px; padding: 32px 16px; color: var(--muted, #64748b); }
+  .ov-empty > i { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: #f1f5f9; color: #94a3b8; font-size: 1.05rem; margin-bottom: 6px; }
+  .ov-empty-title { font-weight: 600; color: var(--text, #0f172a); font-size: 0.9rem; }
+  .ov-empty-sub { font-size: 0.8rem; max-width: 380px; }
+  .ov-empty-code { margin-top: 6px; font-size: 0.75rem; background: #f1f5f9; color: #334155; padding: 4px 10px; border-radius: 6px; }
+  .ov-empty-sm { padding: 20px 16px; }
+  .ov-empty-sm > i { width: 36px; height: 36px; font-size: 0.9rem; }
+  .ov-empty.is-error > i { background: #fee2e2; color: #dc2626; }
+  .ov-empty-overlay { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: var(--surface, #fff); padding: 16px; }
+
+  /* Server info as a two-column key/value grid */
+  .ov-kv-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 20px; align-content: start; }
+  .ov-kv-item { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .ov-kv-item > span:first-child { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted, #64748b); }
+  .ov-kv-item b { font-weight: 600; color: var(--text, #0f172a); word-break: break-word; }
+  .ov-kv-wide { grid-column: 1 / -1; }
+  .ov-kv-small { font-size: 0.8rem; font-weight: 500 !important; }
+  @media (max-width: 575.98px) { .ov-kv-grid { grid-template-columns: 1fr; } .ov-search .form-control { width: 100% !important; } }
+</style>
+
+<script src="/lib/chart.js/dist/chart.umd.min.js"></script>
+<script>
+  (function () {
+    var WINDOW = 60;          // points kept on the live charts
+    var charts = {};          // Chart.js instances live outside Vue's reactivity
+    var prev = null;          // previous serverStatus sample, for mongostat rates
+    var timer = null;
+    var detailsTimer = null;
+    var palette = ['#2563eb', '#7c3aed', '#059669', '#d97706', '#db2777', '#0891b2', '#65a30d', '#64748b'];
+    var OPS = ['insert', 'query', 'update', 'delete', 'getmore', 'command'];
+    var topNames = [];        // full namespaces behind the shortened Mongotop labels
+
+    // Live on/off and the interval are remembered per browser.
+    var PREF_KEY = 'overview.live';
+    function loadPrefs() {
+      try { return JSON.parse(localStorage.getItem(PREF_KEY)) || {}; } catch (e) { return {}; }
+    }
+    function savePrefs(prefs) {
+      try { localStorage.setItem(PREF_KEY, JSON.stringify(prefs)); } catch (e) { /* storage blocked */ }
+    }
+
+    function lineChart(id, series, yTitle) {
+      return new Chart(document.getElementById(id), {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: series.map(function (label, i) {
+            return { label: label, data: [], borderColor: palette[i], backgroundColor: palette[i], borderWidth: 2, pointRadius: 0, pointHitRadius: 8, tension: 0.25 };
+          })
+        },
+        options: {
+          animation: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: { legend: { position: 'bottom' } },
+          scales: {
+            x: { grid: { display: false }, ticks: { maxTicksLimit: 8, maxRotation: 0 } },
+            y: { beginAtZero: true, grid: { color: '#f1f5f9' }, title: { display: !!yTitle, text: yTitle } }
+          }
+        }
+      });
+    }
+
+    function hbar(id, series, fullLabel) {
+      return new Chart(document.getElementById(id), {
+        type: 'bar',
+        data: {
+          labels: [],
+          datasets: series.map(function (label, i) {
+            return { label: label, data: [], backgroundColor: palette[i], borderRadius: 3, borderSkipped: false, maxBarThickness: 18 };
+          })
+        },
+        options: {
+          indexAxis: 'y',
+          animation: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { position: 'bottom' },
+            // Axis labels may be shortened; the tooltip names the full item.
+            tooltip: { callbacks: { title: function (items) { if (!items.length) return ''; return (fullLabel && fullLabel(items[0].dataIndex)) || items[0].label; } } }
+          },
+          scales: {
+            x: { stacked: true, beginAtZero: true, grid: { color: '#f1f5f9' }, title: { display: false, text: '' } },
+            y: { stacked: true, grid: { display: false }, ticks: { autoSkip: false } }
+          }
+        }
+      });
+    }
+
+    // Pretty JSON -> HTML with token classes; MongoDB operators ($match, $oid…) get their own colour.
+    function highlightJson(json) {
+      var esc = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return esc.replace(/("(\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false)\b|\bnull\b|-?\d+(?:\.\d+)?(?:[eE][+\-]?\d+)?)/g, function (m) {
+        var cls = 'j-num';
+        if (m.charAt(0) === '"') cls = /:$/.test(m) ? (m.charAt(1) === '$' ? 'j-op' : 'j-key') : 'j-str';
+        else if (m === 'true' || m === 'false') cls = 'j-bool';
+        else if (m === 'null') cls = 'j-null';
+        return '<span class="' + cls + '">' + m + '</span>';
+      });
+    }
+
+    // Half-hour slot (0 = 00:00 … 47 = 23:30) as HH:MM
+    function slotLabel(slot) {
+      var m = slot * 30;
+      return ('0' + Math.floor(m / 60) % 24).slice(-2) + ':' + ('0' + (m % 60)).slice(-2);
+    }
+
+    function push(chart, label, values) {
+      chart.data.labels.push(label);
+      chart.data.datasets.forEach(function (ds, i) { ds.data.push(values[i]); });
+      if (chart.data.labels.length > WINDOW) {
+        chart.data.labels.shift();
+        chart.data.datasets.forEach(function (ds) { ds.data.shift(); });
+      }
+      chart.update('none');
+    }
+
+    Page.setup({
+      // Runs before the server data is proxied onto the instance, so read Page.data directly.
+      data: function () {
+        var live = Page.data.live || {};
+        var prefs = loadPrefs();
+        return {
+          status: live.status || {},
+          top: live.top || { rows: [] },
+          ops: live.ops || [],
+          rates: null,
+          rateSamples: 0,
+          lastPoll: Page.data.updatedAt,
+          pollError: '',
+          interval: [2, 5, 10, 30].indexOf(prefs.interval) >= 0 ? prefs.interval : 5,
+          liveEnabled: prefs.enabled !== false,
+          loadingDetails: false,
+          logSeverity: '',
+          logSlowOnly: false,
+          logSearch: '',
+          popup: null,
+          copied: false
+        };
+      },
+      computed: {
+        opsList: function () { return Array.isArray(this.ops) ? this.ops : []; },
+        slowOps: function () { return this.opsList.filter(function (o) { return o.secs >= 5; }).length; },
+        lockWaitOps: function () { return this.opsList.filter(function (o) { return o.waitingForLock; }).length; },
+        assertsText: function () {
+          var a = this.status.asserts || {};
+          return Object.keys(a).filter(function (k) { return typeof a[k] === 'number'; })
+            .map(function (k) { return k + ' ' + a[k]; }).join(' · ');
+        },
+        topRows: function () { return (this.top && this.top.rows) || []; },
+        dbList: function () { return Array.isArray(this.details.databases) ? this.details.databases : []; },
+        // Database sizes are charted in GB once any database passes 10 GB.
+        sizeUnit: function () {
+          var max = this.dbList.reduce(function (m, d) { return Math.max(m, d.storageSize + d.indexSize); }, 0);
+          return max >= 10 * 1073741824 ? 'GB' : 'MB';
+        },
+        loginTotal: function () { return (this.details.logins && this.details.logins.total) || 0; },
+        loginPeak: function () {
+          var b = (this.details.logins && this.details.logins.buckets) || [];
+          if (!b.length) return null;
+          var top = b.reduce(function (m, x) { return x.count > m.count ? x : m; }, b[0]);
+          return { count: top.count, label: slotLabel(top.slot), end: slotLabel(top.slot + 1) };
+        },
+        lockWaits: function () { return this.sumOf(this.status.locks, 'wait'); },
+        logAll: function () { return Array.isArray(this.details.log) ? this.details.log : []; },
+        popupJson: function () {
+          if (!this.popup) return '';
+          try { return JSON.stringify(JSON.parse(this.popup.raw), null, 2); } catch (e) { return this.popup.raw || ''; }
+        },
+        popupHtml: function () { return highlightJson(this.popupJson); },
+        logRows: function () {
+          var log = this.logAll;
+          var sev = this.logSeverity, slow = this.logSlowOnly, q = this.logSearch.toLowerCase();
+          var rank = { F: 0, E: 1, W: 2 };
+          return log.filter(function (e) {
+            if (sev === 'E' && !(e.s === 'F' || e.s === 'E')) return false;
+            if (sev === 'W' && !(e.s in rank)) return false;
+            if (slow && e.msg !== 'Slow query') return false;
+            if (q && [e.msg, e.c, e.ns, e.client, e.appName, e.ctx, e.attr].join(' ').toLowerCase().indexOf(q) < 0) return false;
+            return true;
+          }).slice(0, 200);
+        }
+      },
+      watch: {
+        interval: function () { this.savePrefs(); this.schedule(); },
+        liveEnabled: function (on) {
+          this.savePrefs();
+          if (on) this.poll();
+          this.schedule();
+        }
+      },
+      methods: {
+        number: function (v) { return Number(v || 0).toLocaleString('en-US'); },
+        mb: function (v) {
+          v = Number(v || 0);
+          return v >= 1024 ? (v / 1024).toFixed(1) + ' GB' : v + ' MB';
+        },
+        bytes: function (v) {
+          v = Number(v || 0);
+          if (!v) return '0 B';
+          var units = ['B', 'KB', 'MB', 'GB', 'TB'], i = Math.min(units.length - 1, Math.floor(Math.log(v) / Math.log(1024)));
+          return (v / Math.pow(1024, i)).toFixed(i ? 1 : 0) + ' ' + units[i];
+        },
+        pct: function (a, b) { return b ? (a / b * 100).toFixed(1) + '%' : '-'; },
+        duration: function (secs) {
+          secs = Number(secs || 0);
+          var d = Math.floor(secs / 86400), h = Math.floor(secs % 86400 / 3600), m = Math.floor(secs % 3600 / 60);
+          return (d ? d + 'd ' : '') + h + 'h ' + m + 'm';
+        },
+        runTime: function (micros) {
+          var ms = Number(micros || 0) / 1000;
+          if (ms < 1000) return ms.toFixed(ms < 10 ? 1 : 0) + ' ms';
+          if (ms < 60000) return (ms / 1000).toFixed(1) + ' s';
+          return (ms / 60000).toFixed(1) + ' min';
+        },
+        time: function (t) {
+          if (!t) return '';
+          var d = new Date(t);
+          return isNaN(d) ? String(t) : d.toLocaleString('en-GB', { hour12: false });
+        },
+        sumOf: function (list, key) {
+          return Array.isArray(list) ? list.reduce(function (t, r) { return t + (r[key] || 0); }, 0) : 0;
+        },
+        stateClass: function (s) {
+          return { PRIMARY: 'badge-success', SECONDARY: 'badge-primary', ARBITER: 'badge-secondary' }[s] || 'badge-warning';
+        },
+        sevClass: function (s) {
+          return { F: 'badge-danger', E: 'badge-danger', W: 'badge-warning' }[s] || 'badge-light';
+        },
+
+        // mongostat: rates from two cumulative serverStatus samples
+        applyStatus: function (s) {
+          if (!s || s.error) return;
+          this.status = Object.freeze(s);
+          var label = new Date(s.at).toLocaleTimeString('en-GB', { hour12: false });
+          if (prev && s.at > prev.at && s.uptime >= prev.uptime) {
+            var secs = (s.at - prev.at) / 1000;
+            var rate = function (a, b) { return Math.max(0, (a - b) / secs); };
+            var ops = OPS.map(function (k) { return +rate(s.opcounters[k], prev.opcounters[k]).toFixed(1); });
+            this.rates = { totalOps: ops.reduce(function (t, v) { return t + v; }, 0) };
+            this.rateSamples++;
+            push(charts.ops, label, ops);
+            push(charts.net, label, [
+              +(rate(s.network.bytesIn, prev.network.bytesIn) / 1024).toFixed(1),
+              +(rate(s.network.bytesOut, prev.network.bytesOut) / 1024).toFixed(1)
+            ]);
+          }
+          push(charts.conn, label, [s.connections.current, s.connections.active]);
+          var g = s.globalLock;
+          push(charts.lock, label, [g.queueReaders, g.queueWriters, g.activeReaders, g.activeWriters]);
+          if (s.cache && s.cache.max) {
+            push(charts.cache, label, [+(s.cache.used / s.cache.max * 100).toFixed(1), +(s.cache.dirty / s.cache.max * 100).toFixed(1)]);
+          }
+          prev = s;
+        },
+        applyTop: function (t) {
+          this.top = Object.freeze(t || { rows: [] });
+          var rows = this.top.rows || [];
+          var prefix = this.dbName + '.';
+          topNames = rows.map(function (r) { return r.ns; });
+          // Collections of the connected database are labelled by name alone.
+          // Name plus total ms/s, so small bars next to a busy collection still read clearly.
+          charts.top.data.labels = rows.map(function (r) {
+            return (r.ns.indexOf(prefix) === 0 ? r.ns.slice(prefix.length) : r.ns) + '  ' + r.total;
+          });
+          charts.top.data.datasets[0].data = rows.map(function (r) { return r.read; });
+          charts.top.data.datasets[1].data = rows.map(function (r) { return r.write; });
+          charts.top.data.datasets[2].data = rows.map(function (r) { return r.other || 0; });
+          charts.top.update('none');
+        },
+        // Logins per half hour, from midnight to now (or the latest activity).
+        applyLogins: function (logins) {
+          if (!charts.logins) return;
+          var buckets = (logins && logins.buckets) || [];
+          var now = new Date(), nowSlot = now.getHours() * 2 + (now.getMinutes() >= 30 ? 1 : 0);
+          var last = buckets.reduce(function (m, b) { return Math.max(m, b.slot); }, nowSlot);
+          var counts = [];
+          for (var i = 0; i <= Math.min(47, last); i++) counts.push(0);
+          buckets.forEach(function (b) { if (b.slot < counts.length) counts[b.slot] = b.count; });
+          charts.logins.data.labels = counts.map(function (c, i) { return slotLabel(i); });
+          charts.logins.data.datasets[0].data = counts;
+          charts.logins.update('none');
+        },
+        applyDatabases: function (dbs) {
+          if (!Array.isArray(dbs)) return;
+          var div = this.sizeUnit === 'GB' ? 1073741824 : 1048576;
+          var size = function (v) { return +(v / div).toFixed(1); };
+          charts.dbSize.data.labels = dbs.map(function (d) { return d.name; });
+          charts.dbSize.data.datasets[0].data = dbs.map(function (d) { return size(d.storageSize); });
+          charts.dbSize.data.datasets[1].data = dbs.map(function (d) { return size(d.indexSize); });
+          charts.dbSize.options.scales.x.title = { display: true, text: this.sizeUnit };
+          charts.dbSize.update('none');
+        },
+        poll: function () {
+          var vm = this;
+          return fetch('/overview/live', { headers: { Accept: 'application/json' } })
+            .then(function (res) { if (!res.ok) throw new Error('HTTP ' + res.status); return res.json(); })
+            .then(function (live) {
+              vm.pollError = live.status && live.status.error ? live.status.error : '';
+              vm.applyStatus(live.status);
+              vm.applyTop(live.top);
+              vm.ops = Object.freeze(live.ops || []);
+              vm.lastPoll = new Date().toLocaleTimeString('en-GB', { hour12: false });
+            })
+            .catch(function (err) { vm.pollError = err.message; });
+        },
+        loadDetails: function () {
+          var vm = this;
+          vm.loadingDetails = true;
+          return fetch('/overview/details', { headers: { Accept: 'application/json' } })
+            .then(function (res) { if (!res.ok) throw new Error('HTTP ' + res.status); return res.json(); })
+            .then(function (d) { vm.details = Object.freeze(d); vm.applyDatabases(d.databases); vm.applyLogins(d.logins); })
+            .catch(function (err) { vm.pollError = err.message; })
+            .then(function () { vm.loadingDetails = false; });
+        },
+        schedule: function () {
+          var vm = this;
+          clearTimeout(timer);
+          if (!vm.liveEnabled || document.hidden) return;
+          timer = setTimeout(function () { vm.poll().then(function () { vm.schedule(); }); }, vm.interval * 1000);
+        },
+        openPopup: function (popup) {
+          this.popup = Object.freeze(popup);
+          this.copied = false;
+          var vm = this;
+          this.$nextTick(function () { if (vm.$refs.popupClose) vm.$refs.popupClose.focus(); });
+        },
+        showCommand: function (o) {
+          var meta = [{ icon: 'far fa-clock', text: this.runTime(o.micros) }];
+          if (o.client) meta.push({ icon: 'fas fa-network-wired', text: o.client });
+          if (o.appName || o.desc) meta.push({ icon: 'fas fa-cube', text: o.appName || o.desc });
+          if (o.user) meta.push({ icon: 'fas fa-user', text: o.user });
+          if (o.planSummary) meta.push({ icon: 'fas fa-project-diagram', text: o.planSummary, danger: o.planSummary.indexOf('COLLSCAN') >= 0 });
+          if (o.waitingForLock) meta.push({ icon: 'fas fa-lock', text: 'waiting for lock', danger: true });
+          this.openPopup({
+            badge: o.op || 'op', badgeClass: 'badge-dark', title: o.ns || 'Command', subtitle: 'opid ' + o.opid,
+            meta: meta, raw: o.command, truncated: o.commandTruncated,
+            note: 'Snapshot when opened; the operation may have finished since.'
+          });
+        },
+        showLogEntry: function (e) {
+          var meta = [{ icon: 'far fa-clock', text: this.time(e.t) || '-' }, { icon: 'fas fa-puzzle-piece', text: e.c || '-' }];
+          if (e.ctx) meta.push({ icon: 'fas fa-plug', text: e.ctx });
+          if (e.client) meta.push({ icon: 'fas fa-network-wired', text: e.client });
+          if (e.appName) meta.push({ icon: 'fas fa-cube', text: e.appName });
+          if (e.ns) meta.push({ icon: 'fas fa-database', text: e.ns });
+          if (e.durationMillis != null) meta.push({ icon: 'fas fa-stopwatch', text: this.number(e.durationMillis) + ' ms', danger: e.durationMillis >= 1000 });
+          this.openPopup({
+            badge: { F: 'FATAL', E: 'ERROR', W: 'WARNING', I: 'INFO', D: 'DEBUG' }[e.s] || e.s || 'LOG', badgeClass: this.sevClass(e.s),
+            title: e.msg || 'Log event', subtitle: '',
+            meta: meta, raw: e.attr, truncated: e.attrTruncated,
+            note: 'Attributes (attr) of the mongod log event.'
+          });
+        },
+        closePopup: function () { this.popup = null; },
+        copyPopup: function () {
+          var vm = this, text = this.popupJson;
+          var done = function () { vm.copied = true; setTimeout(function () { vm.copied = false; }, 1500); };
+          var fallback = function () {
+            var ta = document.createElement('textarea');
+            ta.value = text; document.body.appendChild(ta); ta.select();
+            try { if (document.execCommand('copy')) done(); } catch (e) { /* left selected for a manual copy */ }
+            document.body.removeChild(ta);
+          };
+          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback);
+          else fallback();
+        },
+        savePrefs: function () {
+          savePrefs({ enabled: this.liveEnabled, interval: this.interval });
+        },
+        // With live data off, the button takes a single sample of everything.
+        refreshAll: function () {
+          if (!this.liveEnabled) this.poll();
+          return this.loadDetails();
+        }
+      },
+      mounted: function () {
+        if (typeof Chart === 'undefined') return;
+        Chart.defaults.font.family = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+        Chart.defaults.color = '#64748b';
+        Chart.defaults.maintainAspectRatio = false;
+        Chart.defaults.plugins.legend.labels.boxWidth = 12;
+
+        charts.ops = lineChart('opsChart', OPS, 'ops/s');
+        charts.conn = lineChart('connChart', ['current', 'active']);
+        charts.net = lineChart('netChart', ['in', 'out'], 'KB/s');
+        charts.lock = lineChart('lockChart', ['queued readers', 'queued writers', 'active readers', 'active writers']);
+        charts.cache = lineChart('cacheChart', ['used', 'dirty'], '%');
+        charts.top = hbar('topChart', ['read', 'write', 'other'], function (i) { return topNames[i]; });
+        charts.top.data.datasets[2].backgroundColor = '#94a3b8';
+        charts.logins = new Chart(document.getElementById('loginChart'), {
+          type: 'line',
+          data: { labels: [], datasets: [{ label: 'Sessions', data: [], borderColor: '#0891b2', backgroundColor: 'rgba(8, 145, 178, 0.12)', fill: true, borderWidth: 2, tension: 0.3, pointRadius: 2, pointHitRadius: 10 }] },
+          options: {
+            animation: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: { display: false },
+              tooltip: { callbacks: { title: function (items) { var i = items[0].dataIndex; return slotLabel(i) + '–' + slotLabel(i + 1); }, label: function (item) { return ' ' + item.parsed.y + ' sessions'; } } }
+            },
+            scales: {
+              x: { grid: { display: false }, ticks: { maxTicksLimit: 16, maxRotation: 0 } },
+              y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { precision: 0 }, title: { display: true, text: 'sessions' } }
+            }
+          }
+        });
+        charts.dbSize = hbar('dbSizeChart', ['storage', 'index']);
+
+        this.applyStatus(this.live.status);
+        this.applyTop(this.live.top);
+        this.applyDatabases(this.details.databases);
+        this.applyLogins(this.details.logins);
+
+        var vm = this;
+        // First rates need a second sample, so poll once straight away.
+        if (this.liveEnabled) setTimeout(function () { vm.poll(); }, 1000);
+        this.schedule();
+        detailsTimer = setInterval(function () { if (vm.liveEnabled && !document.hidden) vm.loadDetails(); }, 60000);
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape' && vm.popup) vm.closePopup();
+        });
+        document.addEventListener('visibilitychange', function () {
+          if (document.hidden) clearTimeout(timer); else vm.schedule();
+        });
+      }
+    });
+  })();
+</script>

@@ -1,0 +1,301 @@
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-filter" style="color:#2563eb;"></i>
+      <span>Filter</span>
+    </div>
+    <div class="card-body">
+      <form class="lb-filters" @submit.prevent="reload">
+        <div class="lb-field">
+          <label for="lb-dataset">Dataset</label>
+          <input id="lb-dataset" type="text" class="form-control" v-model.trim="f.dataset" placeholder="Any dataset">
+        </div>
+        <div class="lb-field">
+          <label for="lb-code">Dataset code</label>
+          <input id="lb-code" type="text" class="form-control" v-model.trim="f.datasetcode" placeholder="Any code">
+        </div>
+        <div class="lb-field">
+          <label for="lb-result">Result type</label>
+          <select id="lb-result" class="form-control" v-model="f.resulttype">
+            <option value="">ทั้งหมด</option>
+            <option value="SUCCESS">SUCCESS</option>
+            <option value="ERROR">ERROR</option>
+          </select>
+        </div>
+        <div class="lb-field">
+          <label for="lb-from">From</label>
+          <input id="lb-from" type="date" class="form-control" v-model="f.from">
+        </div>
+        <div class="lb-field">
+          <label for="lb-to">To</label>
+          <input id="lb-to" type="date" class="form-control" v-model="f.to">
+        </div>
+        <div class="lb-field lb-narrow">
+          <label for="lb-size">Batch size</label>
+          <select id="lb-size" class="form-control" v-model.number="batchSize">
+            <option v-for="n in sizeOptions" :key="n" :value="n">{{ n }}</option>
+          </select>
+        </div>
+        <div class="lb-actions">
+          <button type="submit" class="btn btn-success"><i class="fas fa-search mr-1"></i>กรองข้อมูล</button>
+          <button type="button" class="btn btn-light" @click="resetFilters">Reset</button>
+        </div>
+      </form>
+      <div class="lb-hint">Rows load newest first in batches of {{ batchSize }}. The date range is the date the log was written; leave it empty for all dates.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header lb-head">
+      <span class="lb-title"><i class="fas fa-file-import" style="color:#2563eb;"></i> Import Logs</span>
+      <span class="lb-status" aria-live="polite">{{ statusText }}</span>
+      <span class="lb-buttons">
+        <button type="button" class="btn btn-outline-primary btn-sm" v-if="hasMore && !loading" @click="loadNext()"><i class="fas fa-angle-double-down mr-1"></i>Next batch</button>
+        <button type="button" class="btn btn-outline-primary btn-sm" v-if="hasMore && !loadingAll" :disabled="rows.length >= rowCap" @click="loadAll"><i class="fas fa-layer-group mr-1"></i>Load all</button>
+        <button type="button" class="btn btn-outline-danger btn-sm" v-if="loading" @click="stop"><i class="fas fa-stop mr-1"></i>Stop</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" v-if="total === undefined && !counting && (rows.length || hasMore)" @click="count" title="Count every matching row. On a very large log this reads the whole date range."><i class="fas fa-calculator mr-1"></i>Count matches</button>
+        <span class="lb-counting" v-if="counting"><i class="fas fa-spinner fa-spin mr-1"></i>Counting…</span>
+        <a :href="exportUrl" class="btn btn-success btn-sm"><i class="fas fa-download mr-1"></i>Export CSV</a>
+      </span>
+    </div>
+    <div class="lb-progress" :class="{ 'is-indeterminate': loading && pct === null }" role="progressbar" :aria-valuenow="pct === null ? null : Math.round(pct)" aria-valuemin="0" aria-valuemax="100">
+      <span :style="{ width: (pct === null ? (loading ? 30 : 0) : pct) + '%' }"></span>
+    </div>
+    <div class="card-body p-0">
+      <div class="alert alert-danger m-3" v-if="error">
+        <i class="fas fa-exclamation-triangle mr-1"></i>{{ error }}
+        <button type="button" class="btn btn-sm btn-outline-danger ml-2" @click="loadNext(!batches)">Retry</button>
+      </div>
+      <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
+        <table class="table mb-0 lb-table">
+          <thead>
+            <tr>
+              <th>USERNAME</th>
+              <th>AUDITDATE</th>
+              <th>DATASET</th>
+              <th>DATASETCODE</th>
+              <th>RESULTTYPE</th>
+              <th>ERRORLOG</th>
+              <th>CREATEDBY</th>
+              <th>CREATEDAT</th>
+              <th>MODIFIEDBY</th>
+              <th>MODIFIEDAT</th>
+              <th>ORG</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in shown" :key="item._id">
+              <td>{{ item.username }}</td>
+              <td class="lb-nowrap">{{ item.auditdate }}</td>
+              <td>{{ item.dataset }}</td>
+              <td>{{ item.datasetcode }}</td>
+              <td class="text-center"><span class="lb-badge" :class="item.resulttype == 'ERROR' ? 'is-error' : 'is-ok'"><i :class="item.resulttype == 'ERROR' ? 'fas fa-times-circle' : 'fas fa-check-circle'" aria-hidden="true"></i>{{ item.resulttype || '—' }}</span></td>
+              <td class="lb-log">
+                <div :class="{ 'is-open': open[item._id] }" @click="toggle(item._id)" :title="open[item._id] ? 'Click to collapse' : 'Click to expand'">{{ item.errorlog }}</div>
+                <small v-if="item.errorlogTruncated && open[item._id]" class="text-muted">Shortened here; the CSV export has the full text.</small>
+              </td>
+              <td>{{ item.createdby }}</td>
+              <td class="lb-nowrap">{{ item.createdat }}</td>
+              <td>{{ item.modifiedby }}</td>
+              <td class="lb-nowrap">{{ item.modifiedat }}</td>
+              <td>{{ item.organisation }}</td>
+            </tr>
+            <tr v-if="!rows.length && !loading && !error">
+              <td colspan="11" class="text-center text-muted py-4">No import logs match these filters.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="lb-more" ref="more">
+        <span v-if="loading"><i class="fas fa-spinner fa-spin mr-1"></i>Loading batch {{ batches + 1 }}…</span>
+        <button type="button" class="btn btn-link" v-else-if="hasMore && !error" @click="loadNext()">Load the next {{ batchSize }} rows</button>
+        <span v-else-if="rows.length && !hasMore">All {{ number(rows.length) }} rows loaded.</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .lb-filters { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: flex-end; }
+  .lb-field { display: flex; flex-direction: column; gap: 4px; min-width: 160px; flex: 1 1 160px; max-width: 240px; }
+  .lb-field.lb-narrow { min-width: 110px; flex: 0 1 120px; }
+  .lb-field label { margin: 0; font-size: 12px; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: .03em; }
+  .lb-actions { display: flex; gap: 8px; }
+  .lb-hint { margin-top: 10px; font-size: 12px; color: #64748b; }
+  .lb-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+  .lb-title { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  .lb-status { flex: 1 1 auto; font-size: 13px; color: #475569; font-variant-numeric: tabular-nums; }
+  .lb-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .lb-counting { font-size: 13px; color: #475569; }
+  .lb-progress { height: 4px; background: #e2e8f0; overflow: hidden; position: relative; }
+  .lb-progress > span { display: block; height: 100%; background: #2563eb; transition: width .25s ease; }
+  .lb-progress.is-indeterminate > span { position: absolute; animation: lb-slide 1.1s ease-in-out infinite; }
+  @keyframes lb-slide { from { left: -30%; } to { left: 100%; } }
+  .lb-table td { vertical-align: top; }
+  .lb-nowrap { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .lb-badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 1.6; white-space: nowrap; border: 1px solid transparent; }
+  .lb-badge.is-error { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+  .lb-badge.is-ok { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
+  .lb-log { min-width: 260px; max-width: 520px; }
+  .lb-log > div { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; word-break: break-word; cursor: pointer; }
+  .lb-log > div.is-open { display: block; -webkit-line-clamp: unset; }
+  .lb-more { padding: 12px 16px; text-align: center; font-size: 13px; color: #64748b; min-height: 44px; }
+</style>
+
+<script>
+  (function () {
+    var ROW_CAP = 20000;   // rows kept in the page; the export has no limit
+    var FIELDS = ['dataset', 'datasetcode', 'resulttype', 'from', 'to'];
+    var nf = new Intl.NumberFormat('en-US');
+
+    function api(url, signal) {
+      return fetch(url, { headers: { Accept: 'application/json' }, signal: signal }).then(function (res) {
+        return res.json().catch(function () { return { error: 'HTTP ' + res.status }; }).then(function (data) {
+          if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+          return data;
+        });
+      });
+    }
+
+    Page.setup({
+      data: function () {
+        // Server locals are not on `this` yet while data() runs, so read them from Page.data.
+        var batch = Page.data.batch || {};
+        var size = Number(batch.size) || 100, max = Number(batch.max) || 2000;
+        return {
+          f: Object.assign({ dataset: '', datasetcode: '', resulttype: 'ERROR', from: '', to: '' }, Page.data.filters), batchSize: size,
+          sizeOptions: [100, 200, 500, 1000, 2000].filter(function (n) { return n <= max; }),
+          rows: [], next: '', hasMore: false, batches: 0, elapsed: 0,
+          total: undefined, loading: false, loadingAll: false, error: '', scan: null, estimated: null, counting: false, halted: false, want: 0,
+          search: '', open: {}, rowCap: ROW_CAP, run: 0
+        };
+      },
+      computed: {
+        params: function () {
+          var f = this.f, p = new URLSearchParams();
+          FIELDS.forEach(function (k) { if (f[k]) p.set(k, f[k]); });
+          return p;
+        },
+        exportUrl: function () {
+          var p = new URLSearchParams(this.params);
+          if (!this.f.resulttype) p.set('resulttype', '');
+          return '/logs/import/export?' + p.toString();
+        },
+        pct: function () {
+          if (typeof this.total === 'number') return this.total ? Math.min(100, (this.rows.length / this.total) * 100) : 100;
+          var s = this.scan;
+          if (!s || !(s.to > s.from)) return null;
+          return Math.max(0, Math.min(100, ((s.to - s.at) / (s.to - s.from)) * 100));
+        },
+        scannedText: function () {
+          if (!this.scan || !this.hasMore) return '';
+          var d = new Date(this.scan.at + 7 * 3600000);
+          var pad = function (n) { return String(n).padStart(2, '0'); };
+          return pad(d.getUTCDate()) + '/' + pad(d.getUTCMonth() + 1) + '/' + d.getUTCFullYear() + ' ' + pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes());
+        },
+        statusText: function () {
+          var n = this.number, loaded = n(this.rows.length);
+          var of = typeof this.total === 'number' ? ' of ' + n(this.total) : (this.total === null ? ' (too many to count)' : '');
+          var parts = ['Loaded ' + loaded + of + ' rows'];
+          if (this.batches) parts.push(this.batches + (this.batches === 1 ? ' request' : ' requests') + ' in ' + (this.elapsed / 1000).toFixed(1) + ' s');
+          if (this.scannedText) parts.push('searched back to ' + this.scannedText);
+          if (typeof this.estimated === 'number') parts.push('≈ ' + n(this.estimated) + ' logs in total');
+          if (this.rows.length >= ROW_CAP && this.hasMore) parts.push('page limit reached, use Export CSV for the rest');
+          return parts.join(' · ');
+        },
+        shown: function () {
+          var q = this.search.toLowerCase();
+          if (!q) return this.rows;
+          return this.rows.filter(function (r) {
+            return [r.username, r.auditdate, r.dataset, r.datasetcode, r.resulttype, r.errorlog, r.organisation]
+              .some(function (v) { return v && String(v).toLowerCase().indexOf(q) !== -1; });
+          });
+        }
+      },
+      mounted: function () {
+        var vm = this;
+        if ('IntersectionObserver' in window) {
+          this.observer = new IntersectionObserver(function (entries) {
+            if (entries[0].isIntersecting && vm.hasMore && !vm.loading && !vm.error && !vm.search && vm.rows.length < ROW_CAP) vm.loadNext();
+          }, { rootMargin: '400px' });
+          if (this.$refs.more) this.observer.observe(this.$refs.more);
+        }
+        this.reload();
+      },
+      beforeDestroy: function () {
+        if (this.observer) this.observer.disconnect();
+        this.abort();
+      },
+      methods: {
+        number: function (v) { return nf.format(v || 0); },
+        toggle: function (id) { this.$set(this.open, id, !this.open[id]); },
+        abort: function () {
+          if (this.controller) this.controller.abort();
+          this.controller = null;
+        },
+        resetFilters: function () {
+          this.f = { dataset: '', datasetcode: '', resulttype: 'ERROR', from: '', to: '' };
+          this.reload();
+        },
+        reload: function () {
+          this.abort();
+          this.run++;
+          this.rows = []; this.next = ''; this.hasMore = false; this.batches = 0; this.elapsed = 0;
+          this.error = ''; this.open = {}; this.loadingAll = false; this.total = undefined; this.scan = null; this.counting = false; this.halted = false;
+          var p = new URLSearchParams(this.params);
+          if (!this.f.resulttype) p.set('resulttype', '');
+          try { history.replaceState(null, '', location.pathname + '?' + p.toString()); } catch (e) {}
+          this.loadNext(true);
+        },
+        count: function () {
+          var vm = this, run = this.run;
+          if (vm.counting) return;
+          vm.counting = true;
+          api('/logs/import/count?' + this.exportUrl.split('?')[1]).then(function (d) {
+            if (run === vm.run) { vm.total = d.total; vm.counting = false; }
+          }).catch(function () { if (run === vm.run) { vm.total = null; vm.counting = false; } });
+        },
+        loadNext: function (first, auto) {
+          if (this.loading || (!first && !this.hasMore)) return;
+          if (auto && this.halted) return;
+          if (!auto) { this.halted = false; this.want = this.batchSize; }
+          var vm = this, run = this.run, started = Date.now();
+          var p = new URLSearchParams(this.exportUrl.split('?')[1]);
+          p.set('size', Math.max(1, this.want || this.batchSize));
+          if (this.next) p.set('before', this.next);
+          this.controller = new AbortController();
+          this.loading = true; this.error = '';
+          return api('/logs/import/data?' + p.toString(), this.controller.signal).then(function (d) {
+            if (run !== vm.run) return;
+            vm.rows = vm.rows.concat(d.rows.map(Object.freeze));
+            vm.next = d.next; vm.hasMore = d.hasMore; vm.batches++;
+            vm.scan = d.scan || null;
+            if (d.estimated !== undefined) vm.estimated = d.estimated;
+            vm.want -= d.rows.length;
+            vm.elapsed += Date.now() - started;
+            vm.loading = false;
+            if (vm.hasMore && vm.rows.length < ROW_CAP && !vm.halted) {
+              if (d.partial && vm.want > 0) return vm.loadNext(false, true);
+              if (vm.loadingAll) { vm.want = vm.batchSize; return vm.loadNext(false, true); }
+            }
+            vm.loadingAll = false;
+          }).catch(function (err) {
+            if (run !== vm.run) return;
+            vm.loading = false; vm.loadingAll = false;
+            if (err.name !== 'AbortError') vm.error = err.message;
+          });
+        },
+        loadAll: function () {
+          this.loadingAll = true;
+          if (!this.loading) this.loadNext();
+        },
+        stop: function () {
+          this.halted = true;
+          this.loadingAll = false;
+          this.abort();
+          this.loading = false;
+        }
+      }
+    });
+  })();
+</script>

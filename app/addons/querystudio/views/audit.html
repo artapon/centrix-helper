@@ -1,0 +1,753 @@
+<!-- Filters -->
+<div class="col-12">
+  <div class="card qa-filters" data-table-filter="off">
+    <div class="card-body">
+      <form class="qa-filter-grid" @submit.prevent="search(0)">
+        <div class="qa-f">
+          <label for="qaFrom">From</label>
+          <input id="qaFrom" type="date" class="form-control form-control-sm" v-model="f.from" @change="search(0)">
+        </div>
+        <div class="qa-f">
+          <label for="qaTo">To</label>
+          <input id="qaTo" type="date" class="form-control form-control-sm" v-model="f.to" @change="search(0)">
+        </div>
+        <div class="qa-f">
+          <label for="qaUser">Executed by</label>
+          <select id="qaUser" class="form-control form-control-sm" v-model="f.user" @change="search(0)">
+            <option value="">All users</option>
+            <option v-for="u in options.users" :value="u.v">{{ u.v }} ({{ number(u.n) }})</option>
+          </select>
+        </div>
+        <div class="qa-f">
+          <label for="qaConn">Connection</label>
+          <select id="qaConn" class="form-control form-control-sm" v-model="f.connection" @change="search(0)">
+            <option value="">All connections</option>
+            <option v-for="c in options.connections" :value="c.v">{{ c.v }}</option>
+          </select>
+        </div>
+        <div class="qa-f">
+          <label for="qaIp">IP address</label>
+          <input id="qaIp" class="form-control form-control-sm" list="qaIpList" v-model.trim="f.ip" @change="search(0)" @keyup.enter="search(0)" placeholder="All IPs · 10.0.0.*" autocomplete="off" spellcheck="false" inputmode="decimal">
+          <datalist id="qaIpList"><option v-for="i in options.ips" :value="i.v">{{ number(i.n) }} · {{ i.users }}</option></datalist>
+        </div>
+        <div class="qa-f">
+          <label for="qaColl">Collection</label>
+          <input id="qaColl" class="form-control form-control-sm" list="qaCollList" v-model.trim="f.collection" @change="search(0)" placeholder="All collections" autocomplete="off">
+          <datalist id="qaCollList"><option v-for="c in options.collections" :value="c.v"></option></datalist>
+        </div>
+        <div class="qa-f">
+          <label for="qaAction">Action</label>
+          <select id="qaAction" class="form-control form-control-sm" v-model="f.action" @change="search(0)">
+            <option value="">All actions</option>
+            <option value="run">Run</option><option value="count">Count</option><option value="explain">Explain</option><option value="export">Export</option><option value="clear">Clear</option><option value="censor">Censor setting</option><option value="connect">DB connection switch</option>
+          </select>
+        </div>
+        <div class="qa-f">
+          <label for="qaStatus">Status</label>
+          <select id="qaStatus" class="form-control form-control-sm" v-model="f.status" @change="search(0)">
+            <option value="">All statuses</option>
+            <option v-for="s in STATUS_LIST" :value="s">{{ STATUS[s].label }}</option>
+          </select>
+        </div>
+        <div class="qa-f">
+          <label for="qaSlow">Response time</label>
+          <select id="qaSlow" class="form-control form-control-sm" v-model="f.slow" @change="search(0)">
+            <option value="">Any</option>
+            <option value="1000">≥ 1 s</option><option value="5000">≥ 5 s</option><option value="10000">≥ 10 s</option><option value="30000">≥ 30 s</option>
+          </select>
+        </div>
+        <div class="qa-f qa-f-wide">
+          <label for="qaText">Search</label>
+          <input id="qaText" type="search" class="form-control form-control-sm" v-model="f.q" @input="searchSoon" placeholder="Query text, error or collection…" autocomplete="off">
+        </div>
+        <div class="qa-f qa-f-actions">
+          <button type="button" class="btn btn-sm" :class="adv.open || advActive.length ? 'btn-outline-primary is-active' : 'btn-outline-secondary'" @click="toggleAdv" :aria-expanded="adv.open ? 'true' : 'false'" aria-controls="qaAdv">
+            <i class="fas fa-sliders-h"></i> Advanced<span v-if="advActive.length" class="qa-adv-badge">{{ advActive.length }}</span>
+          </button>
+          <button type="button" class="btn btn-sm btn-secondary" @click="resetFilters"><i class="fas fa-undo"></i> Reset</button>
+          <button type="submit" class="btn btn-sm btn-primary" :disabled="loading"><i class="fas fa-sync-alt" :class="{ 'fa-spin': loading }"></i> Refresh</button>
+        </div>
+      </form>
+      <!-- Advanced search: conditions on any logged column, over the whole log (server side) -->
+      <div v-if="adv.open" id="qaAdv" class="qa-adv">
+        <div class="qa-adv-match">
+          Show entries that match
+          <select class="form-control form-control-sm" v-model="adv.match" aria-label="Match all or any condition">
+            <option value="all">all</option><option value="any">any</option>
+          </select>
+          of these conditions, together with the filters above
+        </div>
+        <div class="qa-adv-cond" v-for="(c, i) in adv.conds" :key="c.id">
+          <select class="form-control form-control-sm qa-adv-field" v-model="c.field" @change="fixOp(c)" :aria-label="'Condition ' + (i + 1) + ' column'">
+            <option v-for="fd in ADV_FIELDS" :key="fd.key" :value="fd.key">{{ fd.label }}</option>
+          </select>
+          <select class="form-control form-control-sm qa-adv-op" v-model="c.op" :aria-label="'Condition ' + (i + 1) + ' comparison'">
+            <option v-for="op in opsFor(c.field)" :key="op" :value="op">{{ ADV_OP_LABELS[fieldType(c.field)][op] }}</option>
+          </select>
+          <template v-if="c.op !== 'empty' && c.op !== 'notempty'">
+            <select v-if="fieldType(c.field) === 'b'" class="form-control form-control-sm qa-adv-val" v-model="c.value" :aria-label="'Condition ' + (i + 1) + ' value'">
+              <option value="">choose…</option><option value="yes">yes</option><option value="no">no</option>
+            </select>
+            <input v-else class="form-control form-control-sm qa-adv-val" v-model.trim="c.value" :list="'qaAdvList-' + c.field" :type="fieldType(c.field) === 'n' ? 'number' : 'text'"
+              :placeholder="fieldType(c.field) === 'd' ? 'YYYY-MM-DD or YYYY-MM-DD HH:mm' : (fieldType(c.field) === 'n' ? 'number' : 'value')" :aria-label="'Condition ' + (i + 1) + ' value'" autocomplete="off" spellcheck="false">
+          </template>
+          <button type="button" class="btn btn-sm btn-light" @click="adv.conds.splice(i, 1)" :aria-label="'Remove condition ' + (i + 1)" title="Remove condition"><i class="fas fa-trash-alt"></i></button>
+        </div>
+        <div class="qa-adv-actions">
+          <button type="button" class="btn btn-sm btn-outline-primary" @click="addCond"><i class="fas fa-plus"></i> Add condition</button>
+          <button type="button" class="btn btn-sm btn-light" @click="clearAdv"><i class="fas fa-times"></i> Clear conditions</button>
+          <span class="qa-adv-hint">Searches the whole audit log. Export and “Clear audit log → matching the current filters” use these conditions too.</span>
+        </div>
+        <datalist id="qaAdvList-username"><option v-for="u in options.users" :value="u.v"></option></datalist>
+        <datalist id="qaAdvList-collection"><option v-for="c in options.collections" :value="c.v"></option></datalist>
+        <datalist id="qaAdvList-connection_name"><option v-for="c in options.connections" :value="c.v"></option></datalist>
+        <datalist id="qaAdvList-ip"><option v-for="x in options.ips" :value="x.v"></option></datalist>
+        <datalist id="qaAdvList-status"><option v-for="st in STATUS_LIST" :value="st"></option></datalist>
+        <datalist id="qaAdvList-action"><option v-for="a in ['run', 'count', 'explain', 'export', 'clear', 'censor', 'connect']" :value="a"></option></datalist>
+        <datalist id="qaAdvList-method"><option v-for="m in ['find', 'aggregate', 'distinct', 'count', 'countDocuments']" :value="m"></option></datalist>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Summary -->
+<div class="col-xl-2 col-md-4 col-6" v-for="k in kpis" :key="k.label">
+  <div class="card qa-kpi">
+    <div class="card-body">
+      <div class="qa-kpi-icon" :class="k.tone"><i :class="k.icon"></i></div>
+      <div class="qa-kpi-text">
+        <div class="qa-kpi-label">{{ k.label }}</div>
+        <div class="qa-kpi-value">{{ k.value }}</div>
+        <div class="qa-kpi-sub">{{ k.sub }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Log -->
+<div class="col-12">
+  <div class="card qa-log" data-table-filter="off">
+    <div class="card-header qa-log-head">
+      <span><i class="fas fa-clipboard-check qa-ic"></i> <b>Executed queries</b>
+        <span class="text-muted">· {{ rangeText }}</span></span>
+      <div class="qa-head-actions">
+        <span class="qa-aside">Kept for {{ keepDays }} days · times in Bangkok time</span>
+        <div class="btn-group btn-group-sm" role="group" aria-label="Export the audit log">
+          <button type="button" class="btn btn-outline-success" @click="exportLog('xlsx')" :disabled="!!exporting || !summary.total" :title="'Export the ' + number(Math.min(summary.total || 0, exportMax)) + ' entries matching the filters to Excel'">
+            <i :class="exporting === 'xlsx' ? 'fas fa-spinner fa-spin' : 'fas fa-file-excel'"></i> Excel</button>
+          <button type="button" class="btn btn-outline-success" @click="exportLog('csv')" :disabled="!!exporting || !summary.total" :title="'Export the ' + number(Math.min(summary.total || 0, exportMax)) + ' entries matching the filters to CSV'">
+            <i :class="exporting === 'csv' ? 'fas fa-spinner fa-spin' : 'fas fa-file-csv'"></i> CSV</button>
+        </div>
+        <button v-if="canClear" type="button" class="btn btn-sm btn-outline-danger" @click="openClear"><i class="fas fa-trash-alt"></i> Clear Audit Log</button>
+      </div>
+    </div>
+    <div v-if="notice" class="qa-notice" :class="'is-' + notice.tone" role="status">
+      <i :class="notice.tone === 'bad' ? 'fas fa-exclamation-triangle' : 'fas fa-check-circle'"></i> <span>{{ notice.text }}</span>
+      <button type="button" class="qa-notice-close" @click="notice = null" aria-label="Dismiss"><i class="fas fa-times"></i></button>
+    </div>
+    <div v-if="error" class="qa-empty is-error"><i class="fas fa-exclamation-triangle"></i><div class="qa-empty-title">Could not load the audit log</div><div class="qa-empty-sub">{{ error }}</div></div>
+    <div v-else-if="!rows.length" class="qa-empty">
+      <i :class="loading ? 'fas fa-spinner fa-spin' : 'fas fa-clipboard'"></i>
+      <div class="qa-empty-title">{{ loading ? 'Loading…' : 'No queries found' }}</div>
+      <div class="qa-empty-sub" v-if="!loading">Nothing was executed in Query Data that matches these filters.</div>
+    </div>
+    <div v-else class="qa-table-wrap" :class="{ 'is-busy': loading }">
+      <table class="table table-sm table-hover mb-0 qa-table">
+        <thead>
+          <tr>
+            <th>Executed at</th><th>Executed by</th><th>Action</th><th>Collection</th><th>Query</th>
+            <th>Status</th><th class="text-right">Response</th><th class="text-right">Docs</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="r in rows" :key="r.id">
+            <td class="qa-nowrap"><div>{{ dateText(r.executed_at) }}</div><small class="text-muted">{{ timeText(r.executed_at) }}</small></td>
+            <td class="qa-nowrap"><div><b>{{ r.username || '—' }}</b></div><small class="text-muted">{{ r.ip || '' }}</small></td>
+            <td class="qa-nowrap"><span class="qa-badge" :class="'is-' + r.action">{{ r.action }}</span> <small class="text-muted">{{ r.method }}</small></td>
+            <td class="qa-coll"><div>{{ r.collection || '—' }}</div><small class="text-muted" :title="r.db_name">{{ r.connection_name || r.db_name }}</small></td>
+            <td class="qa-query"><code :title="r.query_head">{{ oneLine(r.query_head) }}</code></td>
+            <td class="qa-nowrap"><span class="qa-status" :class="STATUS[r.status] ? STATUS[r.status].cls : ''"><i :class="STATUS[r.status] ? STATUS[r.status].icon : 'fas fa-question'"></i> {{ STATUS[r.status] ? STATUS[r.status].label : r.status }}</span></td>
+            <td class="text-right qa-nowrap qa-num" :class="msClass(r.duration_ms)">{{ msText(r.duration_ms) }}</td>
+            <td class="text-right qa-nowrap qa-num">{{ docsText(r) }}</td>
+            <td class="text-right"><button type="button" class="btn btn-sm btn-outline-primary qa-view" @click="openDetail(r)"><i class="fas fa-eye"></i> View</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card-footer qa-pager" v-if="summary.total">
+      <span class="text-muted">{{ number(page * pageSize + 1) }}–{{ number(Math.min(summary.total, (page + 1) * pageSize)) }} of {{ number(summary.total) }}</span>
+      <div class="qa-pager-ctl">
+        <select class="form-control form-control-sm" v-model.number="pageSize" @change="search(0)" aria-label="Rows per page">
+          <option v-for="n in [25, 50, 100, 200]" :value="n">{{ n }} / page</option>
+        </select>
+        <button type="button" class="btn btn-sm btn-light" @click="search(0)" :disabled="loading || !page" aria-label="First page"><i class="fas fa-step-backward"></i></button>
+        <button type="button" class="btn btn-sm btn-light" @click="search(page - 1)" :disabled="loading || !page" aria-label="Previous page"><i class="fas fa-chevron-left"></i></button>
+        <span class="qa-page-no">{{ page + 1 }} / {{ pageCount }}</span>
+        <button type="button" class="btn btn-sm btn-light" @click="search(page + 1)" :disabled="loading || page >= pageCount - 1" aria-label="Next page"><i class="fas fa-chevron-right"></i></button>
+        <button type="button" class="btn btn-sm btn-light" @click="search(pageCount - 1)" :disabled="loading || page >= pageCount - 1" aria-label="Last page"><i class="fas fa-step-forward"></i></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Clear the audit log (administrators) -->
+<div v-if="clearDialog" class="qa-modal-backdrop" @click.self="clearDialog.busy || (clearDialog = null)">
+  <form class="qa-modal qa-modal-sm" role="dialog" aria-modal="true" aria-labelledby="qaClearTitle" @submit.prevent="runClear" novalidate>
+    <div class="qa-modal-head">
+      <div class="qa-modal-title" id="qaClearTitle"><i class="fas fa-trash-alt text-danger"></i> <b>Clear Audit Log</b></div>
+      <button type="button" class="qa-modal-close" @click="clearDialog = null" :disabled="clearDialog.busy" aria-label="Close"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="qa-modal-body">
+      <fieldset class="qa-clear-scopes">
+        <legend>Entries to delete</legend>
+        <label class="qa-clear-scope" :class="{ 'is-active': clearDialog.scope === 'filtered' }">
+          <input type="radio" value="filtered" v-model="clearDialog.scope" @change="previewClear">
+          <span><b>Matching the current filters</b><small>{{ rangeText }}{{ filterText ? ' · ' + filterText : '' }}</small></span>
+        </label>
+        <label class="qa-clear-scope" :class="{ 'is-active': clearDialog.scope === 'older' }">
+          <input type="radio" value="older" v-model="clearDialog.scope" @change="previewClear">
+          <span><b>Older than</b>
+            <select class="form-control form-control-sm qa-clear-days" v-model.number="clearDialog.days" @change="clearDialog.scope = 'older'; previewClear()" aria-label="Older than">
+              <option v-for="d in [30, 90, 180, 365]" :value="d">{{ d }} days</option>
+            </select></span>
+        </label>
+        <label class="qa-clear-scope" :class="{ 'is-active': clearDialog.scope === 'all' }">
+          <input type="radio" value="all" v-model="clearDialog.scope" @change="previewClear">
+          <span><b>Everything</b><small>The whole audit log, every user and date</small></span>
+        </label>
+      </fieldset>
+      <div class="qa-clear-count" :class="{ 'is-zero': clearDialog.count === 0 }">
+        <i :class="clearDialog.counting ? 'fas fa-spinner fa-spin' : 'fas fa-database'"></i>
+        <span v-if="clearDialog.counting">Counting…</span>
+        <span v-else-if="clearDialog.count === 0">Nothing to delete.</span>
+        <span v-else-if="clearDialog.count != null"><b>{{ number(clearDialog.count) }}</b> entr{{ clearDialog.count === 1 ? 'y' : 'ies' }} will be deleted
+          <small v-if="clearDialog.oldest">({{ dateText(clearDialog.oldest) }} to {{ dateText(clearDialog.newest) }})</small></span>
+      </div>
+      <div class="qa-clear-warn"><i class="fas fa-exclamation-triangle"></i>
+        <span>This cannot be undone. Export the entries first if you need to keep them. The clear itself is recorded in the log (who, when, how many).</span></div>
+      <div class="qa-clear-export" v-if="clearDialog.scope === 'filtered' && clearDialog.count">
+        <span>Export these entries first:</span>
+        <button type="button" class="btn btn-sm btn-outline-success" @click="exportLog('xlsx')" :disabled="!!exporting"><i class="fas fa-file-excel"></i> Excel</button>
+        <button type="button" class="btn btn-sm btn-outline-success" @click="exportLog('csv')" :disabled="!!exporting"><i class="fas fa-file-csv"></i> CSV</button>
+      </div>
+      <div class="qa-clear-confirm">
+        <label for="qaClearConfirm">Type <b>CLEAR</b> to confirm</label>
+        <input id="qaClearConfirm" ref="clearConfirm" type="text" class="form-control form-control-sm" v-model="clearDialog.confirm" autocomplete="off" spellcheck="false" :disabled="clearDialog.busy">
+      </div>
+      <div v-if="clearDialog.error" class="qa-detail-error"><i class="fas fa-exclamation-circle"></i> {{ clearDialog.error }}</div>
+    </div>
+    <div class="qa-modal-foot">
+      <span class="text-muted small">Administrators only</span>
+      <div class="qa-modal-actions">
+        <button type="button" class="btn btn-sm btn-secondary" @click="clearDialog = null" :disabled="clearDialog.busy">Cancel</button>
+        <button type="submit" class="btn btn-sm btn-danger" :disabled="clearDialog.busy || clearDialog.confirm !== 'CLEAR' || !clearDialog.count">
+          <i :class="clearDialog.busy ? 'fas fa-spinner fa-spin' : 'fas fa-trash-alt'"></i> Delete {{ clearDialog.count ? number(clearDialog.count) + ' entr' + (clearDialog.count === 1 ? 'y' : 'ies') : '' }}</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<!-- Detail popup -->
+<div v-if="detail" class="qa-modal-backdrop" @click.self="detail = null">
+  <div class="qa-modal" role="dialog" aria-modal="true" aria-labelledby="qaDetailTitle">
+    <div class="qa-modal-head">
+      <div class="qa-modal-title" id="qaDetailTitle">
+        <span class="qa-badge" :class="'is-' + detail.action">{{ detail.action }}</span>
+        <b>{{ detail.collection || 'Query' }}</b>
+        <span class="qa-status" :class="STATUS[detail.status] ? STATUS[detail.status].cls : ''"><i :class="STATUS[detail.status] ? STATUS[detail.status].icon : ''"></i> {{ STATUS[detail.status] ? STATUS[detail.status].label : detail.status }}</span>
+      </div>
+      <button type="button" class="qa-modal-close" @click="detail = null" aria-label="Close" ref="detailClose"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="qa-modal-body">
+      <div class="qa-kv-grid">
+        <div class="qa-kv" v-for="r in detailRows" :key="r.label"><span>{{ r.label }}</span><b :class="r.cls">{{ r.value === '' || r.value == null ? '—' : r.value }}</b></div>
+      </div>
+      <div v-if="detail.error" class="qa-detail-error"><i class="fas fa-exclamation-circle"></i> {{ detail.error }}</div>
+      <div class="qa-query-head">
+        <span>Query <small class="text-muted" v-if="detail.query">({{ number(detail.query.length) }} characters)</small></span>
+      </div>
+      <div v-if="detailLoading" class="qa-empty qa-empty-sm"><i class="fas fa-spinner fa-spin"></i></div>
+      <pre v-else class="qa-code" v-html="highlight(detail.query || '')"></pre>
+    </div>
+    <div class="qa-modal-foot">
+      <span class="text-muted small" :title="detail.user_agent">{{ shortAgent(detail.user_agent) }}</span>
+      <div class="qa-modal-actions">
+        <button type="button" class="btn btn-sm btn-secondary" @click="copyQuery" :disabled="!detail.query"><i :class="copied ? 'fas fa-check' : 'far fa-copy'"></i> {{ copied ? 'Copied' : 'Copy query' }}</button>
+        <button v-if="canQuery" type="button" class="btn btn-sm btn-primary" @click="openInQueryData" :disabled="!detail.query"><i class="fas fa-terminal"></i> Open in Query Data</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .qa-ic { color: #2563eb; }
+  .qa-filters .card-body { padding: 12px 16px; }
+  .qa-filter-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px 12px; align-items: end; margin: 0; }
+  .qa-f label { display: block; margin: 0 0 3px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; }
+  .qa-f .form-control { height: 32px; }
+  .qa-f-wide { grid-column: span 2; }
+  .qa-f-actions { display: flex; gap: 6px; justify-content: flex-end; }
+  .qa-f-actions .btn { height: 32px; display: inline-flex; align-items: center; gap: 6px; }
+  @media (max-width: 575.98px) { .qa-f-wide { grid-column: auto; } }
+  .qa-adv-badge { margin-left: 2px; background: #2563eb; color: #fff; border-radius: 9px; padding: 0 6px; font-size: 0.7rem; line-height: 1.5; }
+  .qa-adv { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; padding: 12px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
+  .qa-adv-match { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 0.8rem; color: #475569; }
+  .qa-adv-match select { width: auto; height: 30px; }
+  .qa-adv-cond { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .qa-adv-cond .form-control { height: 30px; }
+  .qa-adv-field { flex: 0 1 190px; min-width: 0; }
+  .qa-adv-op { flex: 0 1 170px; min-width: 0; }
+  .qa-adv-val { flex: 1 1 200px; max-width: 320px; min-width: 0; }
+  .qa-adv-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .qa-adv-hint { font-size: 0.75rem; color: #94a3b8; }
+  @media (max-width: 575.98px) { .qa-adv-field, .qa-adv-op, .qa-adv-val { flex: 1 1 100%; max-width: none; } }
+
+  .qa-kpi .card-body { display: flex; align-items: center; gap: 12px; padding: 14px; }
+  .qa-kpi-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: #dbeafe; color: #1d4ed8; }
+  .qa-kpi-icon.is-good { background: #dcfce7; color: #15803d; }
+  .qa-kpi-icon.is-bad { background: #fee2e2; color: #b91c1c; }
+  .qa-kpi-icon.is-warn { background: #fef3c7; color: #b45309; }
+  .qa-kpi-icon.is-violet { background: #ede9fe; color: #6d28d9; }
+  .qa-kpi-text { min-width: 0; }
+  .qa-kpi-label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; }
+  .qa-kpi-value { font-size: 1.3rem; font-weight: 700; color: #0f172a; line-height: 1.2; font-variant-numeric: tabular-nums; }
+  .qa-kpi-sub { font-size: 0.75rem; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .qa-log-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .qa-aside { font-size: 0.75rem; color: #94a3b8; }
+  .qa-head-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .qa-head-actions .btn { display: inline-flex; align-items: center; gap: 6px; }
+  .qa-notice { display: flex; align-items: center; gap: 8px; margin: 10px 16px 0; padding: 8px 12px; border-radius: 8px; font-size: 0.84rem; background: #f0fdf4; color: #14532d; border: 1px solid #bbf7d0; }
+  .qa-notice.is-bad { background: #fef2f2; color: #7f1d1d; border-color: #fecaca; }
+  .qa-notice span { flex: 1; }
+  .qa-notice-close { background: none; border: 0; color: inherit; opacity: 0.6; }
+  .qa-badge.is-clear { background: #fee2e2; color: #991b1b; }
+  .qa-badge.is-censor { background: #ede9fe; color: #5b21b6; }
+  .qa-badge.is-connect { background: #e0f2fe; color: #075985; }
+  .qa-modal-sm { max-width: 560px; }
+  .qa-clear-scopes { margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 8px; }
+  .qa-clear-scopes legend { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 4px; }
+  .qa-clear-scope { display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 9px 12px; border: 1px solid #e2e8f0; border-radius: 8px; cursor: pointer; }
+  .qa-clear-scope.is-active { border-color: #fca5a5; background: #fff7f7; }
+  .qa-clear-scope input { margin-top: 4px; }
+  .qa-clear-scope span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .qa-clear-scope small { color: #64748b; overflow-wrap: anywhere; }
+  .qa-clear-days { width: auto; margin-top: 4px; }
+  .qa-clear-count { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; background: #f8fafc; border: 1px solid #e2e8f0; font-size: 0.88rem; }
+  .qa-clear-count b { color: #b91c1c; font-size: 1rem; font-variant-numeric: tabular-nums; }
+  .qa-clear-count.is-zero { color: #64748b; }
+  .qa-clear-warn { display: flex; gap: 8px; font-size: 0.8rem; color: #92400e; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 8px 12px; }
+  .qa-clear-warn i { margin-top: 3px; }
+  .qa-clear-export { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 0.8rem; color: #475569; }
+  .qa-clear-confirm label { display: block; margin: 0 0 4px; font-size: 0.8rem; color: #334155; }
+  .qa-clear-confirm input { max-width: 220px; font-family: 'Cascadia Code', Consolas, 'Courier New', monospace; letter-spacing: 0.08em; }
+  .qa-table-wrap { overflow-x: auto; }
+  .qa-table-wrap.is-busy { opacity: 0.55; pointer-events: none; transition: opacity 0.15s; }
+  .qa-table th { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: #64748b; background: #f8fafc; border-top: 0; white-space: nowrap; }
+  .qa-table td { vertical-align: middle; font-size: 0.83rem; }
+  .qa-table small { font-size: 0.72rem; }
+  .qa-nowrap { white-space: nowrap; }
+  .qa-num { font-variant-numeric: tabular-nums; }
+  .qa-coll { max-width: 180px; word-break: break-all; }
+  .qa-query { max-width: 0; width: 40%; }
+  .qa-query code { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.78rem; color: #334155; background: none; padding: 0; }
+  .qa-view { white-space: nowrap; }
+  .qa-badge { display: inline-block; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 7px; border-radius: 5px; background: #e2e8f0; color: #334155; }
+  .qa-badge.is-run { background: #dcfce7; color: #166534; }
+  .qa-badge.is-count { background: #dbeafe; color: #1e40af; }
+  .qa-badge.is-explain { background: #ede9fe; color: #5b21b6; }
+  .qa-badge.is-export { background: #ffedd5; color: #9a3412; }
+  .qa-status { display: inline-flex; align-items: center; gap: 5px; font-size: 0.78rem; font-weight: 600; }
+  .qa-status.is-ok { color: #15803d; }
+  .qa-status.is-error { color: #b91c1c; }
+  .qa-status.is-stopped { color: #b45309; }
+  .qa-status.is-invalid { color: #64748b; }
+  .qa-ms-warn { color: #b45309; font-weight: 600; }
+  .qa-ms-bad { color: #b91c1c; font-weight: 700; }
+  .qa-pager { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 0.82rem; background: #fff; }
+  .qa-pager-ctl { display: flex; align-items: center; gap: 4px; }
+  .qa-pager-ctl select { width: auto; height: 30px; margin-right: 6px; }
+  .qa-page-no { min-width: 64px; text-align: center; font-variant-numeric: tabular-nums; }
+
+  .qa-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px; padding: 44px 16px; color: #64748b; }
+  .qa-empty > i { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: #f1f5f9; color: #94a3b8; margin-bottom: 6px; }
+  .qa-empty-title { font-weight: 600; color: #0f172a; font-size: 0.9rem; }
+  .qa-empty-sub { font-size: 0.8rem; max-width: 420px; }
+  .qa-empty-sm { padding: 18px; }
+  .qa-empty.is-error > i { background: #fee2e2; color: #dc2626; }
+
+  .qa-modal-backdrop { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 1060; background: rgba(15, 23, 42, 0.55); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .qa-modal { background: #fff; border-radius: 12px; box-shadow: 0 20px 50px rgba(15, 23, 42, 0.35); width: 100%; max-width: 960px; max-height: calc(100vh - 32px); display: flex; flex-direction: column; overflow: hidden; }
+  .qa-modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; }
+  .qa-modal-title { display: flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; word-break: break-all; }
+  .qa-modal-close { background: none; border: 0; font-size: 1.1rem; color: #64748b; width: 32px; height: 32px; border-radius: 8px; }
+  .qa-modal-close:hover { background: #f1f5f9; color: #0f172a; }
+  .qa-modal-body { overflow: auto; flex: 1; min-height: 0; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+  .qa-modal-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 10px 16px; border-top: 1px solid #e2e8f0; }
+  .qa-modal-foot > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
+  .qa-modal-actions { display: flex; gap: 6px; }
+  .qa-kv-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  @media (max-width: 767.98px) { .qa-kv-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .qa-kv { display: flex; flex-direction: column; gap: 2px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 7px 10px; background: #f8fafc; min-width: 0; }
+  .qa-kv span { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; }
+  .qa-kv b { font-size: 0.85rem; color: #0f172a; word-break: break-all; font-variant-numeric: tabular-nums; }
+  .qa-detail-error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; border-radius: 8px; padding: 8px 12px; font-size: 0.82rem; white-space: pre-wrap; word-break: break-word; }
+  .qa-query-head { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; }
+  .qa-code { margin: 0; padding: 12px 14px; border-radius: 8px; background: #0f172a; color: #e2e8f0; font-family: 'Cascadia Code', Consolas, 'Courier New', monospace; font-size: 0.8rem; line-height: 1.55; white-space: pre-wrap; word-break: break-word; min-height: 80px; }
+  .qa-code .j-key { color: #7dd3fc; } .qa-code .j-op { color: #fda4af; } .qa-code .j-str { color: #86efac; }
+  .qa-code .j-num { color: #fcd34d; } .qa-code .j-bool { color: #f9a8d4; } .qa-code .j-null { color: #94a3b8; } .qa-code .j-fn { color: #c4b5fd; }
+</style>
+
+<script>
+  (function () {
+    var TZ = 'Asia/Bangkok';
+    var STATUS = {
+      ok: { label: 'Success', icon: 'fas fa-check-circle', cls: 'is-ok' },
+      error: { label: 'Error', icon: 'fas fa-times-circle', cls: 'is-error' },
+      stopped: { label: 'Stopped', icon: 'fas fa-stop-circle', cls: 'is-stopped' },
+      invalid: { label: 'Invalid query', icon: 'fas fa-exclamation-circle', cls: 'is-invalid' }
+    };
+    var pad2 = function (n) { return String(n).padStart(2, '0'); };
+    // YYYY-MM-DD in Bangkok time, `days` from today.
+    function bkkDay(days) {
+      var d = new Date(Date.now() + 7 * 3600000 + (days || 0) * 86400000);
+      return d.getUTCFullYear() + '-' + pad2(d.getUTCMonth() + 1) + '-' + pad2(d.getUTCDate());
+    }
+    var defaults = function () { return { from: bkkDay(-6), to: bkkDay(0), user: '', ip: '', connection: '', collection: '', action: '', status: '', slow: '', q: '', adv: '' }; };
+    // Advanced search columns (the server allows the same list): t text, n number, d date-time, b yes/no.
+    var ADV_FIELDS = [
+      { key: 'executed_at', label: 'Executed at', type: 'd' }, { key: 'username', label: 'Executed by', type: 't' },
+      { key: 'role', label: 'Role', type: 't' }, { key: 'ip', label: 'Client IP', type: 't' },
+      { key: 'connection_name', label: 'Connection', type: 't' }, { key: 'db_name', label: 'Database', type: 't' },
+      { key: 'action', label: 'Action', type: 't' }, { key: 'method', label: 'Method', type: 't' },
+      { key: 'collection', label: 'Collection', type: 't' }, { key: 'query', label: 'Query text', type: 't' },
+      { key: 'status', label: 'Status', type: 't' }, { key: 'error', label: 'Error', type: 't' },
+      { key: 'duration_ms', label: 'Response (ms)', type: 'n' }, { key: 'docs_returned', label: 'Docs / rows', type: 'n' },
+      { key: 'total', label: 'Total', type: 'n' }, { key: 'page', label: 'Page', type: 'n' },
+      { key: 'page_size', label: 'Page size', type: 'n' }, { key: 'has_more', label: 'More pages', type: 'b' },
+      { key: 'detail', label: 'Detail (export / clear)', type: 't' }, { key: 'user_agent', label: 'User agent', type: 't' },
+      { key: 'id', label: 'ID', type: 'n' }
+    ];
+    var ADV_TYPE = {};
+    ADV_FIELDS.forEach(function (fd) { ADV_TYPE[fd.key] = fd.type; });
+    var ADV_OP_LABELS = {
+      t: { contains: 'contains', notcontains: 'does not contain', eq: 'equals', ne: 'does not equal', starts: 'starts with', ends: 'ends with', empty: 'is empty', notempty: 'is not empty' },
+      n: { eq: '= equals', ne: '≠ not equal', gt: '> greater than', gte: '≥ at least', lt: '< less than', lte: '≤ at most', empty: 'is empty', notempty: 'is not empty' },
+      d: { eq: 'on (day or minute)', ne: 'not on', gt: 'after', gte: 'on or after', lt: 'before', lte: 'on or before' },
+      b: { eq: 'is', empty: 'is empty', notempty: 'is not empty' }
+    };
+    var advId = 1;
+    var fmt = function (opts) { return new Intl.DateTimeFormat('en-GB', Object.assign({ timeZone: TZ, hour12: false }, opts)); };
+    var dateFmt = fmt({ day: '2-digit', month: 'short', year: 'numeric' });
+    var timeFmt = fmt({ hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    var fullFmt = fmt({ day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    function api(url) {
+      return fetch(url, { headers: { Accept: 'application/json' } }).then(function (res) {
+        return res.json().catch(function () { return { error: 'HTTP ' + res.status }; }).then(function (data) {
+          if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+          return data;
+        });
+      });
+    }
+
+    function post(url, body) {
+      return fetch(url, { method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (res) {
+        return res.json().catch(function () { return { error: 'HTTP ' + res.status }; }).then(function (data) {
+          if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+          return data;
+        });
+      });
+    }
+
+    function highlight(text) {
+      var esc = String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return esc.replace(/("(\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(ObjectId|ISODate|NumberLong|NumberDecimal|NumberInt|Timestamp)\b|\b(true|false)\b|\bnull\b|\$?\b[A-Za-z_][\w$]*(?=\s*:)|-?\b\d+(?:\.\d+)?\b)/g, function (m) {
+        var cls = 'j-num';
+        if (m.charAt(0) === '"') cls = /:$/.test(m) ? (m.charAt(1) === '$' ? 'j-op' : 'j-key') : 'j-str';
+        else if (/^(ObjectId|ISODate|NumberLong|NumberDecimal|NumberInt|Timestamp)$/.test(m)) cls = 'j-fn';
+        else if (m === 'true' || m === 'false') cls = 'j-bool';
+        else if (m === 'null') cls = 'j-null';
+        else if (/^[A-Za-z_$]/.test(m)) cls = m.charAt(0) === '$' ? 'j-op' : 'j-key';
+        return '<span class="' + cls + '">' + m + '</span>';
+      });
+    }
+
+    var timer = null;
+    Page.setup({
+      data: function () {
+        return {
+          STATUS: STATUS, STATUS_LIST: Object.keys(STATUS),
+          f: defaults(), page: 0, pageSize: 50,
+          rows: [], summary: {}, options: { users: [], collections: [], connections: [], ips: [] },
+          loading: false, error: '',
+          detail: null, detailLoading: false, copied: false,
+          exporting: '', notice: null, clearDialog: null,
+          ADV_FIELDS: ADV_FIELDS, ADV_OP_LABELS: ADV_OP_LABELS,
+          adv: { open: false, match: 'all', conds: [] }
+        };
+      },
+      computed: {
+        pageCount: function () { return Math.max(1, Math.ceil((this.summary.total || 0) / this.pageSize)); },
+        rangeText: function () {
+          var f = this.f;
+          if (!f.from && !f.to) return 'all dates';
+          if (f.from === f.to) return f.from;
+          return (f.from || '…') + ' to ' + (f.to || '…');
+        },
+        // The non-date filters in words, for the Clear popup.
+        filterText: function () {
+          var f = this.f, out = [];
+          if (f.user) out.push('user ' + f.user);
+          if (f.ip) out.push('IP ' + f.ip);
+          if (f.connection) out.push(f.connection);
+          if (f.collection) out.push(f.collection);
+          if (f.action) out.push(f.action);
+          if (f.status) out.push(STATUS[f.status] ? STATUS[f.status].label.toLowerCase() : f.status);
+          if (f.slow) out.push('≥ ' + this.msText(Number(f.slow)));
+          if (f.q) out.push('"' + f.q + '"');
+          var n = this.advActive.length;
+          if (n) out.push(n + ' advanced condition' + (n === 1 ? '' : 's') + ' (' + this.adv.match + ')');
+          return out.join(' · ');
+        },
+        // Conditions complete enough to search with.
+        advActive: function () {
+          return this.adv.conds.filter(function (c) { return c.field && c.op && (c.op === 'empty' || c.op === 'notempty' || String(c.value).trim() !== ''); })
+            .map(function (c) { return { field: c.field, op: c.op, value: String(c.value).trim() }; });
+        },
+        advJson: function () {
+          return this.advActive.length ? JSON.stringify({ match: this.adv.match, conds: this.advActive }) : '';
+        },
+        kpis: function () {
+          var s = this.summary, n = this.number, total = s.total || 0;
+          var failed = (s.errors || 0) + (s.stopped || 0) + (s.invalid || 0);
+          return [
+            { label: 'Queries', value: n(total), sub: n(s.ok || 0) + ' succeeded', icon: 'fas fa-terminal', tone: '' },
+            { label: 'Users', value: n(s.users || 0), sub: 'executed queries', icon: 'fas fa-users', tone: 'is-violet' },
+            { label: 'Errors', value: n(s.errors || 0), sub: n(s.stopped || 0) + ' stopped · ' + n(s.invalid || 0) + ' invalid', icon: 'fas fa-times-circle', tone: s.errors ? 'is-bad' : 'is-good' },
+            { label: 'Success rate', value: total ? (Math.round(((s.ok || 0) / total) * 1000) / 10) + '%' : '—', sub: n(failed) + ' not completed', icon: 'fas fa-check-circle', tone: total && failed / total > 0.1 ? 'is-warn' : 'is-good' },
+            { label: 'Avg response', value: this.msText(s.avg_ms), sub: 'p95 ' + this.msText(s.p95_ms), icon: 'fas fa-stopwatch', tone: s.avg_ms >= 5000 ? 'is-warn' : '' },
+            { label: 'Slowest', value: this.msText(s.max_ms), sub: 'max response time', icon: 'fas fa-hourglass-half', tone: s.max_ms >= 10000 ? 'is-bad' : (s.max_ms >= 5000 ? 'is-warn' : '') }
+          ];
+        },
+        detailRows: function () {
+          var d = this.detail || {};
+          var rows = [
+            { label: 'Executed at', value: d.executed_at ? fullFmt.format(new Date(d.executed_at)) : '' },
+            { label: 'Executed by', value: d.username + (d.role ? ' (' + d.role + ')' : '') },
+            { label: 'Client IP', value: d.ip },
+            { label: 'Connection', value: d.connection_name },
+            { label: 'Database', value: d.db_name },
+            { label: 'Method', value: d.method },
+            { label: 'Response time', value: this.msText(d.duration_ms), cls: this.msClass(d.duration_ms) },
+            { label: d.action === 'export' ? 'Rows exported' : 'Docs returned', value: d.docs_returned == null ? '' : this.number(d.docs_returned) + (d.has_more ? ' (more pages)' : '') }
+          ];
+          if (d.action === 'run' || d.action === 'export') rows.push({ label: 'Page', value: d.page == null ? '' : (d.page + 1) + ' · ' + d.page_size + ' / page' });
+          if (d.total != null) rows.push({ label: d.action === 'count' ? 'Count' : 'Total', value: this.number(d.total) });
+          if (d.action === 'censor') {
+            var z = {};
+            try { z = d.detail ? JSON.parse(d.detail) : {}; } catch (e) { z = {}; }
+            rows.push({ label: 'Personal-data censoring', value: z.censor === 'off' ? 'Switched OFF (real names, ID numbers, addresses and phones shown)' : 'Switched ON (personal data hidden)' });
+            if (z.before) rows.push({ label: 'Before', value: z.before === 'off' ? 'Off' : 'On' });
+          }
+          if (d.action === 'connect') {
+            var k = {};
+            try { k = d.detail ? JSON.parse(d.detail) : {}; } catch (e) { k = {}; }
+            var where = function (c) { return c && c.name ? c.name + (c.db ? ' · ' + c.db : '') : 'No connection'; };
+            rows.push({ label: 'Switched from', value: where(k.from) });
+            rows.push({ label: 'Switched to', value: where(k.to) });
+          }
+          if (d.action === 'clear') {
+            var c = {};
+            try { c = d.detail ? JSON.parse(d.detail) : {}; } catch (e) { c = {}; }
+            rows.push({ label: 'Cleared', value: c.scope === 'all' ? 'Everything' : c.scope === 'older' ? 'Older than ' + c.days + ' days' : 'Entries matching filters' });
+            rows.push({ label: 'Entries deleted', value: this.number(c.deleted) });
+            if (c.filters) rows.push({ label: 'Filters', value: Object.keys(c.filters).map(function (k) { return k + ': ' + c.filters[k]; }).join(' · ') });
+          }
+          if (d.action === 'export') {
+            var x = {};
+            try { x = d.detail ? JSON.parse(d.detail) : {}; } catch (e) { x = {}; }
+            if (!d.detail) rows.push({ label: 'Export', value: 'Not finished (the page was closed or the export is still running)' });
+            else {
+              rows.push({ label: 'Format', value: (x.format || '').toUpperCase() + (x.scope === 'page' ? ' · page on screen' : ' · all results') });
+              rows.push({ label: 'File', value: x.file || '' });
+              if (x.batches != null) rows.push({ label: 'Batches', value: x.batches + (x.batchSize ? ' × ' + this.number(x.batchSize) : '') });
+              if (x.bytes != null) rows.push({ label: 'File size', value: this.number(Math.round(x.bytes / 1024)) + ' KB' });
+              rows.push({ label: 'Dates', value: x.dates === 'iso' ? 'ISO (UTC)' : 'Bangkok time' });
+            }
+          }
+          return rows;
+        }
+      },
+      methods: {
+        highlight: highlight,
+        number: function (v) { return v == null || v === '' ? '—' : Number(v).toLocaleString('en-US'); },
+        msText: function (ms) {
+          if (ms == null) return '—';
+          if (ms < 1000) return ms + ' ms';
+          return (ms / 1000).toFixed(ms < 10000 ? 2 : 1) + ' s';
+        },
+        msClass: function (ms) { return ms >= 10000 ? 'qa-ms-bad' : (ms >= 3000 ? 'qa-ms-warn' : ''); },
+        dateText: function (iso) { return iso ? dateFmt.format(new Date(iso)) : ''; },
+        timeText: function (iso) { return iso ? timeFmt.format(new Date(iso)) : ''; },
+        oneLine: function (q) { return String(q || '').replace(/\s+/g, ' ').trim(); },
+        docsText: function (r) {
+          if (r.action === 'count' || (r.docs_returned == null && r.total != null)) return r.total == null ? '—' : this.number(r.total);
+          if (r.docs_returned == null) return '—';
+          return this.number(r.docs_returned) + (r.has_more ? '+' : '');
+        },
+        shortAgent: function (ua) {
+          ua = String(ua || '');
+          var m = /(Edg|Chrome|Firefox|Safari)\/([\d.]+)/.exec(ua);
+          var os = /Windows NT [\d.]+|Mac OS X [\d_]+|Android [\d.]+|iPhone OS [\d_]+|Linux/.exec(ua);
+          return m ? (m[1] === 'Edg' ? 'Edge' : m[1]) + ' ' + m[2].split('.')[0] + (os ? ' · ' + os[0].replace(/_/g, '.') : '') : ua;
+        },
+        query: function (page) {
+          var p = new URLSearchParams();
+          var f = this.f;
+          Object.keys(f).forEach(function (k) { if (f[k] !== '' && f[k] != null) p.set(k, f[k]); });
+          p.set('page', page); p.set('pageSize', this.pageSize);
+          return p.toString();
+        },
+        search: function (page) {
+          var vm = this, seq = (vm._seq = (vm._seq || 0) + 1);
+          clearTimeout(timer);
+          vm.loading = true;
+          vm.error = '';
+          return api('/query-studio/audit/search?' + vm.query(Math.max(0, page || 0)))
+            .then(function (data) {
+              if (seq !== vm._seq) return;
+              vm.rows = Object.freeze(data.rows);
+              vm.summary = Object.freeze(data.summary || {});
+              vm.page = data.page;
+              if (data.page > 0 && !data.rows.length) vm.search(0);
+            })
+            .catch(function (err) { if (seq === vm._seq) vm.error = err.message; })
+            .then(function () { if (seq === vm._seq) vm.loading = false; });
+        },
+        // The filtered log as a file; the server builds it, the page saves it.
+        exportLog: function (format) {
+          var vm = this, p = new URLSearchParams(), f = vm.f;
+          Object.keys(f).forEach(function (k) { if (f[k] !== '' && f[k] != null) p.set(k, f[k]); });
+          p.set('format', format);
+          vm.exporting = format;
+          vm.notice = null;
+          fetch('/query-studio/audit/export?' + p.toString())
+            .then(function (res) {
+              if (!res.ok) return res.json().catch(function () { return {}; }).then(function (d) { throw new Error(d.error || ('HTTP ' + res.status)); });
+              var name = (/filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '') || [])[1] || ('query-data-audit.' + format);
+              var rows = Number(res.headers.get('X-Rows') || 0), cut = res.headers.get('X-Truncated') === '1';
+              return res.blob().then(function (blob) {
+                var url = URL.createObjectURL(blob), a = document.createElement('a');
+                a.href = url; a.download = name;
+                document.body.appendChild(a); a.click(); a.remove();
+                setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
+                vm.notice = { tone: cut ? 'bad' : 'ok', text: 'Exported ' + vm.number(rows) + ' entries to ' + name + (cut ? ' (the first ' + vm.number(vm.exportMax) + ' only; narrow the filters for the rest)' : '') };
+              });
+            })
+            .catch(function (err) { vm.notice = { tone: 'bad', text: 'Export failed: ' + err.message }; })
+            .then(function () { vm.exporting = ''; });
+        },
+        openClear: function () {
+          this.clearDialog = { scope: 'filtered', days: 90, confirm: '', count: null, oldest: '', newest: '', counting: false, busy: false, error: '' };
+          this.previewClear();
+          var vm = this;
+          this.$nextTick(function () { if (vm.$refs.clearConfirm) vm.$refs.clearConfirm.focus(); });
+        },
+        clearBody: function () {
+          var d = this.clearDialog, f = this.f, filters = {};
+          Object.keys(f).forEach(function (k) { if (f[k] !== '' && f[k] != null) filters[k] = f[k]; });
+          return { scope: d.scope, days: d.days, filters: filters, confirm: d.confirm };
+        },
+        previewClear: function () {
+          var vm = this, d = vm.clearDialog, seq = (d.seq = (d.seq || 0) + 1);
+          d.counting = true; d.error = '';
+          post('/query-studio/audit/clear/preview', vm.clearBody())
+            .then(function (r) { if (vm.clearDialog === d && d.seq === seq) Object.assign(d, { count: r.count, oldest: r.oldest, newest: r.newest }); })
+            .catch(function (err) { if (vm.clearDialog === d) { d.count = null; d.error = err.message; } })
+            .then(function () { if (d.seq === seq) d.counting = false; });
+        },
+        runClear: function () {
+          var vm = this, d = vm.clearDialog;
+          if (!d || d.busy || d.confirm !== 'CLEAR' || !d.count) return;
+          d.busy = true; d.error = '';
+          post('/query-studio/audit/clear', vm.clearBody())
+            .then(function (r) {
+              vm.clearDialog = null;
+              vm.notice = { tone: 'ok', text: 'Deleted ' + vm.number(r.deleted) + ' audit entr' + (r.deleted === 1 ? 'y' : 'ies') + '. The clear was recorded in the log.' };
+              vm.search(0);
+              vm.loadOptions();
+            })
+            .catch(function (err) { d.error = err.message; d.busy = false; });
+        },
+        searchSoon: function () { var vm = this; clearTimeout(timer); timer = setTimeout(function () { vm.search(0); }, 350); },
+        resetFilters: function () { this.adv.conds = []; this.adv.match = 'all'; this.f = defaults(); this.search(0); },
+        fieldType: function (key) { return ADV_TYPE[key] || 't'; },
+        opsFor: function (key) { return Object.keys(ADV_OP_LABELS[ADV_TYPE[key] || 't']); },
+        fixOp: function (c) {
+          var ops = this.opsFor(c.field);
+          if (ops.indexOf(c.op) === -1) c.op = ops[0];
+          if (this.fieldType(c.field) === 'b' && !/^(yes|no)$/.test(c.value)) c.value = '';
+        },
+        addCond: function () { this.adv.conds.push({ id: advId++, field: 'query', op: 'contains', value: '' }); },
+        clearAdv: function () { this.adv.conds = []; this.addCond(); },
+        toggleAdv: function () {
+          this.adv.open = !this.adv.open;
+          if (this.adv.open && !this.adv.conds.length) this.addCond();
+        },
+        loadOptions: function () {
+          var vm = this;
+          api('/query-studio/audit/options').then(function (o) { vm.options = Object.freeze(o); }).catch(function () { /* filters still work by hand */ });
+        },
+        openDetail: function (r) {
+          var vm = this;
+          vm.detail = Object.assign({}, r, { query: r.query_head });
+          vm.copied = false;
+          vm.detailLoading = r.query_length > (r.query_head || '').length;
+          api('/query-studio/audit/' + r.id)
+            .then(function (full) { if (vm.detail && vm.detail.id === r.id) vm.detail = Object.freeze(full); })
+            .catch(function () { /* keep the summary row */ })
+            .then(function () { vm.detailLoading = false; });
+          this.$nextTick(function () { if (vm.$refs.detailClose) vm.$refs.detailClose.focus(); });
+        },
+        copyQuery: function () {
+          var vm = this, text = vm.detail && vm.detail.query;
+          if (!text) return;
+          var done = function () { vm.copied = true; setTimeout(function () { vm.copied = false; }, 1500); };
+          var fallback = function () {
+            var ta = document.createElement('textarea');
+            ta.value = text; document.body.appendChild(ta); ta.select();
+            try { if (document.execCommand('copy')) done(); } catch (e) { /* left selected */ }
+            document.body.removeChild(ta);
+          };
+          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback);
+          else fallback();
+        },
+        // Query Data opens with the last editor text it saved (localStorage "querydata.last").
+        openInQueryData: function () {
+          try { localStorage.setItem('querydata.last', JSON.stringify(this.detail.query)); } catch (e) { /* storage blocked */ }
+          window.location.href = '/query-studio';
+        }
+      },
+      watch: {
+        // The conditions go to the server as one JSON filter; it searches once typing pauses.
+        advJson: function (v) {
+          if (v === this.f.adv) return;
+          this.f.adv = v;
+          this.searchSoon();
+        },
+        'f.adv': function (v) { if (!v && this.advActive.length) this.adv.conds = []; }
+      },
+      mounted: function () {
+        var vm = this;
+        this.search(0);
+        this.loadOptions();
+        document.addEventListener('keydown', function (e) {
+          if (e.key !== 'Escape') return;
+          if (vm.clearDialog) { if (!vm.clearDialog.busy) vm.clearDialog = null; }
+          else if (vm.detail) vm.detail = null;
+        });
+      }
+    });
+  })();
+</script>

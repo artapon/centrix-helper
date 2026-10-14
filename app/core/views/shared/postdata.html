@@ -1,0 +1,267 @@
+<div class="col-sm-12">
+  <div class="card">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <i class="fas fa-code" style="color:#2563eb;"></i>
+      <span>Post Data</span>
+      <button v-if="dataset != 'CertTemplate' && allRefs.length" type="button" class="btn btn-sm btn-outline-primary ml-auto" @click="viewRefs()">
+        <i class="fas fa-search-plus mr-1"></i>View lookups <span class="pd-count">{{ allRefs.length }}</span>
+      </button>
+    </div>
+    <div class="card-body">
+      <small>{{ postdataRaw }}</small>
+      <div v-if="dataset != 'CertTemplate'" class="table-responsive">
+        <p class="pd-note">Date-times are shown in Bangkok time (GMT+7); hover a date to see the stored value. Click <i class="fas fa-search-plus"></i> after an ObjectId to look up its record.</p>
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>Key</th>
+              <th>Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in postdataRows" :key="row.key">
+              <td>{{ row.key }}</td>
+              <td v-if="row.date" :title="row.value">
+                <span class="pd-date">{{ row.date }}</span> <span class="pd-id">GMT+7</span>
+              </td>
+              <td v-else>{{ row.value }}<button v-if="row.ids" type="button" class="pd-look" @click="viewRefs(row)" :title="'Look up ' + row.key" :aria-label="'Look up ' + row.key"><i class="fas fa-search-plus"></i></button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div v-else v-html="postdata"></div>
+    </div>
+  </div>
+</div>
+
+<div v-if="refView" class="pd-backdrop" @click.self="refView = null">
+  <div class="pd-modal" role="dialog" aria-modal="true" aria-labelledby="pdRefsTitle">
+    <div class="pd-modal-head">
+      <div class="pd-modal-title" id="pdRefsTitle"><i class="fas fa-search-plus" style="color:#2563eb;"></i>
+        <b>{{ collection || dataset || 'Audit data' }}</b>
+        <span class="text-muted" v-if="refView.single">· {{ refView.single }}</span></div>
+      <button type="button" class="pd-close" @click="refView = null" aria-label="Close" ref="refsClose"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="pd-tabs" role="tablist">
+      <button type="button" role="tab" class="pd-tab" :class="{ 'is-active': refView.tab === 'refs' }" :aria-selected="refView.tab === 'refs' ? 'true' : 'false'" @click="refView = Object.assign({}, refView, { tab: 'refs' })">
+        <i class="fas fa-link"></i> Lookups <span class="pd-count">{{ refView.refs.length }}</span></button>
+      <button type="button" role="tab" class="pd-tab" :class="{ 'is-active': refView.tab === 'json' }" :aria-selected="refView.tab === 'json' ? 'true' : 'false'" @click="refView = Object.assign({}, refView, { tab: 'json' })">
+        <i class="fas fa-code"></i> Document</button>
+      <span class="pd-sum" v-if="refView.tab === 'refs' && refView.loaded && !refView.error">{{ refFound }} of {{ refView.refs.length }} found</span>
+    </div>
+    <div v-if="refView.tab === 'json'" class="pd-modal-body pd-json"><pre>{{ docText }}</pre></div>
+    <div v-else class="pd-modal-body">
+      <div v-if="!refView.refs.length" class="pd-empty"><i class="fas fa-link"></i><b>No ObjectId fields</b><span>This audit data has no ObjectId values to look up.</span></div>
+      <div v-else-if="refView.error" class="pd-empty is-error"><i class="fas fa-exclamation-triangle"></i><b>Lookup failed</b><span>{{ refView.error }}</span></div>
+      <table v-else class="table table-sm table-hover mb-0 pd-refs">
+        <thead><tr><th>Field</th><th>ObjectId</th><th>Collection</th><th>Code</th><th>Name</th><th>Description</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr v-for="r in refView.refs" :key="r.path + ':' + r.id" :class="{ 'is-missing': r.notFound }">
+            <td class="pd-nowrap"><span class="pd-field">{{ r.path }}</span></td>
+            <td class="pd-nowrap"><code>{{ r.id }}</code>
+              <button type="button" class="pd-look" @click="copy(r.id, r.path + ':' + r.id)" :title="'Copy ' + r.id" :aria-label="'Copy ' + r.path + ' ObjectId'"><i :class="copied === r.path + ':' + r.id ? 'fas fa-check text-success' : 'far fa-copy'"></i></button></td>
+            <template v-if="!refView.loaded"><td colspan="5" class="text-muted"><i class="fas fa-spinner fa-spin"></i> Looking up…</td></template>
+            <template v-else-if="r.notFound"><td colspan="5" class="pd-miss" :title="r.tried && r.tried.length ? 'Looked in: ' + r.tried.join(', ') : 'No collection to look in'"><i class="fas fa-question-circle"></i> Not found<span v-if="r.tried && r.tried.length"> in {{ r.tried.join(', ') }}</span></td></template>
+            <template v-else>
+              <td class="pd-nowrap"><span class="pd-pill">{{ r.collection }}</span><div v-if="r.domaincode" class="pd-domain">{{ r.domaincode }}</div></td>
+              <td class="pd-nowrap"><b>{{ r.code || '—' }}</b></td>
+              <td>{{ r.name || '—' }}</td>
+              <td>{{ r.description || '—' }}</td>
+              <td><span v-if="r.statusflag" class="pd-flag" :class="'is-' + r.statusflag.toLowerCase()" :title="flagText(r.statusflag)">{{ r.statusflag }}</span><span v-else class="text-muted">—</span></td>
+            </template>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pd-modal-foot">
+      <span class="text-muted small">Looked up by field name: modifiedby → users, entypeuid → referencevalues, …</span>
+      <span class="pd-actions">
+        <button type="button" class="btn btn-sm btn-secondary" @click="copy(docText, 'doc')"><i :class="copied === 'doc' ? 'fas fa-check' : 'far fa-copy'"></i> {{ copied === 'doc' ? 'Copied' : 'Copy JSON' }}</button>
+        <button type="button" class="btn btn-sm btn-primary" @click="refView = null">Close</button>
+      </span>
+    </div>
+  </div>
+</div>
+
+<style>
+  .pd-note { margin: 12px 0 8px; font-size: 12px; color: #64748b; }
+  .pd-id { margin-left: 6px; font-size: 12px; color: #94a3b8; font-family: SFMono-Regular, Consolas, monospace; }
+  .pd-date { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pd-look { border: 0; background: none; padding: 0 4px; margin-left: 6px; color: #2563eb; font-size: 0.75rem; line-height: 1; border-radius: 4px; cursor: pointer; opacity: 0.6; }
+  .pd-look:hover, .pd-look:focus-visible { opacity: 1; background: #eff6ff; outline: none; }
+  .pd-count { background: #eef2ff; color: #3730a3; border-radius: 9px; padding: 0 7px; font-size: 0.72rem; font-weight: 600; }
+  .pd-backdrop { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 1060; background: rgba(15, 23, 42, 0.55); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .pd-modal { background: #fff; border-radius: 12px; box-shadow: 0 20px 50px rgba(15, 23, 42, 0.35); width: 100%; max-width: 1100px; max-height: calc(100vh - 32px); display: flex; flex-direction: column; overflow: hidden; }
+  .pd-modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; }
+  .pd-modal-title { display: flex; align-items: center; gap: 8px; min-width: 0; word-break: break-all; }
+  .pd-close { background: none; border: 0; font-size: 1.1rem; color: #64748b; width: 32px; height: 32px; border-radius: 8px; }
+  .pd-close:hover { background: #f1f5f9; color: #0f172a; }
+  .pd-tabs { display: flex; align-items: center; gap: 2px; padding: 0 12px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; }
+  .pd-tab { background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 12px; font-size: 0.85rem; font-weight: 600; color: #64748b; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+  .pd-tab:hover { color: #0f172a; }
+  .pd-tab.is-active { color: #2563eb; border-bottom-color: #2563eb; }
+  .pd-sum { margin-left: auto; font-size: 0.78rem; color: #64748b; }
+  .pd-modal-body { overflow: auto; flex: 1; min-height: 160px; }
+  .pd-json { background: #0f172a; }
+  .pd-json pre { margin: 0; padding: 14px 16px; color: #e2e8f0; font-size: 0.8rem; white-space: pre-wrap; word-break: break-word; }
+  .pd-refs th { position: sticky; top: 0; background: #f8fafc; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: #64748b; border-top: 0; white-space: nowrap; padding: 8px 12px; z-index: 1; }
+  .pd-refs td { font-size: 0.83rem; vertical-align: middle; padding: 6px 12px; }
+  .pd-refs code { font-size: 0.78rem; color: #334155; }
+  .pd-refs tr.is-missing td { background: #fafafa; }
+  .pd-nowrap { white-space: nowrap; }
+  .pd-field { font-family: 'Cascadia Code', Consolas, 'Courier New', monospace; font-size: 0.8rem; font-weight: 600; color: #0369a1; }
+  .pd-domain { font-size: 0.7rem; color: #94a3b8; margin-top: 2px; }
+  .pd-miss { color: #94a3b8; font-size: 0.8rem; }
+  .pd-pill { display: inline-block; font-weight: 700; font-size: 0.78rem; background: #eef2ff; color: #3730a3; border-radius: 6px; padding: 1px 8px; }
+  .pd-flag { display: inline-block; min-width: 22px; text-align: center; font-weight: 700; font-size: 0.75rem; border-radius: 6px; padding: 1px 6px; background: #f1f5f9; color: #475569; }
+  .pd-flag.is-a { background: #dcfce7; color: #166534; }
+  .pd-flag.is-d { background: #fee2e2; color: #991b1b; }
+  .pd-empty { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 28px 16px; color: #64748b; text-align: center; font-size: 0.85rem; }
+  .pd-empty > i { font-size: 1.1rem; color: #94a3b8; margin-bottom: 4px; }
+  .pd-empty b { color: #0f172a; }
+  .pd-empty.is-error > i { color: #dc2626; }
+  .pd-empty.is-error span { color: #991b1b; white-space: pre-wrap; }
+  .pd-modal-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 10px 16px; border-top: 1px solid #e2e8f0; }
+  .pd-actions { display: flex; gap: 6px; }
+</style>
+
+<script>
+  (function () {
+    var OID = /^[0-9a-f]{24}$/i;
+    var MAX_REFS = 300;   // the lookup endpoint's limit per request
+    // ISO date-times that carry a time zone (as MongoDB dates are saved in JSON).
+    var ISO_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?(Z|[+-]\d{2}:?\d{2})$/;
+    var bkk = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Bangkok', hour12: false,
+      day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+
+    // "DD/MM/YYYY HH:mm:ss" in Bangkok time, or '' when the value is not a date-time.
+    function bkkDate(value) {
+      if (typeof value !== 'string' || !ISO_DATE.test(value)) return '';
+      var d = new Date(value);
+      if (isNaN(d.getTime())) return '';
+      var p = {};
+      bkk.formatToParts(d).forEach(function (part) { p[part.type] = part.value; });
+      return p.day + '/' + p.month + '/' + p.year + ' ' + (p.hour === '24' ? '00' : p.hour) + ':' + p.minute + ':' + p.second;
+    }
+
+    // ObjectIds in a row's value ("id" or "id, id, ...").
+    function idsIn(value) {
+      return String(value).split(', ').filter(function (v) { return OID.test(v); }).map(function (v) { return v.toLowerCase(); });
+    }
+
+    // Field paths for the lookup rules: values[0].modifiedby -> values.0.modifiedby
+    var lookupPath = function (key) { return key.replace(/\[(\d+)\]/g, '.$1'); };
+
+    function post(url, body) {
+      return fetch(url, { method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (res) {
+        return res.json().catch(function () { return { error: 'HTTP ' + res.status }; }).then(function (data) {
+          if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+          return data;
+        });
+      });
+    }
+
+    var found = {};   // "<path>:<id>" -> lookup result, so reopening a lookup is instant
+
+    Page.setup({
+      // collection comes from the server; the default keeps older callers working.
+      data: function () { return { refView: null, copied: '', collection: '' }; },
+      computed: {
+        jsonObject: function () {
+          // postdata is JSON.stringify(<formatted json string>), so it is decoded twice
+          try { return this.postdata ? JSON.parse(JSON.parse(this.postdata)) : {}; } catch (e) { return {}; }
+        },
+        docText: function () {
+          try { return JSON.stringify(this.jsonObject, null, 2); } catch (e) { return String(this.postdataRaw || ''); }
+        },
+        // Flattens the audit JSON into key/value rows; nested objects become dotted keys.
+        postdataRows: function () {
+          var rows = [];
+          var push = function (row) {
+            var ids = idsIn(row.value);
+            if (ids.length) row.ids = ids;
+            rows.push(row);
+          };
+
+          (function addRowsForObject(obj, prefix) {
+            for (var key in obj) {
+              var name = prefix ? prefix + '.' + key : key;
+              var value = obj[key];
+              if (value && typeof value === 'object' && !Array.isArray(value)) {
+                if (typeof value.$date === 'string') value = value.$date;          // extended JSON date
+                else if (typeof value.$oid === 'string') value = value.$oid;       // extended JSON ObjectId
+                else { addRowsForObject(value, name); continue; }
+              }
+              if (Array.isArray(value) && value.some(function (item) { return item && typeof item === 'object'; })) {
+                // Arrays of objects get a row per field (name[0].field), so their ids and dates are shown too.
+                value.forEach(function (item, i) {
+                  if (item && typeof item === 'object') addRowsForObject(Array.isArray(item) ? { '': item } : item, name + '[' + i + ']');
+                  else push({ key: name + '[' + i + ']', value: String(item), date: bkkDate(item) });
+                });
+                continue;
+              }
+              if (Array.isArray(value)) {
+                value = value.map(function (item) {
+                  return typeof item === 'object' ? JSON.stringify(item) : (bkkDate(item) || item);
+                }).join(', ');
+              } else if (typeof value !== 'string') {
+                value = String(value);
+              }
+              push({ key: name, value: value, date: bkkDate(value) });
+            }
+          })(this.jsonObject, '');
+
+          return rows;
+        },
+        // Every ObjectId in the audit data, one entry per field and id.
+        allRefs: function () {
+          var out = [];
+          this.postdataRows.forEach(function (row) {
+            (row.ids || []).forEach(function (id) { out.push({ path: lookupPath(row.key), id: id }); });
+          });
+          return out.slice(0, MAX_REFS);
+        },
+        refFound: function () {
+          return this.refView ? this.refView.refs.filter(function (r) { return r.collection; }).length : 0;
+        }
+      },
+      mounted: function () {
+        var vm = this;
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape' && vm.refView) vm.refView = null;
+        });
+      },
+      methods: {
+        flagText: function (f) { return { A: 'Active', D: 'Deleted', I: 'Inactive' }[f] || f; },
+        // One row's ObjectIds, or every ObjectId when no row is given.
+        viewRefs: function (row) {
+          var vm = this;
+          var refs = row ? (row.ids || []).map(function (id) { return { path: lookupPath(row.key), id: id }; }) : this.allRefs;
+          var known = refs.map(function (r) { return found[r.path + ':' + r.id]; });
+          var cached = known.every(Boolean);
+          var view = { tab: 'refs', single: row ? row.key : '', refs: Object.freeze(cached ? known : refs), loaded: cached || !refs.length, error: '' };
+          vm.refView = view;
+          vm.$nextTick(function () { if (vm.$refs.refsClose) vm.$refs.refsClose.focus(); });
+          if (view.loaded) return;
+          post(location.pathname.replace(/\/$/, '') + '/lookup', { collection: this.collection || '', refs: refs })
+            .then(function (res) {
+              (res.refs || []).forEach(function (r) { found[r.path + ':' + r.id] = Object.freeze(r); });
+              if (vm.refView !== view) return;
+              vm.refView = Object.assign({}, view, { refs: Object.freeze(res.refs || []), loaded: true });
+            })
+            .catch(function (err) {
+              if (vm.refView !== view) return;
+              vm.refView = Object.assign({}, view, { error: err.message, loaded: true });
+            });
+        },
+        copy: function (text, key) {
+          var vm = this;
+          var done = function () { vm.copied = key; setTimeout(function () { if (vm.copied === key) vm.copied = ''; }, 1500); };
+          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, function () {});
+        }
+      }
+    });
+  })();
+</script>

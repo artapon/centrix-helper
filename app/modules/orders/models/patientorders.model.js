@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const paging = require('../../../core/http/paging');        // optional Previous / Next paging of the list pages
 
 const TZ = "Asia/Bangkok";
 const DATETIME_FORMAT = "%d/%m/%Y %H:%M";
@@ -122,7 +123,7 @@ function resolveOrdersLimit({ visituid, patientuid, ordercattype }) {
   return 50;
 }
 
-exports.getPatientOrders = async function (orguid, patientuid = "", visituid = "", ordercattype = "") {
+exports.getPatientOrders = async function (orguid, patientuid = "", visituid = "", ordercattype = "", page = null) {
   const filter = buildActiveOrdersFilter(orguid, { patientuid, visituid, ordercattype });
   const limit = resolveOrdersLimit({ visituid, patientuid, ordercattype });
 
@@ -219,7 +220,7 @@ exports.getPatientOrders = async function (orguid, patientuid = "", visituid = "
         billintType: "$patientorderitems.billingtype"
       }
     },
-    { $limit: limit }
+    ...paging.stages(page, limit)
   ];
 
   return runAggregation("patientorders", pipeline);
@@ -229,9 +230,11 @@ function resolveOrdersByCateLimit({ visituid, patientuid }) {
   return (visituid || patientuid) ? 100000 : 50;
 }
 
-exports.getPatientOrdersByCate = async function (orguid, patientuid = "", visituid = "", ordercatetype, accessionnumber = "") {
+// paging (optional): { skip, limit } for the Lab Orders pages; without it as before (50, or every item of a patient / visit).
+exports.getPatientOrdersByCate = async function (orguid, patientuid = "", visituid = "", ordercatetype, accessionnumber = "", paging = null) {
   const filter = buildActiveOrdersFilter(orguid, { patientuid, visituid, ordercattype: ordercatetype });
-  const limit = resolveOrdersByCateLimit({ visituid, patientuid });
+  const skip = paging ? Math.max(0, parseInt(paging.skip, 10) || 0) : 0;
+  const limit = paging && paging.limit ? Math.min(1000, Math.max(1, parseInt(paging.limit, 10) || 50)) : resolveOrdersByCateLimit({ visituid, patientuid });
 
   const pipeline = [
     { $match: filter },
@@ -278,7 +281,8 @@ exports.getPatientOrdersByCate = async function (orguid, patientuid = "", visitu
     // documents that will be discarded, and stops the old bug where a
     // matching document past the `limit` cutoff was silently dropped.
     ...(accessionnumber ? [{ $match: { accessionnumber } }] : []),
-    // Nothing below drops rows, so limit before the joins instead of joining every order first.
+    // Nothing below drops rows, so page and limit before the joins instead of joining every order first.
+    ...(skip ? [{ $skip: skip }] : []),
     { $limit: limit },
 
     ...joinManyById("ordercategories", {
@@ -358,7 +362,7 @@ exports.getPatientOrdersByCate = async function (orguid, patientuid = "", visitu
   return runAggregation("patientorders", pipeline);
 };
 
-exports.getPharmacyOrders = async function (orguid, patientuid, itemcode, visituid) {
+exports.getPharmacyOrders = async function (orguid, patientuid, itemcode, visituid, page = null) {
   const filter = buildActiveOrdersFilter(orguid, { patientuid, visituid });
   filter.ordercattype = "MEDICINE";
   const searchitem = itemcode ? { "item.code": itemcode } : {};
@@ -505,7 +509,7 @@ exports.getPharmacyOrders = async function (orguid, patientuid, itemcode, visitu
         iscosignrequired: 1
       }
     },
-    { $limit: 50 }
+    ...paging.stages(page, 50)
   ];
 
   return runAggregation("patientorders", pipeline);
@@ -551,7 +555,7 @@ exports.getPatientOrdersitem = async function (orderuid, orderitemuid, orguid) {
  *
  * @returns {Promise<Array>} - A promise that resolves to an array of medication administration orders.
  */
-exports.getMedsadminOrders = async function (orguid, patientuid, visituid, itemcode, ordernumber) {
+exports.getMedsadminOrders = async function (orguid, patientuid, visituid, itemcode, ordernumber, page = null) {
   const initfilter = buildActiveOrdersFilter(orguid, { patientuid, visituid });
   const searchitem = {};
   if (itemcode) searchitem["orderitem.code"] = itemcode;
@@ -643,9 +647,8 @@ exports.getMedsadminOrders = async function (orguid, patientuid, visituid, itemc
     }
   ];
 
-  if (!visituid) {
-    pipeline.push({ $limit: 200 });
-  }
+  // Paged: every visit is paged too; else as before (200, every row of a visit).
+  pipeline.push(...paging.stages(page, visituid ? 0 : 200));
 
   return runAggregation("medsadmins", pipeline);
 };

@@ -1,6 +1,6 @@
 // Mounted before the sign-in guard: these pages are how a user gets signed in.
 const router = require('express').Router();
-const asyncHandler = require('../../core/http/asyncHandler');
+const asyncHandler = require('../../core/http/async.handler');
 const authController = require('./controllers/auth.controller');
 
 router.get('/login', asyncHandler(authController.loginForm));

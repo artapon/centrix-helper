@@ -20,13 +20,13 @@ const sessions = require('express-session');
 const MemoryStore = require('memorystore')(sessions);
 const { ensureSchema } = require('./app/core/migrations/sqlite/migrate');
 const modules = require('./app/core/modules');
-const renderPage = require('./app/core/middleware/renderPage');
-const requireDbConnection = require('./app/core/middleware/requireDbConnection');
-const requireAuth = require('./app/core/middleware/requireAuth');
+const renderPage = require('./app/core/middleware/renderpage.middleware');
+const requireDbConnection = require('./app/core/middleware/requiredbconnection.middleware');
+const requireAuth = require('./app/core/middleware/requireauth.middleware');
 const auth = require('./app/core/auth');
 const addons = require('./app/core/addons');
-const requireActiveAddon = require('./app/core/middleware/requireActiveAddon');
-const legacyRedirect = require('./app/core/middleware/legacyRedirect');
+const requireActiveAddon = require('./app/core/middleware/requireactiveaddon.middleware');
+const legacyRedirect = require('./app/core/middleware/legacyredirect.middleware');
 
 const schemaReady = ensureSchema();
 addons.init(schemaReady);
@@ -131,7 +131,7 @@ app.use((err, req, res, next) => {
 
 // HMVC modules: routes.open.js (no sign-in), then routes.public.js behind the sign-in
 // guard, then routes.js behind the DB guard as well.
-app.use(legacyRedirect);   // old /data, /tool, /settings URLs -> domain URLs (core/routeMap.js)
+app.use(legacyRedirect);   // old /data, /tool, /settings URLs -> domain URLs (core/routemap.js)
 modules.mountRoutes(app, 'routes.open.js');
 app.use(requireAuth);
 app.use(requireActiveAddon);   // pages of a deactivated add-on (Marketplace)

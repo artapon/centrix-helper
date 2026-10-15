@@ -1,0 +1,221 @@
+<div class="col-12">
+  <div v-if="success" class="alert alert-success" role="alert"><i class="fas fa-check-circle mr-2"></i>{{ success }}</div>
+  <div v-if="error" class="alert alert-danger" role="alert"><i class="fas fa-exclamation-triangle mr-2"></i>{{ error }}</div>
+
+  <a href="/admin/marketplace" class="ad-back"><i class="fas fa-arrow-left mr-1"></i> Marketplace</a>
+
+  <!-- Add-on header: what it is (left), its facts and activate / deactivate (right) -->
+  <div class="card ad-hero" :class="{ 'is-inactive': !addon.active }">
+    <div class="ad-hero-grid">
+      <div class="ad-hero-main">
+        <div class="ad-head">
+          <span class="ad-icon"><i :class="addon.icon"></i></span>
+          <div class="ad-title">
+            <h1>{{ addon.name }}</h1>
+            <small>{{ addon.category }}<template v-if="addon.author"> · {{ addon.author }}</template></small>
+          </div>
+        </div>
+        <p v-if="addon.summary" class="ad-summary">{{ addon.summary }}</p>
+        <p v-if="addon.description && addon.description !== addon.summary" class="ad-description">{{ addon.description }}</p>
+        <div v-if="addon.missing && addon.missing.length" class="ad-missing" role="alert">
+          <i class="fas fa-box-open"></i>
+          <span>Needs the npm package{{ addon.missing.length > 1 ? 's' : '' }} <b>{{ addon.missing.join(', ') }}</b>. Run
+            <code>npm install {{ addon.missing.join(' ') }}</code> in the app folder, then restart the server.</span>
+        </div>
+      </div>
+
+      <aside class="ad-hero-side">
+        <span class="ad-status" :class="addon.active ? 'is-active' : 'is-off'">
+          <i class="fas" :class="addon.active ? 'fa-check-circle' : 'fa-pause-circle'"></i> {{ addon.active ? 'Active' : 'Inactive' }}
+        </span>
+        <dl class="ad-facts">
+          <div><dt>Version</dt><dd>v{{ addon.version }}</dd></div>
+          <div><dt>Category</dt><dd>{{ addon.category }}</dd></div>
+          <div v-if="addon.menu"><dt>Menu</dt><dd>{{ addon.menu.header }} · {{ addon.menu.items.length }} item{{ addon.menu.items.length === 1 ? '' : 's' }}</dd></div>
+          <div v-if="addon.widgets && addon.widgets.length"><dt>Widgets</dt><dd>{{ addon.widgets.length }}</dd></div>
+          <div><dt>Pages</dt><dd>{{ addon.paths.length }}</dd></div>
+        </dl>
+        <p class="ad-changed">{{ changedText }}</p>
+
+        <template v-if="addon.active">
+          <form v-if="confirming" method="post" :action="'/admin/marketplace/' + addon.id + '/deactivate'" class="ad-confirm">
+            <input type="hidden" name="from" value="detail">
+            <span>Hide {{ addon.name }} from the menu and close its pages for everyone? Its data and role permissions are kept.</span>
+            <span class="ad-confirm-actions">
+              <button type="submit" class="btn btn-danger btn-sm"><i class="fas fa-power-off mr-1"></i> Deactivate</button>
+              <button type="button" class="btn btn-light btn-sm" @click="confirming = false">Cancel</button>
+            </span>
+          </form>
+          <button v-else type="button" class="btn btn-outline-danger btn-sm ad-side-btn" @click="confirming = true">
+            <i class="fas fa-power-off mr-1"></i> Deactivate
+          </button>
+        </template>
+        <form v-else method="post" :action="'/admin/marketplace/' + addon.id + '/activate'">
+          <input type="hidden" name="from" value="detail">
+          <button type="submit" class="btn btn-primary btn-sm ad-side-btn" :disabled="addon.missing && addon.missing.length > 0"
+                  :title="addon.missing && addon.missing.length ? 'Install the missing packages first' : ''"><i class="fas fa-bolt mr-1"></i> Activate</button>
+        </form>
+      </aside>
+    </div>
+  </div>
+
+  <!-- Details: two columns that balance their heights (one on narrow screens) -->
+  <div class="ad-cols">
+    <!-- Features -->
+    <section v-if="addon.features && addon.features.length" class="card ad-card">
+      <header class="ad-card-head"><i class="fas fa-star"></i><span>Features</span><span class="ad-count">{{ addon.features.length }}</span></header>
+      <ul class="ad-list">
+        <li v-for="f in addon.features" :key="f"><i class="fas fa-check"></i><span>{{ f }}</span></li>
+      </ul>
+    </section>
+
+    <!-- Menu -->
+    <section v-if="addon.menu" class="card ad-card">
+      <header class="ad-card-head"><i class="fas fa-bars"></i><span>Adds to the menu</span><span class="ad-count">{{ addon.menu.header }}</span></header>
+      <ul class="ad-rows">
+        <li v-for="item in addon.menu.items" :key="item.link">
+          <div class="ad-row-top">
+            <a class="ad-row-name" :href="addon.active ? item.link : null" :title="addon.active ? 'Open ' + item.text : 'Activate to open'">
+              <i :class="item.icon"></i> {{ item.text }}
+            </a>
+            <span v-if="item.adminOnly" class="ad-tag">Admins only</span>
+            <code class="ad-path">{{ item.link }}</code>
+          </div>
+          <ul v-if="item.actions && item.actions.length" class="ad-actions">
+            <li v-for="a in item.actions" :key="a.key"><b>{{ a.text }}</b><span v-if="a.description">{{ a.description }}</span></li>
+          </ul>
+        </li>
+      </ul>
+    </section>
+
+    <!-- Widgets other pages can show (each granted to roles on its own) -->
+    <section v-if="addon.widgets && addon.widgets.length" class="card ad-card">
+      <header class="ad-card-head"><i class="fas fa-puzzle-piece"></i><span>Widgets</span><span class="ad-count">{{ addon.widgets.length }}</span></header>
+      <ul class="ad-rows">
+        <li v-for="w in addon.widgets" :key="w.id">
+          <div class="ad-row-top">
+            <span class="ad-row-name"><i :class="w.icon"></i> {{ w.text }}</span>
+            <code class="ad-path">{{ w.link }}</code>
+          </div>
+          <p v-if="w.description" class="ad-row-desc">{{ w.description }}</p>
+        </li>
+      </ul>
+      <p class="ad-card-foot">Granted to roles in <a href="/admin/roles">Roles &amp; Permissions</a> &gt; Widgets.</p>
+    </section>
+
+    <!-- Needs -->
+    <section v-if="(addon.requires && addon.requires.length) || (addon.packages && addon.packages.length)" class="card ad-card">
+      <header class="ad-card-head"><i class="fas fa-plug"></i><span>Needs</span></header>
+      <ul v-if="addon.requires.length" class="ad-list is-needs">
+        <li v-for="r in addon.requires" :key="r"><i class="fas fa-plug"></i><span>{{ r }}</span></li>
+      </ul>
+      <div v-if="addon.packages && addon.packages.length" class="ad-chips-block">
+        <span class="ad-label">npm packages</span>
+        <p class="ad-chips"><code v-for="p in addon.packages" :key="p">{{ p }}</code></p>
+      </div>
+    </section>
+
+    <!-- Pages -->
+    <section v-if="addon.paths && addon.paths.length" class="card ad-card">
+      <header class="ad-card-head"><i class="fas fa-link"></i><span>Pages</span><span class="ad-count">{{ addon.paths.length }}</span></header>
+      <p class="ad-chips ad-chips-pad"><code v-for="p in addon.paths" :key="p">{{ p }}</code></p>
+    </section>
+  </div>
+</div>
+
+<style>
+  .ad-back { display: inline-block; margin-bottom: 12px; font-size: .84rem; font-weight: 600; color: var(--primary); }
+
+  /* Header */
+  .ad-hero { margin-bottom: 16px; overflow: hidden; }
+  .ad-hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) 280px; }
+  .ad-hero-main { padding: 22px 24px; min-width: 0; }
+  .ad-hero-side { padding: 20px; background: var(--surface-2); border-left: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px; }
+  @media (max-width: 991px) {
+    .ad-hero-grid { grid-template-columns: minmax(0, 1fr); }
+    .ad-hero-side { border-left: 0; border-top: 1px solid var(--border); }
+  }
+  .ad-head { display: flex; align-items: center; gap: 14px; }
+  .ad-icon { flex: 0 0 52px; height: 52px; border-radius: 12px; display: grid; place-items: center; background: var(--primary-soft); color: var(--primary); font-size: 1.35rem; }
+  .ad-hero.is-inactive .ad-icon { background: var(--surface-3); color: var(--muted); }
+  .ad-title { min-width: 0; }
+  .ad-title h1 { font-size: 1.3rem; margin: 0 0 2px; text-wrap: balance; }
+  .ad-title small { color: var(--muted); font-size: .8rem; }
+  .ad-summary { margin: 16px 0 0; color: var(--text); font-size: .95rem; line-height: 1.55; max-width: 72ch; }
+  .ad-description { margin: 8px 0 0; color: var(--text-2); font-size: .86rem; line-height: 1.6; max-width: 72ch; }
+  .ad-missing { display: flex; gap: 8px; align-items: flex-start; margin-top: 14px; font-size: .82rem; color: var(--warning); background: var(--warning-soft); border-radius: var(--radius-sm); padding: 8px 10px; max-width: 72ch; }
+  .ad-missing i { margin-top: 2px; }
+  .ad-missing code { color: inherit; background: rgba(0,0,0,.05); border-radius: 4px; padding: 0 4px; }
+
+  .ad-status { align-self: flex-start; display: inline-flex; align-items: center; gap: 5px; font-size: .78rem; font-weight: 600; border-radius: 999px; padding: 4px 12px; white-space: nowrap; }
+  .ad-status.is-active { color: var(--success); background: var(--success-soft); }
+  .ad-status.is-off { color: var(--text-2); background: var(--surface-3); }
+  .ad-facts { margin: 0; display: grid; gap: 6px; }
+  .ad-facts > div { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 8px; align-items: baseline; }
+  .ad-facts dt { font-size: .68rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+  .ad-facts dd { margin: 0; font-size: .84rem; color: var(--text); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .ad-changed { margin: 0; font-size: .76rem; color: var(--muted); line-height: 1.4; }
+  .ad-side-btn { width: 100%; justify-content: center; }
+  .ad-hero-side form { margin: 0; }
+  .ad-confirm { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; background: var(--danger-soft); border-radius: var(--radius-sm); }
+  .ad-confirm > span:first-of-type { font-size: .8rem; font-weight: 600; color: var(--danger); line-height: 1.4; }
+  .ad-confirm-actions { display: flex; gap: 6px; }
+
+  /* Details: balanced columns */
+  .ad-cols { column-count: 2; column-gap: 16px; }
+  @media (max-width: 991px) { .ad-cols { column-count: 1; } }
+  .ad-card { display: inline-block; width: 100%; break-inside: avoid; margin: 0 0 16px; }
+  .ad-card-head { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: .9rem; color: var(--text); }
+  .ad-card-head > i { color: var(--primary); width: 16px; text-align: center; }
+  .ad-count { margin-left: auto; font-size: .72rem; font-weight: 600; color: var(--text-2); background: var(--surface-3); border-radius: 999px; padding: 1px 9px; font-variant-numeric: tabular-nums; }
+  .ad-card-foot { margin: 0; padding: 10px 16px; border-top: 1px solid var(--border); font-size: .76rem; color: var(--muted); }
+
+  .ad-list { list-style: none; margin: 0; padding: 12px 16px; display: grid; gap: 8px; font-size: .85rem; color: var(--text-2); line-height: 1.45; }
+  .ad-list li { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 8px; }
+  .ad-list i { margin-top: 4px; color: var(--success); font-size: .72rem; }
+  .ad-list.is-needs i { color: var(--muted); }
+
+  .ad-rows { list-style: none; margin: 0; padding: 0; }
+  .ad-rows > li { padding: 11px 16px; }
+  .ad-rows > li + li { border-top: 1px solid var(--border); }
+  .ad-row-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .ad-row-name { font-weight: 600; font-size: .87rem; color: var(--text); }
+  .ad-row-name i { width: 18px; text-align: center; color: var(--muted); }
+  a.ad-row-name[href]:hover { color: var(--primary); text-decoration: none; }
+  .ad-tag { font-size: .68rem; font-weight: 600; color: var(--text-2); background: var(--surface-3); border-radius: 999px; padding: 1px 8px; }
+  .ad-path { margin-left: auto; font-size: .72rem; color: var(--muted); background: none; padding: 0; }
+  .ad-row-desc { margin: 4px 0 0 26px; font-size: .78rem; color: var(--text-2); line-height: 1.45; }
+  .ad-actions { list-style: none; margin: 8px 0 0 26px; padding: 0 0 0 10px; border-left: 2px solid var(--border); display: grid; gap: 4px; }
+  .ad-actions li { font-size: .78rem; color: var(--text-2); line-height: 1.4; }
+  .ad-actions b { color: var(--text); font-weight: 600; margin-right: 6px; }
+
+  .ad-label { display: block; font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .ad-chips-block { padding: 0 16px 14px; }
+  .ad-list + .ad-chips-block { border-top: 1px solid var(--border); padding-top: 12px; }
+  .ad-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
+  .ad-chips-pad { padding: 12px 16px 14px; }
+  .ad-chips code { font-size: .76rem; background: var(--surface-3); border-radius: 4px; padding: 2px 7px; color: var(--text-2); }
+</style>
+
+<script>
+  Page.setup({
+    data: function () {
+      return { confirming: false };
+    },
+    computed: {
+      // "Activated by admin1 · 09/10/2026 14:03 GMT+7", or the manifest default when never changed.
+      changedText: function () {
+        var a = this.addon;
+        if (!a.changedAt) return a.active ? 'Active by default' : 'Inactive by default';
+        var d = new Date(a.changedAt), when = '';
+        if (!isNaN(d)) {
+          var p = {};
+          new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
+            .formatToParts(d).forEach(function (x) { p[x.type] = x.value; });
+          when = p.day + '/' + p.month + '/' + p.year + ' ' + p.hour + ':' + p.minute + ' GMT+7';
+        }
+        return (a.active ? 'Activated' : 'Deactivated') + (a.changedBy ? ' by ' + a.changedBy : '') + (when ? ' · ' + when : '');
+      }
+    }
+  });
+</script>

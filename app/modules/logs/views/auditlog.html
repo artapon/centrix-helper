@@ -1,39 +1,49 @@
 <div class="col-sm-12">
   <div class="card">
     <div class="card-header" style="display:flex;align-items:center;gap:8px;">
-      <i class="fas fa-filter" style="color:#2563eb;"></i>
-      <span>Filter</span>
+      <i class="fas fa-search" style="color:#2563eb;"></i>
+      <span>Search & Filter Audit Logs</span>
     </div>
     <div class="card-body">
-      <form class="lb-filters" @submit.prevent="reload">
-        <div class="lb-field">
-          <label for="lb-dataset">Dataset</label>
-          <select id="lb-dataset" class="form-control" v-model="f.dataset">
-            <option value="">All datasets</option>
-            <option v-for="d in datasetList" :key="d" :value="d">{{ d }}</option>
-          </select>
+      <form @submit.prevent="reload">
+        <div class="form-row">
+          <div class="form-group col-sm-3 mb-3">
+            <label for="lb-dataset"><i class="fas fa-database mr-1" style="color:#94a3b8;"></i>Dataset</label>
+            <select id="lb-dataset" class="form-control" v-model="f.dataset">
+              <option value="">All datasets</option>
+              <option v-for="d in datasetList" :key="d" :value="d">{{ d }}</option>
+            </select>
+          </div>
+          <div class="form-group col-sm-3 mb-3">
+            <label for="lb-code"><i class="fas fa-barcode mr-1" style="color:#94a3b8;"></i>Dataset Code</label>
+            <input id="lb-code" type="text" class="form-control" v-model.trim="f.datasetcode" :disabled="!f.dataset" :placeholder="f.dataset ? 'Any code' : 'Choose a dataset first'">
+          </div>
+          <div class="form-group col-sm-3 mb-3">
+            <label for="lb-from"><i class="fas fa-calendar-alt mr-1" style="color:#94a3b8;"></i>From</label>
+            <input id="lb-from" type="date" class="form-control" v-model="f.from">
+          </div>
+          <div class="form-group col-sm-3 mb-3">
+            <label for="lb-to"><i class="fas fa-calendar-alt mr-1" style="color:#94a3b8;"></i>To</label>
+            <input id="lb-to" type="date" class="form-control" v-model="f.to">
+          </div>
+          <div class="form-group col-sm-3 mb-3">
+            <label for="lb-size"><i class="fas fa-list-ol mr-1" style="color:#94a3b8;"></i>Batch Size</label>
+            <select id="lb-size" class="form-control" v-model.number="batchSize">
+              <option v-for="n in sizeOptions" :key="n" :value="n">{{ n }}</option>
+            </select>
+          </div>
         </div>
-        <div class="lb-field">
-          <label for="lb-code">Dataset code</label>
-          <input id="lb-code" type="text" class="form-control" v-model.trim="f.datasetcode" :disabled="!f.dataset" :placeholder="f.dataset ? 'Any code' : 'Choose a dataset first'">
-        </div>
-        <div class="lb-field">
-          <label for="lb-from">From</label>
-          <input id="lb-from" type="date" class="form-control" v-model="f.from">
-        </div>
-        <div class="lb-field">
-          <label for="lb-to">To</label>
-          <input id="lb-to" type="date" class="form-control" v-model="f.to">
-        </div>
-        <div class="lb-field lb-narrow">
-          <label for="lb-size">Batch size</label>
-          <select id="lb-size" class="form-control" v-model.number="batchSize">
-            <option v-for="n in sizeOptions" :key="n" :value="n">{{ n }}</option>
-          </select>
-        </div>
-        <div class="lb-actions">
-          <button type="submit" class="btn btn-success"><i class="fas fa-search mr-1"></i>กรองข้อมูล</button>
-          <button type="button" class="btn btn-light" @click="resetFilters">Reset</button>
+        <div class="form-row">
+          <div class="form-group col-sm-3 mb-0">
+            <button type="submit" class="btn btn-primary w-100">
+              <i class="fas fa-filter mr-1"></i> Filter Data
+            </button>
+          </div>
+          <div class="form-group col-sm-2 mb-0">
+            <button type="button" class="btn btn-secondary w-100" @click="resetFilters">
+              <i class="fas fa-undo mr-1"></i> Reset
+            </button>
+          </div>
         </div>
       </form>
       <div class="lb-hint">Rows load newest first in batches of {{ batchSize }}. The default range is the last 7 days; clear both dates for all dates.</div>
@@ -45,12 +55,17 @@
       <span class="lb-title"><i class="fas fa-history" style="color:#2563eb;"></i> Auditlogs</span>
       <span class="lb-status" aria-live="polite">{{ statusText }}</span>
       <span class="lb-buttons">
-        <button type="button" class="btn btn-outline-primary btn-sm" v-if="hasMore && !loading" @click="loadNext()"><i class="fas fa-angle-double-down mr-1"></i>Next batch</button>
         <button type="button" class="btn btn-outline-primary btn-sm" v-if="hasMore && !loadingAll" :disabled="rows.length >= rowCap" @click="loadAll"><i class="fas fa-layer-group mr-1"></i>Load all</button>
         <button type="button" class="btn btn-outline-danger btn-sm" v-if="loading" @click="stop"><i class="fas fa-stop mr-1"></i>Stop</button>
         <button type="button" class="btn btn-outline-secondary btn-sm" v-if="total === undefined && !counting && (rows.length || hasMore)" @click="count" title="Count every matching row. On a very large log this reads the whole date range."><i class="fas fa-calculator mr-1"></i>Count matches</button>
         <span class="lb-counting" v-if="counting"><i class="fas fa-spinner fa-spin mr-1"></i>Counting…</span>
       </span>
+      <!-- Previous / Next: one batch a page; Next reads the next batch when it is not loaded yet -->
+      <span class="lb-pager">
+          <span class="lb-pager-range" v-if="pageRows.length">Page {{ pageIdx + 1 }} · rows {{ number(pageIdx * batchSize + 1) }}–{{ number(pageIdx * batchSize + pageRows.length) }}</span>
+          <button type="button" class="btn btn-secondary btn-sm" @click="prevPage" :disabled="!pageIdx"><i class="fas fa-chevron-left mr-1"></i> Previous</button>
+          <button type="button" class="btn btn-secondary btn-sm" @click="nextPage" :disabled="!canNext"><template v-if="wantPage !== null && loading"><i class="fas fa-spinner fa-spin mr-1"></i> Loading</template><template v-else>Next <i class="fas fa-chevron-right ml-1"></i></template></button>
+        </span>
     </div>
     <div class="lb-progress" :class="{ 'is-indeterminate': loading && pct === null }" role="progressbar" :aria-valuenow="pct === null ? null : Math.round(pct)" aria-valuemin="0" aria-valuemax="100">
       <span :style="{ width: (pct === null ? (loading ? 30 : 0) : pct) + '%' }"></span>
@@ -75,7 +90,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="item in shown" :key="item._id">
+            <tr v-for="item in pageRows" :key="item._id">
               <td class="text-left lb-nowrap">{{ item.auditdate }}</td>
               <td class="text-left">{{ item.dataset }}</td>
               <td class="text-left">{{ item.datasetcode }}</td>
@@ -91,20 +106,19 @@
         </table>
       </div>
       <div class="lb-more" ref="more">
-        <span v-if="loading"><i class="fas fa-spinner fa-spin mr-1"></i>Loading batch {{ batches + 1 }}…</span>
-        <button type="button" class="btn btn-link" v-else-if="hasMore && !error" @click="loadNext()">Load the next {{ batchSize }} rows</button>
-        <span v-else-if="rows.length && !hasMore">All {{ number(rows.length) }} rows loaded.</span>
+        <span v-if="loading && wantPage === null"><i class="fas fa-spinner fa-spin mr-1"></i>Loading batch {{ batches + 1 }}…</span>
+        <span v-else-if="rows.length && !hasMore" class="lb-more-note">All {{ number(rows.length) }} rows loaded.</span>
+        <span class="lb-pager">
+        <span class="lb-pager-range" v-if="pageRows.length">Page {{ pageIdx + 1 }} · rows {{ number(pageIdx * batchSize + 1) }}–{{ number(pageIdx * batchSize + pageRows.length) }}</span>
+        <button type="button" class="btn btn-secondary btn-sm" @click="prevPage" :disabled="!pageIdx"><i class="fas fa-chevron-left mr-1"></i> Previous</button>
+        <button type="button" class="btn btn-secondary btn-sm" @click="nextPage" :disabled="!canNext"><template v-if="wantPage !== null && loading"><i class="fas fa-spinner fa-spin mr-1"></i> Loading</template><template v-else>Next <i class="fas fa-chevron-right ml-1"></i></template></button>
+      </span>
       </div>
     </div>
   </div>
 </div>
 
 <style>
-  .lb-filters { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: flex-end; }
-  .lb-field { display: flex; flex-direction: column; gap: 4px; min-width: 160px; flex: 1 1 160px; max-width: 240px; }
-  .lb-field.lb-narrow { min-width: 110px; flex: 0 1 120px; }
-  .lb-field label { margin: 0; font-size: 12px; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: .03em; }
-  .lb-actions { display: flex; gap: 8px; }
   .lb-hint { margin-top: 10px; font-size: 12px; color: #64748b; }
   .lb-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
   .lb-title { display: flex; align-items: center; gap: 8px; font-weight: 600; }
@@ -118,6 +132,10 @@
   .lb-table td { vertical-align: top; }
   .lb-nowrap { white-space: nowrap; font-variant-numeric: tabular-nums; }
   .lb-url { max-width: 420px; word-break: break-all; }
+  .lb-pager { display: flex; align-items: center; gap: 8px; margin-left: auto; order: 2; flex-wrap: wrap; }
+  .lb-pager-range { font-size: 12px; color: #64748b; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .lb-more { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+  .lb-more-note { margin-right: auto; }
   .lb-more { padding: 12px 16px; text-align: center; font-size: 13px; color: #64748b; min-height: 44px; }
 </style>
 
@@ -155,6 +173,7 @@
           sizeOptions: [100, 200, 500, 1000, 2000].filter(function (n) { return n <= max; }),
           rows: [], next: '', hasMore: false, batches: 0, elapsed: 0,
           total: undefined, loading: false, loadingAll: false, error: '', scan: null, estimated: null, counting: false, halted: false, want: 0, note: '',
+          pageIdx: 0, wantPage: null,     // the page shown; the page Next waits for while its batch loads
           search: '', rowCap: ROW_CAP, run: 0
         };
       },
@@ -187,6 +206,9 @@
           if (this.rows.length >= ROW_CAP && this.hasMore) parts.push('page limit reached, narrow the date range');
           return parts.join(' · ');
         },
+        // The page shown: `batchSize` of the loaded rows (after the search).
+        pageRows: function () { return this.shown.slice(this.pageIdx * this.batchSize, (this.pageIdx + 1) * this.batchSize); },
+        canNext: function () { return (this.pageIdx + 1) * this.batchSize < this.shown.length || (this.hasMore && !this.search && this.rows.length < ROW_CAP); },
         shown: function () {
           var q = this.search.toLowerCase();
           if (!q) return this.rows;
@@ -198,19 +220,34 @@
       },
       mounted: function () {
         var vm = this;
-        if ('IntersectionObserver' in window) {
-          this.observer = new IntersectionObserver(function (entries) {
-            if (entries[0].isIntersecting && vm.hasMore && !vm.loading && !vm.error && !vm.search && vm.rows.length < ROW_CAP) vm.loadNext();
-          }, { rootMargin: '400px' });
-          if (this.$refs.more) this.observer.observe(this.$refs.more);
-        }
+        // Paged with Previous / Next: the next batch loads when Next needs it, not on scroll.
         this.reload();
       },
       beforeDestroy: function () {
         if (this.observer) this.observer.disconnect();
         this.abort();
       },
+      watch: {
+        // A batch Next asked for arrived: show its page (or stop waiting when nothing more came).
+        'shown.length': function (n) {
+          if (this.wantPage !== null && this.wantPage * this.batchSize < n) { this.pageIdx = this.wantPage; this.wantPage = null; }
+          else if (this.wantPage !== null && !this.loading && !this.hasMore) this.wantPage = null;
+          var last = Math.max(0, Math.ceil(n / this.batchSize) - 1);
+          if (this.pageIdx > last) this.pageIdx = last;
+        },
+        loading: function (on) { if (!on && this.wantPage !== null && this.wantPage * this.batchSize >= this.shown.length) this.wantPage = null; },
+        search: function () { this.pageIdx = 0; },
+        batchSize: function () { this.pageIdx = 0; }
+      },
       methods: {
+        prevPage: function () { if (this.pageIdx > 0) { this.pageIdx--; this.wantPage = null; } },
+        nextPage: function () {
+          var next = this.pageIdx + 1;
+          if (next * this.batchSize < this.shown.length) { this.pageIdx = next; return; }
+          if (!this.hasMore || this.loading) return;
+          this.wantPage = next;
+          this.loadNext();
+        },
         number: function (v) { return nf.format(v || 0); },
         abort: function () {
           if (this.controller) this.controller.abort();
@@ -221,6 +258,7 @@
           this.reload();
         },
         reload: function () {
+          this.pageIdx = 0; this.wantPage = null;
           this.abort();
           this.run++;
           this.rows = []; this.next = ''; this.hasMore = false; this.batches = 0; this.elapsed = 0;

@@ -1,6 +1,8 @@
 // Role-based access, keyed by menu item: a role is granted menu links (menu.config.js), and
 // a request for a page under a link the role lacks is refused. Administrators have every
 // permission; items marked adminOnly (user and role management) are never grantable.
+// Add-on widgets are granted the same way: they sit in a hidden "Widgets" section of the menu
+// (link /widgets/<addon>/<key>, see core/addons.js) that the sidebar doesn't draw.
 
 const ADMIN_ROLE = 'admin';
 
@@ -43,9 +45,13 @@ function grantableMenu(menu = global.menu || []) {
   return menu
     .map((section) => ({
       header: section.header,
+      ...(section.hidden ? { widgets: true } : {}),
       items: section.items
         .filter((item) => item.active && !item.adminOnly)
-        .map((item) => ({ text: item.text, icon: item.icon, permission: linkPath(item.link), actions: itemActions(item) }))
+        .map((item) => ({
+          text: item.text, icon: item.icon, permission: linkPath(item.link), actions: itemActions(item),
+          ...(item.widget ? { widget: true, description: item.description || '', source: item.source || '' } : {})
+        }))
     }))
     .filter((section) => section.items.length);
 }
@@ -99,7 +105,7 @@ function canAccessPath(user, path, menu = global.menu || []) {
 
 // Where "/" should send a user whose role does not include the Overview.
 function firstAccessibleLink(user, menu = global.menu || []) {
-  for (const section of menu) {
+  for (const section of menu.filter((s) => !s.hidden)) {
     const item = section.items.find((it) => it.active && canAccessItem(user, it));
     if (item) return item.link;
   }

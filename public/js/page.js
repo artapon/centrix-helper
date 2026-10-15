@@ -39,3 +39,20 @@
     }
   };
 })();
+
+// <page-pager :paging="paging">: Previous / Next of a paged list (see app/core/http/paging.js).
+// In a card header it sits right after the table filter app.js adds; anywhere else, on the right.
+(function () {
+  if (!window.Vue) return;
+  Vue.component('page-pager', {
+    props: { paging: { type: Object, default: null } },
+    template:
+      '<div v-if="paging" class="pg-tools">' +
+        '<span v-if="paging.to" class="pg-range">Page {{ paging.page + 1 }} · rows {{ paging.from }}–{{ paging.to }}</span>' +
+        '<a :href="paging.prev || null" class="btn btn-secondary btn-sm" :class="{ disabled: !paging.prev }" :aria-disabled="paging.prev ? \'false\' : \'true\'" :tabindex="paging.prev ? null : -1">' +
+          '<i class="fas fa-chevron-left mr-1"></i> Previous</a>' +
+        '<a :href="paging.next || null" class="btn btn-secondary btn-sm" :class="{ disabled: !paging.next }" :aria-disabled="paging.next ? \'false\' : \'true\'" :tabindex="paging.next ? null : -1">' +
+          'Next <i class="fas fa-chevron-right ml-1"></i></a>' +
+      '</div>'
+  });
+})();

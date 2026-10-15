@@ -2,11 +2,57 @@
   <div v-if="success" class="alert alert-success" role="alert"><i class="fas fa-check-circle mr-2"></i>{{ success }}</div>
   <div v-if="error" class="alert alert-danger" role="alert"><i class="fas fa-exclamation-triangle mr-2"></i>{{ error }}</div>
 
+  <!-- Overview -->
+  <section class="card mk-hero">
+    <div class="mk-hero-text">
+      <h1><i class="fas fa-store"></i> Add-on Marketplace</h1>
+      <p>Optional features installed with this app. Activating or deactivating one applies to everyone at once and stays after a restart.
+        An active add-on's pages are open to administrators and can be granted to roles in <a href="/admin/roles">Roles &amp; Permissions</a>.</p>
+      <div class="mk-hero-actions">
+        <button type="button" class="btn btn-primary btn-sm" @click="openUpload"><i class="fas fa-upload mr-1"></i> Upload add-on</button>
+        <a class="btn btn-light btn-sm" href="/admin/marketplace/guide"><i class="fas fa-book mr-1"></i> Developer guide</a>
+      </div>
+    </div>
+    <dl class="mk-stats">
+      <div><dt>Installed</dt><dd>{{ addons.length }}</dd></div>
+      <div class="is-active"><dt>Active</dt><dd>{{ activeCount }}</dd></div>
+      <div><dt>Inactive</dt><dd>{{ addons.length - activeCount }}</dd></div>
+      <div v-if="missingCount" class="is-warn"><dt>Need packages</dt><dd>{{ missingCount }}</dd></div>
+    </dl>
+  </section>
+
+  <!-- Installed since the server started: they load at the next restart -->
+  <div v-if="pendingList.length" class="mk-pending" role="status">
+    <i class="fas fa-redo-alt"></i>
+    <div>
+      <b>Restart the server to load {{ pendingList.length === 1 ? 'this add-on' : 'these add-ons' }}</b>
+      <ul>
+        <li v-for="p in pendingList" :key="p.id">{{ p.name }} {{ p.version }} · {{ p.update ? 'updated' : 'installed' }}{{ p.by ? ' by ' + p.by : '' }}<template v-if="p.packagesMissing && p.packagesMissing.length"> · needs <code>npm install {{ p.packagesMissing.join(' ') }}</code></template></li>
+      </ul>
+      <small v-if="!canRestart">Run <code>pm2 restart all</code> (or restart the service). </small><small>{{ pendingList.some(function (p) { return !p.update; }) ? 'Then activate new add-ons here and grant their pages to roles.' : '' }}</small>
+      <div v-if="canRestart && !up" class="mk-restart">
+        <button v-if="!restart.asking && !restart.busy" type="button" class="btn btn-warning btn-sm" @click="restart.asking = true"><i class="fas fa-power-off mr-1"></i> Restart server now</button>
+        <template v-if="restart.asking && !restart.busy">
+          <span class="mk-restart-warn">Everyone is signed out and the app is unavailable for a few seconds.</span>
+          <button type="button" class="btn btn-danger btn-sm" @click="restartServer"><i class="fas fa-power-off mr-1"></i> Restart</button>
+          <button type="button" class="btn btn-light btn-sm" @click="restart.asking = false">Cancel</button>
+        </template>
+        <span v-if="restart.busy" class="mk-restart-busy"><i class="fas fa-spinner fa-spin"></i> {{ restart.text }}</span>
+        <span v-if="restart.error" class="mk-restart-err">{{ restart.error }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Search and filters -->
   <div class="mk-toolbar">
     <div class="mk-search">
       <i class="fas fa-search"></i>
-      <input type="search" v-model.trim="q" placeholder="Search add-ons…" aria-label="Search add-ons">
+      <input type="search" v-model.trim="q" placeholder="Search name, feature or menu item…" aria-label="Search add-ons">
     </div>
+    <select v-if="categories.length > 1" class="form-control form-control-sm mk-category" v-model="category" aria-label="Category">
+      <option value="">All categories</option>
+      <option v-for="c in categories" :key="c" :value="c">{{ c }}</option>
+    </select>
     <div class="mk-filter" role="group" aria-label="Show">
       <button v-for="f in filters" :key="f.key" type="button" :class="{ 'is-on': show === f.key }"
               :aria-pressed="show === f.key ? 'true' : 'false'" @click="show = f.key">
@@ -15,181 +61,384 @@
     </div>
   </div>
 
-  <div v-if="!addons.length" class="card">
-    <div class="card-body text-center text-muted">
-      <i class="fas fa-store fa-2x mb-2 d-block"></i>
-      No add-ons are installed. Add-ons live in <code>app/addons/&lt;id&gt;/</code> with an <code>addon.json</code> manifest.
-    </div>
+  <!-- Empty states -->
+  <div v-if="!addons.length" class="card mk-empty">
+    <i class="fas fa-store"></i>
+    <b>No add-ons are installed</b>
+    <span>Add-ons live in <code>addons/&lt;id&gt;/</code> with an <code>addon.json</code> manifest.</span>
   </div>
-  <p v-else-if="!shown.length" class="text-muted">No add-ons match.</p>
+  <div v-else-if="!shown.length" class="card mk-empty">
+    <i class="fas fa-search"></i>
+    <b>No add-ons match</b>
+    <button type="button" class="btn btn-link btn-sm" @click="q = ''; category = ''; show = 'all'">Clear search and filters</button>
+  </div>
 
+  <!-- Add-ons -->
   <div class="mk-grid">
-    <article v-for="a in shown" :key="a.id" :id="'addon-' + a.id" class="mk-card" :class="{ 'is-inactive': !a.active, 'is-target': target === a.id }">
+    <article v-for="a in shown" :key="a.id" :id="'addon-' + a.id" class="mk-card"
+             :class="{ 'is-inactive': !a.active, 'is-target': target === a.id }">
       <header class="mk-head">
         <span class="mk-icon"><i :class="a.icon"></i></span>
         <div class="mk-title">
-          <h2>{{ a.name }} <span class="mk-version">v{{ a.version }}</span></h2>
-          <small>{{ a.category }}<template v-if="a.author"> · {{ a.author }}</template></small>
+          <h2><a :href="detailLink(a)">{{ a.name }}</a></h2>
+          <small>{{ a.author || 'Unknown publisher' }}</small>
         </div>
         <span class="mk-status" :class="a.active ? 'is-active' : 'is-off'">
-          <i class="fas" :class="a.active ? 'fa-check-circle' : 'fa-pause-circle'"></i> {{ a.active ? 'Active' : 'Inactive' }}
+          <span class="mk-dot"></span>{{ a.active ? 'Active' : 'Inactive' }}
         </span>
       </header>
 
-      <p class="mk-summary">{{ a.summary || a.description }}</p>
-
-      <div v-if="a.missing && a.missing.length" class="mk-missing" role="alert">
-        <i class="fas fa-box-open"></i>
-        <span>Needs the npm package{{ a.missing.length > 1 ? 's' : '' }} <b>{{ a.missing.join(', ') }}</b>. Run
-          <code>npm install {{ a.missing.join(' ') }}</code> in the app folder, then restart the server.</span>
-      </div>
-
-      <div v-if="a.menu" class="mk-menu">
-        <span class="mk-label">Adds to the menu</span>
-        <div class="mk-menu-items">
-          <span class="mk-menu-head">{{ a.menu.header }}</span>
-          <a v-for="item in a.menu.items" :key="item.link" class="mk-chip" :href="a.active ? item.link : null"
-             :title="a.active ? 'Open ' + item.text : 'Activate to open'">
-            <i :class="item.icon"></i> {{ item.text }}
-          </a>
+      <div class="mk-body">
+        <span class="mk-category-tag">{{ a.category }}</span>
+        <p class="mk-summary">{{ a.summary || a.description }}</p>
+        <div v-if="a.missing && a.missing.length" class="mk-missing" role="alert">
+          <i class="fas fa-box-open"></i>
+          <span>Needs <b>{{ a.missing.join(', ') }}</b>: run <code>npm install {{ a.missing.join(' ') }}</code>, then restart.</span>
         </div>
       </div>
 
-      <button type="button" class="mk-more" @click="toggle(a.id)" :aria-expanded="open[a.id] ? 'true' : 'false'">
-        <i class="fas" :class="open[a.id] ? 'fa-chevron-up' : 'fa-chevron-down'"></i> {{ open[a.id] ? 'Hide details' : 'Details' }}
-      </button>
-      <div v-if="open[a.id]" class="mk-details">
-        <p v-if="a.summary && a.description">{{ a.description }}</p>
-        <template v-if="a.features.length">
-          <span class="mk-label">Features</span>
-          <ul class="mk-features">
-            <li v-for="f in a.features" :key="f"><i class="fas fa-check"></i> {{ f }}</li>
-          </ul>
-        </template>
-        <template v-if="a.requires.length">
-          <span class="mk-label">Needs</span>
-          <ul class="mk-features is-needs">
-            <li v-for="r in a.requires" :key="r"><i class="fas fa-plug"></i> {{ r }}</li>
-          </ul>
-        </template>
-        <span class="mk-label">Pages</span>
-        <p class="mk-paths"><code v-for="p in a.paths" :key="p">{{ p }}</code></p>
-      </div>
+      <dl class="mk-facts">
+        <div><dt>Version</dt><dd>{{ a.version }}</dd></div>
+        <div><dt>Menu items</dt><dd>{{ a.menu ? a.menu.items.length : 0 }}</dd></div>
+        <div><dt>Widgets</dt><dd>{{ (a.widgets || []).length }}</dd></div>
+        <div><dt>Pages</dt><dd>{{ a.paths.length }}</dd></div>
+      </dl>
 
       <footer class="mk-foot">
-        <span class="mk-changed">{{ changedText(a) }}</span>
-        <template v-if="a.active">
-          <template v-if="confirming === a.id">
-            <form method="post" :action="'/admin/marketplace/' + a.id + '/deactivate'" class="mk-confirm">
-              <span>Hide {{ a.name }} from the menu and close its pages for everyone? Its data and role permissions are kept.</span>
-              <span class="mk-confirm-actions">
-                <button type="submit" class="btn btn-danger btn-sm"><i class="fas fa-power-off mr-1"></i> Deactivate</button>
-                <button type="button" class="btn btn-light btn-sm" @click="confirming = ''">Cancel</button>
-              </span>
-            </form>
-          </template>
-          <button v-else type="button" class="btn btn-outline-danger btn-sm" @click="confirming = a.id">
-            <i class="fas fa-power-off mr-1"></i> Deactivate
-          </button>
-        </template>
-        <form v-else method="post" :action="'/admin/marketplace/' + a.id + '/activate'">
-          <button type="submit" class="btn btn-primary btn-sm" :disabled="a.missing && a.missing.length > 0"
-                  :title="a.missing && a.missing.length ? 'Install the missing packages first' : ''"><i class="fas fa-bolt mr-1"></i> Activate</button>
+        <form v-if="a.active && confirming === a.id" method="post" :action="'/admin/marketplace/' + a.id + '/deactivate'" class="mk-confirm">
+          <span>Hide {{ a.name }} from the menu and close its pages for everyone? Its data and role permissions are kept.</span>
+          <span class="mk-confirm-actions">
+            <button type="submit" class="btn btn-danger btn-sm"><i class="fas fa-power-off mr-1"></i> Deactivate</button>
+            <button type="button" class="btn btn-light btn-sm" @click="confirming = ''">Cancel</button>
+          </span>
         </form>
+        <template v-else>
+          <div class="mk-foot-row">
+            <a class="btn btn-light btn-sm mk-details" :href="detailLink(a)">View details <i class="fas fa-arrow-right"></i></a>
+            <button v-if="a.active" type="button" class="btn btn-outline-danger btn-sm" @click="confirming = a.id">
+              <i class="fas fa-power-off mr-1"></i> Deactivate
+            </button>
+            <form v-else method="post" :action="'/admin/marketplace/' + a.id + '/activate'">
+              <button type="submit" class="btn btn-primary btn-sm" :disabled="a.missing && a.missing.length > 0"
+                      :title="a.missing && a.missing.length ? 'Install the missing packages first' : ''"><i class="fas fa-bolt mr-1"></i> Activate</button>
+            </form>
+          </div>
+          <span class="mk-changed"><i class="far fa-clock"></i> {{ changedText(a) }}</span>
+        </template>
       </footer>
     </article>
   </div>
 
-  <p class="text-muted small mt-3">
-    Activating or deactivating an add-on applies to everyone at once and stays after a restart. When active, an add-on's
-    menu items are open to administrators and can be granted to roles in <a href="/admin/roles">Roles &amp; Permissions</a>.
-  </p>
+  <!-- Upload add-on: choose a .zip, see what it does, then install -->
+  <div v-if="up" class="mk-overlay" role="dialog" aria-modal="true" aria-labelledby="mk-up-title" @click.self="closeUpload">
+    <div class="mk-dialog">
+      <div class="mk-dialog-head">
+        <div>
+          <h3 id="mk-up-title"><i class="fas fa-upload"></i> Upload add-on</h3>
+          <p>A .zip of an add-on folder with its <code>addon.json</code> (see the <a href="/admin/marketplace/guide">developer guide</a>). It is checked first; nothing is installed until you confirm.</p>
+        </div>
+        <button type="button" class="mk-close" @click="closeUpload" aria-label="Close"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="mk-dialog-body">
+        <label v-if="!up.plan && !up.result" class="mk-drop" :class="{ 'is-busy': up.busy }">
+          <input type="file" accept=".zip,application/zip" class="sr-only" @change="pickPackage" :disabled="up.busy">
+          <i class="fas" :class="up.busy ? 'fa-spinner fa-spin' : 'fa-file-archive'"></i>
+          <b>{{ up.busy ? 'Checking ' + up.file + '…' : 'Choose an add-on package (.zip)' }}</b>
+          <small>At most 20 MB; 50 MB and 2,000 files unpacked.</small>
+        </label>
+        <div v-if="up.error" class="alert alert-danger mb-0" role="alert"><i class="fas fa-exclamation-triangle mr-1"></i> {{ up.error }}</div>
+
+        <template v-if="up.plan && !up.result">
+          <div class="mk-plan">
+            <span class="mk-icon"><i :class="up.plan.icon"></i></span>
+            <div class="mk-plan-text">
+              <b>{{ up.plan.name }} <span class="mk-ver">{{ up.plan.version }}</span></b>
+              <small>{{ up.plan.author || 'Unknown publisher' }} · {{ up.plan.category }} · id <code>{{ up.plan.id }}</code></small>
+              <span>{{ up.plan.summary }}</span>
+            </div>
+            <span class="mk-badge" :class="up.plan.update ? 'is-update' : 'is-new'">{{ up.plan.update ? 'Update ' + (up.plan.currentVersion || '') + ' → ' + up.plan.version : 'New add-on' }}</span>
+          </div>
+          <dl class="mk-facts mk-plan-facts">
+            <div><dt>Files</dt><dd>{{ up.plan.files }}</dd></div>
+            <div><dt>Size</dt><dd>{{ size(up.plan.bytes) }}</dd></div>
+            <div><dt>Routes</dt><dd>{{ up.plan.routes.length }}</dd></div>
+            <div><dt>Packages</dt><dd>{{ up.plan.packages.length }}</dd></div>
+          </dl>
+          <div v-if="up.plan.update" class="mk-note"><i class="fas fa-history"></i> The installed version is moved to <code>data/addon-backups/</code> and replaced; its data and settings are kept.</div>
+          <div v-if="up.plan.packagesMissing.length" class="mk-missing"><i class="fas fa-box-open"></i><span>Needs <b>{{ up.plan.packagesMissing.join(', ') }}</b>: run <code>npm install {{ up.plan.packagesMissing.join(' ') }}</code> before activating it.</span></div>
+          <div v-for="w in up.plan.warnings" :key="w" class="mk-missing"><i class="fas fa-exclamation-triangle"></i><span>{{ w }}</span></div>
+          <details class="mk-files">
+            <summary>Files in the package ({{ up.plan.files }})</summary>
+            <ul><li v-for="f in up.plan.fileList" :key="f"><code>{{ f }}</code></li></ul>
+          </details>
+          <label class="mk-trust">
+            <input type="checkbox" v-model="up.trust">
+            <span><b>I trust this add-on's code.</b> An add-on runs on the server with the app's full rights (files, database, network). Install only add-ons from people you trust.</span>
+          </label>
+        </template>
+
+        <div v-if="up.result" class="mk-done" role="status">
+          <i class="fas fa-check-circle"></i>
+          <div>
+            <b>{{ up.result.name }} {{ up.result.version }} {{ up.result.update ? 'updated' : 'installed' }}.</b>
+            <span>Restart the server to load it<template v-if="!up.result.update">, then activate it here and grant its pages to roles</template>.<template v-if="up.result.backup"> The previous version is in <code>{{ up.result.backup }}</code>.</template></span>
+            <span v-if="!canRestart" class="mk-muted">The app does not run under pm2 here: restart it on the server (<code>pm2 restart all</code> or the service).</span>
+          </div>
+        </div>
+        <div v-if="up.result && canRestart" class="mk-restart">
+          <button v-if="!restart.asking && !restart.busy" type="button" class="btn btn-warning btn-sm" @click="restart.asking = true"><i class="fas fa-power-off mr-1"></i> Restart server now</button>
+          <template v-if="restart.asking && !restart.busy">
+            <span class="mk-restart-warn">Everyone is signed out and the app is unavailable for a few seconds.</span>
+            <button type="button" class="btn btn-danger btn-sm" @click="restartServer"><i class="fas fa-power-off mr-1"></i> Restart</button>
+            <button type="button" class="btn btn-light btn-sm" @click="restart.asking = false">Cancel</button>
+          </template>
+          <span v-if="restart.busy" class="mk-restart-busy"><i class="fas fa-spinner fa-spin"></i> {{ restart.text }}</span>
+          <span v-if="restart.error" class="mk-restart-err">{{ restart.error }}</span>
+        </div>
+      </div>
+      <div class="mk-dialog-foot">
+        <button v-if="up.plan && !up.result" type="button" class="btn btn-light btn-sm mr-auto" @click="up = blankUpload()"><i class="fas fa-undo mr-1"></i> Choose another file</button>
+        <button type="button" class="btn btn-light btn-sm" @click="closeUpload">{{ up.result ? 'Close' : 'Cancel' }}</button>
+        <button v-if="up.plan && !up.result" type="button" class="btn btn-primary btn-sm" @click="installPackage" :disabled="!up.trust || up.busy">
+          <i class="fas mr-1" :class="up.busy ? 'fa-spinner fa-spin' : 'fa-download'"></i> {{ up.plan.update ? 'Update add-on' : 'Install add-on' }}
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <style>
-  .mk-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
-  .mk-search { position: relative; flex: 1 1 260px; max-width: 420px; }
+  /* Overview */
+  .mk-hero { display: flex; flex-direction: row; align-items: center;   /* .card is a column in Bootstrap */ justify-content: space-between; gap: 24px; flex-wrap: wrap; padding: 22px 24px; margin-bottom: 16px; }
+  .mk-hero-text { flex: 1 1 420px; min-width: 0; }
+  .mk-hero h1 { font-size: 1.2rem; margin: 0 0 6px; display: flex; align-items: center; gap: 10px; }
+  .mk-hero h1 i { color: var(--primary); font-size: 1rem; }
+  .mk-hero p { margin: 0; max-width: 72ch; color: var(--text-2); font-size: .86rem; line-height: 1.55; }
+  .mk-stats { display: flex; gap: 0; margin: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface-2); }
+  .mk-stats > div { padding: 10px 18px; min-width: 96px; text-align: center; }
+  .mk-stats > div + div { border-left: 1px solid var(--border); }
+  .mk-stats dt { font-size: .66rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .mk-stats dd { margin: 2px 0 0; font-size: 1.35rem; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; line-height: 1.2; }
+  .mk-stats .is-active dd { color: var(--success); }
+  .mk-stats .is-warn dd { color: var(--warning); }
+
+  /* Toolbar */
+  .mk-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+  .mk-search { position: relative; flex: 1 1 280px; max-width: 440px; }
   .mk-search i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: .8rem; }
-  .mk-search input { width: 100%; height: 36px; padding: 0 12px 0 32px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); }
+  .mk-search input { width: 100%; height: 34px; padding: 0 12px 0 32px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-size: .84rem; }
   .mk-search input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-ring); }
-  .mk-filter { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); overflow: hidden; }
-  .mk-filter button { border: 0; background: transparent; padding: 6px 12px; font-size: .8rem; font-weight: 600; color: var(--text-2); cursor: pointer; }
+  .mk-category { width: auto !important; height: 34px; }
+  .mk-filter { display: inline-flex; margin-left: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); overflow: hidden; }
+  .mk-filter button { border: 0; background: transparent; height: 32px; padding: 0 14px; font-size: .8rem; font-weight: 600; color: var(--text-2); cursor: pointer; }
   .mk-filter button + button { border-left: 1px solid var(--border); }
+  .mk-filter button:hover { background: var(--surface-2); }
   .mk-filter button.is-on { background: var(--primary-soft); color: var(--primary); }
-  .mk-count { font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 500; margin-left: 2px; }
+  .mk-count { font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 500; margin-left: 3px; }
   .mk-filter button.is-on .mk-count { color: inherit; }
 
-  .mk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); gap: 16px; align-items: start; }
-  .mk-card { display: flex; flex-direction: column; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; min-width: 0; }
+  /* Empty states */
+  .mk-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 40px 16px; text-align: center; color: var(--text-2); font-size: .86rem; }
+  .mk-empty > i { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-3); color: var(--muted); margin-bottom: 4px; }
+  .mk-empty b { color: var(--text); }
+
+  /* Cards */
+  .mk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); gap: 16px; }
+  .mk-card { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); min-width: 0; transition: box-shadow .15s ease, border-color .15s ease; }
+  .mk-card:hover { box-shadow: var(--shadow); border-color: #c9d6ea; }
   .mk-card.is-target { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-ring); }
-  .mk-head { display: flex; align-items: flex-start; gap: 12px; }
-  .mk-icon { flex: 0 0 44px; height: 44px; border-radius: 10px; display: grid; place-items: center; background: var(--primary-soft); color: var(--primary); font-size: 1.15rem; }
+  .mk-head { display: flex; align-items: center; gap: 12px; padding: 18px 18px 0; }
+  .mk-icon { flex: 0 0 46px; height: 46px; border-radius: 11px; display: grid; place-items: center; background: var(--primary-soft); color: var(--primary); font-size: 1.15rem; }
   .mk-card.is-inactive .mk-icon { background: var(--surface-3); color: var(--muted); }
   .mk-title { flex: 1; min-width: 0; }
-  .mk-title h2 { font-size: 1.02rem; margin: 0 0 2px; text-wrap: balance; }
+  .mk-title h2 { font-size: 1rem; margin: 0; line-height: 1.3; }
+  .mk-title h2 a { color: var(--text); }
+  .mk-title h2 a:hover { color: var(--primary); text-decoration: none; }
   .mk-title small { color: var(--muted); font-size: .76rem; }
-  .mk-version { font-size: .7rem; font-weight: 600; color: var(--text-2); background: var(--surface-3); border-radius: 999px; padding: 1px 7px; vertical-align: 2px; font-variant-numeric: tabular-nums; }
-  .mk-status { display: inline-flex; align-items: center; gap: 5px; font-size: .74rem; font-weight: 600; border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+  .mk-status { display: inline-flex; align-items: center; gap: 6px; font-size: .74rem; font-weight: 600; border-radius: 999px; padding: 3px 10px; white-space: nowrap; align-self: flex-start; }
   .mk-status.is-active { color: var(--success); background: var(--success-soft); }
   .mk-status.is-off { color: var(--text-2); background: var(--surface-3); }
-  .mk-summary { margin: 0; color: var(--text-2); font-size: .86rem; line-height: 1.5; }
-  .mk-missing { display: flex; gap: 8px; align-items: flex-start; font-size: .8rem; color: var(--warning); background: var(--warning-soft); border-radius: var(--radius-sm); padding: 8px 10px; }
+  .mk-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+  .mk-body { flex: 1; padding: 12px 18px 14px; display: flex; flex-direction: column; gap: 8px; }
+  .mk-category-tag { align-self: flex-start; font-size: .68rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--primary); }
+  .mk-summary { margin: 0; color: var(--text-2); font-size: .85rem; line-height: 1.55; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .mk-missing { display: flex; gap: 8px; align-items: flex-start; font-size: .78rem; color: var(--warning); background: var(--warning-soft); border-radius: var(--radius-sm); padding: 8px 10px; }
   .mk-missing i { margin-top: 2px; }
   .mk-missing code { color: inherit; background: rgba(0,0,0,.05); border-radius: 4px; padding: 0 4px; }
-  .mk-label { display: block; font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
-  .mk-menu-items { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-  .mk-menu-head { font-size: .78rem; font-weight: 700; color: var(--text); margin-right: 2px; }
-  .mk-chip { display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; color: var(--text-2); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 3px 9px; text-decoration: none; }
-  .mk-chip i { color: var(--muted); }
-  a.mk-chip[href]:hover { border-color: var(--primary); color: var(--primary); text-decoration: none; }
-  .mk-more { align-self: flex-start; border: 0; background: none; padding: 0; font-size: .8rem; font-weight: 600; color: var(--primary); cursor: pointer; }
-  .mk-more i { font-size: .7rem; margin-right: 3px; }
-  .mk-details { border-top: 1px solid var(--border); padding-top: 12px; font-size: .84rem; color: var(--text-2); }
-  .mk-details p { margin: 0 0 12px; line-height: 1.5; }
-  .mk-features { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 4px; }
-  .mk-features i { width: 16px; color: var(--success); font-size: .75rem; }
-  .mk-features.is-needs i { color: var(--muted); }
-  .mk-paths { display: flex; flex-wrap: wrap; gap: 6px; }
-  .mk-paths code { font-size: .76rem; background: var(--surface-3); border-radius: 4px; padding: 1px 6px; color: var(--text-2); }
-  .mk-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; border-top: 1px solid var(--border); padding-top: 12px; margin-top: auto; }
+
+  .mk-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0; border-top: 1px solid var(--border); background: var(--surface-2); }
+  .mk-facts > div { padding: 9px 12px; text-align: center; }
+  .mk-facts > div + div { border-left: 1px solid var(--border); }
+  .mk-facts dt { font-size: .64rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+  .mk-facts dd { margin: 1px 0 0; font-size: .9rem; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+
+  .mk-foot { border-top: 1px solid var(--border); padding: 12px 18px 14px; display: flex; flex-direction: column; gap: 8px; }
   .mk-foot form { margin: 0; }
-  .mk-changed { font-size: .76rem; color: var(--muted); }
-  .mk-confirm { display: flex; flex-direction: column; gap: 8px; width: 100%; padding: 10px 12px; background: var(--danger-soft); border-radius: var(--radius-sm); }
-  .mk-confirm > span:first-child { font-size: .8rem; font-weight: 600; color: var(--danger); }
+  .mk-foot-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .mk-details { display: inline-flex; align-items: center; gap: 6px; }
+  .mk-details i { font-size: .7rem; }
+  .mk-changed { font-size: .74rem; color: var(--muted); }
+  .mk-changed i { margin-right: 3px; }
+  .mk-confirm { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; background: var(--danger-soft); border-radius: var(--radius-sm); }
+  .mk-confirm > span:first-child { font-size: .8rem; font-weight: 600; color: var(--danger); line-height: 1.4; }
   .mk-confirm-actions { display: flex; gap: 6px; }
+
+  /* Restart server */
+  .mk-restart { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+  .mk-restart-warn { font-size: .8rem; font-weight: 600; color: var(--danger); }
+  .mk-restart-busy { font-size: .84rem; font-weight: 600; color: var(--text); display: inline-flex; gap: 8px; align-items: center; }
+  .mk-restart-err { font-size: .8rem; color: var(--danger); flex-basis: 100%; }
+  .mk-muted { display: block; color: var(--text-2); font-size: .8rem; margin-top: 4px; }
+
+  /* Upload add-on and the restart banner */
+  .mk-hero-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .mk-pending { display: flex; gap: 12px; align-items: flex-start; padding: 12px 16px; margin-bottom: 16px; border-radius: var(--radius); background: var(--warning-soft); color: var(--text); border: 1px solid var(--warning); font-size: .84rem; }
+  .mk-pending > i { color: var(--warning); margin-top: 3px; }
+  .mk-pending ul { margin: 4px 0; padding-left: 18px; }
+  .mk-pending small { color: var(--text-2); }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .mk-overlay { position: fixed; inset: 0; z-index: 1050; background: rgba(16, 24, 40, .55); display: flex; align-items: flex-start; justify-content: center; padding: 5vh 16px; overflow: auto; }
+  .mk-dialog { position: relative; width: 100%; max-width: 680px; background: var(--surface); border-radius: 12px; box-shadow: var(--shadow-lg); display: flex; flex-direction: column; max-height: 90vh; }
+  .mk-dialog-head { padding: 18px 60px 14px 20px; border-bottom: 1px solid var(--border); }
+  .mk-dialog-head h3 { margin: 0; font-size: 1.05rem; display: flex; gap: 8px; align-items: center; }
+  .mk-dialog-head h3 i { color: var(--primary); }
+  .mk-dialog-head p { margin: 4px 0 0; font-size: .82rem; color: var(--text-2); }
+  .mk-close { position: absolute; top: 12px; right: 12px; width: 34px; height: 34px; border: 0; border-radius: 8px; background: transparent; color: var(--text-2); cursor: pointer; }
+  .mk-close:hover { background: var(--surface-2); color: var(--text); }
+  .mk-dialog-body { padding: 16px 20px; overflow: auto; display: flex; flex-direction: column; gap: 12px; }
+  .mk-dialog-foot { display: flex; gap: 8px; justify-content: flex-end; padding: 12px 20px; border-top: 1px solid var(--border); background: var(--surface-2); border-radius: 0 0 12px 12px; }
+  .mk-drop { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 32px 16px; margin: 0; border: 2px dashed var(--border); border-radius: 12px; text-align: center; cursor: pointer; color: var(--text-2); }
+  .mk-drop:hover, .mk-drop:focus-within { border-color: var(--primary); background: var(--primary-soft); }
+  .mk-drop > i { font-size: 1.8rem; color: var(--primary); }
+  .mk-drop b { color: var(--text); }
+  .mk-drop small { color: var(--muted); }
+  .mk-drop.is-busy { cursor: progress; }
+  .mk-plan { display: flex; gap: 12px; align-items: flex-start; }
+  .mk-plan-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: .84rem; }
+  .mk-plan-text b { font-size: 1rem; }
+  .mk-plan-text small { color: var(--muted); }
+  .mk-plan-text > span { color: var(--text-2); }
+  .mk-ver { font-weight: 500; color: var(--muted); font-size: .85rem; }
+  .mk-badge { font-size: .74rem; font-weight: 700; border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+  .mk-badge.is-new { color: var(--success); background: var(--success-soft); }
+  .mk-badge.is-update { color: var(--primary); background: var(--primary-soft); }
+  .mk-plan-facts { border: 1px solid var(--border); border-radius: var(--radius-sm); }
+  .mk-note { font-size: .8rem; color: var(--text-2); display: flex; gap: 8px; align-items: baseline; }
+  .mk-files summary { cursor: pointer; font-size: .82rem; font-weight: 600; color: var(--text-2); }
+  .mk-files ul { margin: 6px 0 0; padding-left: 18px; max-height: 180px; overflow: auto; font-size: .78rem; }
+  .mk-trust { display: flex; gap: 10px; align-items: flex-start; margin: 0; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--danger-soft); font-size: .82rem; color: var(--text); cursor: pointer; }
+  .mk-trust input { margin-top: 3px; }
+  .mk-trust b { color: var(--danger); }
+  .mk-done { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--success-soft); font-size: .86rem; }
+  .mk-done > i { color: var(--success); font-size: 1.2rem; margin-top: 2px; }
+  .mk-done b { display: block; }
+
+  @media (max-width: 767px) {
+    .mk-stats { width: 100%; }
+    .mk-stats > div { flex: 1; min-width: 0; padding: 10px 8px; }
+    .mk-filter { margin-left: 0; }
+  }
 </style>
 
 <script>
   Page.setup({
     data: function () {
-      var open = {};
-      var target = (location.hash || '').replace(/^#addon-/, '');
-      if (target) open[target] = true;   // arriving from a link to one add-on: show its details
-      return { q: '', show: 'all', open: open, confirming: '', target: target };
+      var target = (location.hash || '').replace(/^#addon-/, '');   // arriving from a link to one add-on: highlight its card
+      return { q: '', show: 'all', category: '', confirming: '', target: target, up: null, justInstalled: [],
+        restart: { asking: false, busy: false, text: '', error: '' } };
     },
     computed: {
+      // Installed since the server started (from the server, plus any installed on this page just now)
+      pendingList: function () {
+        var list = (this.pending || []).slice();
+        this.justInstalled.forEach(function (p) { list = list.filter(function (x) { return x.id !== p.id; }).concat([p]); });
+        return list;
+      },
+      activeCount: function () { return this.addons.filter(function (a) { return a.active; }).length; },
+      missingCount: function () { return this.addons.filter(function (a) { return a.missing && a.missing.length; }).length; },
+      categories: function () {
+        var seen = {};
+        this.addons.forEach(function (a) { seen[a.category] = true; });
+        return Object.keys(seen).sort();
+      },
       filters: function () {
-        var active = this.addons.filter(function (a) { return a.active; }).length;
         return [
           { key: 'all', label: 'All', count: this.addons.length },
-          { key: 'active', label: 'Active', count: active },
-          { key: 'inactive', label: 'Inactive', count: this.addons.length - active }
+          { key: 'active', label: 'Active', count: this.activeCount },
+          { key: 'inactive', label: 'Inactive', count: this.addons.length - this.activeCount }
         ];
       },
       shown: function () {
-        var q = this.q.toLowerCase(), show = this.show;
+        var q = this.q.toLowerCase(), show = this.show, category = this.category;
         return this.addons.filter(function (a) {
           if (show === 'active' && !a.active) return false;
           if (show === 'inactive' && a.active) return false;
+          if (category && a.category !== category) return false;
           if (!q) return true;
           var text = [a.name, a.category, a.author, a.summary, a.description].concat(a.features)
-            .concat(a.menu ? a.menu.items.map(function (i) { return i.text; }) : []).join(' ').toLowerCase();
+            .concat(a.menu ? a.menu.items.map(function (i) { return i.text; }) : [])
+            .concat((a.widgets || []).map(function (w) { return w.text; })).join(' ').toLowerCase();
           return text.indexOf(q) >= 0;
         });
       }
     },
     methods: {
-      toggle: function (id) { this.$set(this.open, id, !this.open[id]); },
+      // ---- Restart: the app exits, pm2 starts it again; the page waits for it, then reloads (sign-in again) ----
+      restartServer: function () {
+        var vm = this, r = vm.restart, started = Date.now(), wentDown = false;
+        r.busy = true; r.error = ''; r.text = 'Restarting the server…';
+        var ping = function () {
+          return fetch('/login', { cache: 'no-store', credentials: 'same-origin', redirect: 'manual' }).then(function () { return true; }, function () { return false; });
+        };
+        var wait = function () {
+          ping().then(function (up) {
+            if (!up) { wentDown = true; r.text = 'Waiting for the server to come back…'; }
+            // back up (after it went down, or after a few seconds if the restart was quicker than the first look)
+            if (up && (wentDown || Date.now() - started > 6000)) { r.text = 'The server is back: reloading…'; window.location.href = '/admin/marketplace'; return; }
+            if (Date.now() - started > 120000) { r.busy = false; r.error = 'The server has not come back after 2 minutes. Check it on the host (pm2 status / pm2 logs).'; return; }
+            setTimeout(wait, 1500);
+          });
+        };
+        fetch('/admin/marketplace/restart', { method: 'POST', credentials: 'same-origin', headers: { Accept: 'application/json' } })
+          .then(vm.answer)
+          .then(function () { setTimeout(wait, 1500); })
+          .catch(function (err) { r.busy = false; r.asking = false; r.error = err.message; });
+      },
+
+      // ---- Upload add-on ----
+      blankUpload: function () { return { file: '', busy: false, error: '', plan: null, trust: false, result: null }; },
+      openUpload: function () { this.up = this.blankUpload(); },
+      closeUpload: function () { if (!this.up || !this.up.busy) this.up = null; },
+      size: function (b) { return b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB'; },
+      answer: function (r) {
+        return r.json().catch(function () { return { error: 'The server answered ' + r.status + '.' }; })
+          .then(function (d) { if (!r.ok || d.error) throw new Error(d.error || ('HTTP ' + r.status)); return d; });
+      },
+      pickPackage: function (e) {
+        var vm = this, file = e.target.files && e.target.files[0];
+        if (!file) return;
+        var fd = new FormData();
+        fd.append('package', file);
+        vm.up = Object.assign(vm.blankUpload(), { file: file.name, busy: true });
+        fetch('/admin/marketplace/upload', { method: 'POST', credentials: 'same-origin', body: fd, headers: { Accept: 'application/json' } })
+          .then(vm.answer)
+          .then(function (plan) { vm.up = Object.assign(vm.blankUpload(), { file: file.name, plan: plan }); })
+          .catch(function (err) { vm.up = Object.assign(vm.blankUpload(), { file: file.name, error: err.message }); });
+      },
+      installPackage: function () {
+        var vm = this, up = vm.up;
+        up.busy = true; up.error = '';
+        fetch('/admin/marketplace/upload/install', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ token: up.plan.token, trust: up.trust === true })
+        }).then(vm.answer)
+          .then(function (r) { up.result = r; vm.justInstalled = vm.justInstalled.concat([r]); })
+          .catch(function (err) { up.error = err.message; })
+          .then(function () { up.busy = false; });
+      },
+      detailLink: function (a) { return '/admin/marketplace/' + encodeURIComponent(a.id); },
       // "Activated by admin1 · 09/10/2026 14:03 GMT+7", or the manifest default when never changed.
       changedText: function (a) {
         if (!a.changedAt) return a.active ? 'Active by default' : 'Inactive by default';

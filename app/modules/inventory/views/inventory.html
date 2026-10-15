@@ -2,82 +2,80 @@
   <div class="card">
     <div class="card-header" style="display:flex;align-items:center;gap:8px;">
       <i class="fas fa-search" style="color:#2563eb;"></i>
-      <span>Search Inventory Transactions</span>
+      <span>Search & Filter Inventory Transactions</span>
     </div>
     <div class="card-body">
-      <form method="get" action="/inventory/tracking" class="form-group">
-          <div class="form-row">
-          <div class="form-group col-sm-3">
-          <label>TRANSACTION_TYPE : &nbsp;</label>
-          <select name="transactiontype" class="form-control" onchange="disableInput()" id="transactiontype">
-            <option value="INVENTORIES.GOODSRECEIVE" >GOODSRECEIVE (Ex. RA - RCVPUR)</option>
-            <option value="INVENTORIES.CANCELTRANSFER" >CANCELTRANSFER</option>
-            <option value="INVENTORIES.TRANSFEROUT" >TRANSFEROUT (TRN- OUT)</option>
-            <option value="INVENTORIES.TRANSFERIN" >TRANSFERIN (TRN- IN)</option>
-            <option value="INVENTORIES.STOCKISSUE" >STOCKISSUE (IS-)</option>
-            <option value="INVENTORIES.STOCKDISPENSE" >STOCKDISPENSE (SD-)</option>
-            <option value="PHARMACYMASTER.CANCELDISPENSE" >CANCELDISPENSE (SD-)</option>
-            <option value="PHARMACYMASTER.IPFILL" >IPFILL (SD-)</option>
-            <option value="COMMON.DISPENSERETURN" >DISPENSERETURN (DR)</option>
-            <option value="INVENTORIES.VENDORRETURN" >VENDORRETURN</option>
-            <option value="INVENTORIES.STOCKADJUST" >STOCKADJUST (ADJ-)</option>
-            <option value="INVENTORIES.MANUFACTURING" >MANUFACTURING</option>
-            <option value="INVENTORIES.REPACKING" >REPACKING</option>
-            <option value="INVENTORIES.MANUFACUTINGREPACKING" >MANUFACUTINGREPACKING</option>
-            <option value="INVENTORIES.STOCKTRANSFERRETURN" >STOCKTRANSFERRETURN</option>
-          </select>
+      <form method="get" action="/inventory/tracking">
+        <div class="form-row">
+          <div class="form-group col-sm-3 mb-3">
+            <label><i class="fas fa-tags mr-1" style="color:#94a3b8;"></i>Transaction Type</label>
+            <select name="transactiontype" class="form-control" onchange="disableInput()" id="transactiontype">
+              <option value="" :selected="transactiontype === ''">ALL TYPES</option>
+              <option value="INVENTORIES.GOODSRECEIVE" :selected="transactiontype === 'INVENTORIES.GOODSRECEIVE'">GOODSRECEIVE (Ex. RA - RCVPUR)</option>
+              <option value="INVENTORIES.CANCELTRANSFER" :selected="transactiontype === 'INVENTORIES.CANCELTRANSFER'">CANCELTRANSFER</option>
+              <option value="INVENTORIES.TRANSFEROUT" :selected="transactiontype === 'INVENTORIES.TRANSFEROUT'">TRANSFEROUT (TRN- OUT)</option>
+              <option value="INVENTORIES.TRANSFERIN" :selected="transactiontype === 'INVENTORIES.TRANSFERIN'">TRANSFERIN (TRN- IN)</option>
+              <option value="INVENTORIES.STOCKISSUE" :selected="transactiontype === 'INVENTORIES.STOCKISSUE'">STOCKISSUE (IS-)</option>
+              <option value="INVENTORIES.STOCKDISPENSE" :selected="transactiontype === 'INVENTORIES.STOCKDISPENSE'">STOCKDISPENSE (SD-)</option>
+              <option value="PHARMACYMASTER.CANCELDISPENSE" :selected="transactiontype === 'PHARMACYMASTER.CANCELDISPENSE'">CANCELDISPENSE (SD-)</option>
+              <option value="PHARMACYMASTER.IPFILL" :selected="transactiontype === 'PHARMACYMASTER.IPFILL'">IPFILL (SD-)</option>
+              <option value="COMMON.DISPENSERETURN" :selected="transactiontype === 'COMMON.DISPENSERETURN'">DISPENSERETURN (DR)</option>
+              <option value="INVENTORIES.VENDORRETURN" :selected="transactiontype === 'INVENTORIES.VENDORRETURN'">VENDORRETURN</option>
+              <option value="INVENTORIES.STOCKADJUST" :selected="transactiontype === 'INVENTORIES.STOCKADJUST'">STOCKADJUST (ADJ-)</option>
+              <option value="INVENTORIES.MANUFACTURING" :selected="transactiontype === 'INVENTORIES.MANUFACTURING'">MANUFACTURING</option>
+              <option value="INVENTORIES.REPACKING" :selected="transactiontype === 'INVENTORIES.REPACKING'">REPACKING</option>
+              <option value="INVENTORIES.MANUFACUTINGREPACKING" :selected="transactiontype === 'INVENTORIES.MANUFACUTINGREPACKING'">MANUFACUTINGREPACKING</option>
+              <option value="INVENTORIES.STOCKTRANSFERRETURN" :selected="transactiontype === 'INVENTORIES.STOCKTRANSFERRETURN'">STOCKTRANSFERRETURN</option>
+            </select>
           </div>
-          <div class="form-group col-sm-3">
-            <label>วันที่เริม : &nbsp;</label>
-            <input type="text" class="datetimepicker2 form-control" name="date">
+          <div class="form-group col-sm-3 mb-3">
+            <label><i class="fas fa-calendar-alt mr-1" style="color:#94a3b8;"></i>From Date</label>
+            <input type="text" class="datetimepicker2 form-control" name="date" :value="selectdate" placeholder="YYYY-MM-DD">
           </div>
-          <div class="form-group col-sm-3">
-            <label>วันที่สิ้นสุด : &nbsp;</label>
-            <input type="text" class="datetimepicker2 form-control" name="date2">
+          <div class="form-group col-sm-3 mb-3">
+            <label><i class="fas fa-calendar-alt mr-1" style="color:#94a3b8;"></i>To Date</label>
+            <input type="text" class="datetimepicker2 form-control" name="date2" :value="selectdate2" placeholder="YYYY-MM-DD">
           </div>
+          <div class="form-group col-sm-3 mb-3">
+            <label><i class="fas fa-id-card mr-1" style="color:#94a3b8;"></i>HN</label>
+            <input type="text" class="form-control" name="mrn" :value="mrn" placeholder="HN">
           </div>
-          <div class="form-row">
-          <div class="form-group col-sm-3">
-            <label>HN : &nbsp;</label>
-            <input type="text" class="form-control" name="mrn" >
+          <div class="form-group col-sm-3 mb-3">
+            <label><i class="fas fa-receipt mr-1" style="color:#94a3b8;"></i>Order No.</label>
+            <input type="text" class="form-control" name="orderno" id="orderno" :value="orderno" placeholder="Order number">
           </div>
-          <div class="form-group col-sm-3">
-            <label>ORDER NO : &nbsp;</label>
-            <input type="text" class="form-control" name="orderno" id="orderno">
+          <div class="form-group col-sm-3 mb-3">
+            <label><i class="fas fa-barcode mr-1" style="color:#94a3b8;"></i>Item No.</label>
+            <input type="text" class="form-control" name="itemno" :value="itemno" placeholder="Item number">
           </div>
-          <div class="form-group col-sm-3">
-            <label>ITEM NO : &nbsp;</label>
-            <input type="text" class="form-control" name="itemno" >
+          <div class="form-group col-sm-3 mb-3">
+            <label><i class="fas fa-hashtag mr-1" style="color:#94a3b8;"></i>Reference No.</label>
+            <input type="text" class="form-control" name="refno" :value="refno" placeholder="Reference number">
           </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-sm-3 mb-0">
+            <button type="submit" class="btn btn-primary w-100">
+              <i class="fas fa-filter mr-1"></i> Filter Data
+            </button>
           </div>
-          <div class="form-row">
-            <div class="form-group col-sm-3">
-              <label>REFERENCE_NO : &nbsp;</label>
-              <input type="text" class="form-control" name="refno">
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group col-sm-6">
-            <input type="submit" value="กรองข้อมูล" class="btn btn-success">
-            </div>
-          </div>
-        </form>
+        </div>
+      </form>
       </div>
     </div>
   </div>
 <div class="col-sm-12">
   <div class="card">
-    <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+    <div class="card-header" style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;">
       <span style="display:flex;align-items:center;gap:8px;">
         <i class="fas fa-sync" style="color:#2563eb;"></i>
         Inventory Transactions
       </span>
-      <div style="display:flex;gap:8px;">
-        <a :href="`/inventory/tracking?mrn=${mrn}&itemno=${itemno}&date=${selectdate}&date2=${selectdate2}&transactiontype=${transactiontype}&page=${lastpage}`" class="btn btn-primary btn-sm" > < ก่อนหน้า</a>
-        <a :href="`/inventory/tracking?mrn=${mrn}&itemno=${itemno}&date=${selectdate}&date2=${selectdate2}&transactiontype=${transactiontype}&page=${nextpage}`" class="btn btn-primary btn-sm" > ถัดไป ></a>
-      </div>
+      <!-- Previous / Next: right after the table filter app.js adds -->
+      <page-pager :paging="paging"></page-pager>
     </div>
     <div class="card-body p-0">
+      <div v-if="error" class="alert alert-danger m-3" role="alert"><i class="fas fa-exclamation-triangle mr-1"></i> {{ error }}</div>
       <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
         <table class="table mb-0">
           <thead>
@@ -145,12 +143,11 @@
             </tr>
           </tbody>
         </table>
+        <p v-if="!error && !(results && results.length)" class="text-muted text-center small py-3 mb-0">No stock ledger rows for this search{{ page ? ' on this page' : '' }}: try other dates or ALL TYPES.</p>
       </div>
     </div>
-    <div class="card-footer" style="display:flex;justify-content:flex-end;gap:8px;">
-      <a :href="`/inventory/tracking?mrn=${mrn}&itemno=${itemno}&date=${selectdate}&date2=${selectdate2}&transactiontype=${transactiontype}&page=${lastpage}`" class="btn btn-primary btn-sm" > < ก่อนหน้า</a>
-      <a :href="`/inventory/tracking?mrn=${mrn}&itemno=${itemno}&date=${selectdate}&date2=${selectdate2}&transactiontype=${transactiontype}&page=${nextpage}`" class="btn btn-primary btn-sm" > ถัดไป ></a>
-    </div>
+    <!-- The same pages under the table -->
+    <div class="pg-foot"><page-pager :paging="paging"></page-pager></div>
   </div>
 </div>
 

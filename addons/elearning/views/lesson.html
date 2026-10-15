@@ -1,0 +1,145 @@
+<div class="col-12">
+<div class="el is-player">
+
+  <header class="el-ptop">
+    <a class="el-icon-btn" :href="courseUrl" title="Back to the course"><i class="fas fa-arrow-left" aria-hidden="true"></i><span class="sr-only">Back to the course</span></a>
+    <div class="el-ptop-title">
+      <small><a :href="courseUrl">{{ course.title }}</a></small>
+      <b>{{ lesson.title }}</b>
+    </div>
+    <div v-if="total" class="el-ptop-prog" :title="done + ' of ' + total + ' lessons complete'">
+      <span class="el-bar" :class="{ 'is-done': done >= total }"><span :style="{ width: pct(done, total) + '%' }"></span></span>
+      <span>{{ done }}/{{ total }} · {{ pct(done, total) }}%</span>
+    </div>
+    <button type="button" class="el-icon-btn" :title="side ? 'Hide the curriculum' : 'Show the curriculum'" :aria-pressed="side" @click="toggleSide">
+      <i :class="side ? 'fas fa-outdent' : 'fas fa-list-ul'" aria-hidden="true"></i><span class="sr-only">Curriculum</span>
+    </button>
+  </header>
+
+  <div class="el-pwrap" :class="{ 'is-wide': !side }">
+    <aside v-show="side" class="el-pside" aria-label="Curriculum">
+      <div v-for="s in curriculum" :key="s.id" class="el-sec">
+        <button type="button" class="el-sec-head" :class="{ 'is-closed': !open[s.id] }" :aria-expanded="!!open[s.id]" @click="$set(open, s.id, !open[s.id])">
+          <i class="fas fa-chevron-down" aria-hidden="true"></i>
+          <span class="el-sec-title">{{ s.title }}</span>
+          <span class="el-sec-meta">{{ sectionDone(s) }}/{{ s.lessons.length }}</span>
+        </button>
+        <ul v-show="open[s.id]" class="el-lessons">
+          <li v-for="l in s.lessons" :key="l.id">
+            <a class="el-lesson" :class="{ 'is-current': l.id === lesson.id }" :href="lessonUrl(l)" :aria-current="l.id === lesson.id ? 'page' : null">
+              <span class="el-lesson-type" :class="'is-' + l.type"><i :class="typeIcon(l)" aria-hidden="true"></i></span>
+              <span class="el-lesson-title">{{ l.title }}<small v-if="l.durationMin">{{ duration(l.durationMin) }}</small></span>
+              <span class="el-lesson-done" :class="{ 'is-on': l.done }"><i :class="l.done ? 'fas fa-check-circle' : 'far fa-circle'" aria-hidden="true"></i><span class="sr-only">{{ l.done ? 'Completed' : '' }}</span></span>
+            </a>
+          </li>
+        </ul>
+      </div>
+    </aside>
+
+    <main class="el-pmain">
+      <div v-if="lesson.type === 'video'" class="el-pvideo" :class="{ 'is-audio': lesson.player && lesson.player.audio }">
+        <el-player :player="lesson.player"></el-player>
+      </div>
+
+      <article class="el-pcontent" :class="{ 'is-full': lesson.type === 'quiz' }">
+        <div class="el-eyebrow">{{ section ? section.title : '' }} · Lesson {{ index + 1 }} of {{ total }}</div>
+        <h1>{{ lesson.title }}</h1>
+        <p v-if="lesson.type === 'video' && lesson.player && lesson.player.open" class="el-muted" style="font-size: 13px; margin-top: -8px;">
+          The video doesn't play? <a :href="lesson.player.open" target="_blank" rel="noopener">Open it on {{ SOURCES[lesson.videoSource] }}</a><template v-if="lesson.videoSource === 'gdrive'"> (you may need to sign in to Google with an account the file is shared with)</template>.
+        </p>
+        <div v-if="lesson.content.trim()" class="el-md" v-html="md(lesson.content)"></div>
+        <el-quiz v-if="lesson.type === 'quiz'" :quiz="lesson.quiz" :mine="lesson.mine" :url="lessonUrl(lesson) + '/quiz'" @progress="passed"></el-quiz>
+        <el-assignment v-if="lesson.type === 'assignment'" :assignment="lesson.assignment" :mine="lesson.mine" :url="lessonUrl(lesson) + '/submit'"></el-assignment>
+      </article>
+
+      <div v-if="done >= total && total" class="el-finish" role="status">
+        <i class="fas fa-trophy" aria-hidden="true"></i>
+        <div><b>Course complete!</b><span>You've completed every lesson of "{{ course.title }}".</span></div>
+      </div>
+      <div v-if="error" class="el-msg is-error" style="margin: 0 clamp(20px, 4vw, 48px) 16px;" role="alert"><i class="fas fa-exclamation-triangle"></i> {{ error }}</div>
+
+      <footer class="el-pnav">
+        <div class="el-pnav-side">
+          <a v-if="prev" class="el-btn" :href="lessonUrl(prev)" :title="prev.title"><i class="fas fa-chevron-left" aria-hidden="true"></i><span>Previous</span></a>
+        </div>
+        <span v-if="graded" class="el-badge" :class="current.done ? 'is-done' : ''" style="height: 32px; padding: 0 12px;">
+          <i :class="current.done ? 'fas fa-check-circle' : 'far fa-circle'" aria-hidden="true"></i>
+          {{ current.done ? 'Completed' : lesson.type === 'quiz' ? 'Pass the quiz to complete' : 'Completed when graded as passed' }}
+        </span>
+        <button v-else type="button" class="el-btn" :class="current.done ? 'is-ok-soft' : 'is-ok'" :disabled="saving" @click="setDone(!current.done)">
+          <i :class="saving ? 'fas fa-spinner fa-spin' : current.done ? 'fas fa-check-circle' : 'far fa-check-circle'" aria-hidden="true"></i>
+          {{ current.done ? 'Completed' : 'Mark as complete' }}
+        </button>
+        <div class="el-pnav-side is-next">
+          <a v-if="next" class="el-btn is-primary" :href="lessonUrl(next)" :title="next.title" @click="completeAndGo"><span>Next lesson</span><i class="fas fa-chevron-right" aria-hidden="true"></i></a>
+          <a v-else class="el-btn is-primary" :href="courseUrl" @click="completeAndGo"><span>Finish</span><i class="fas fa-flag-checkered" aria-hidden="true"></i></a>
+        </div>
+      </footer>
+    </main>
+  </div>
+
+</div>
+</div>
+
+<script src="/e-learning/assets/elearning.js"></script>
+<script src="/e-learning/assets/lessons.js"></script>
+<script>
+  (function () {
+    'use strict';
+    var SIDE_KEY = 'elearning.curriculum';
+
+    Page.setup({
+      data: function () {
+        var side = true;
+        try { side = localStorage.getItem(SIDE_KEY) !== 'hidden'; } catch (e) { /* private mode */ }
+        if (window.innerWidth < 900) side = false;
+        // The outline is copied so a lesson's done flag can change here (server data is frozen)
+        var curriculum = Page.data.course.curriculum.map(function (s) {
+          return { id: s.id, title: s.title, lessons: s.lessons.map(function (l) { return Object.assign({}, l); }) };
+        });
+        var open = {};
+        curriculum.forEach(function (s) { open[s.id] = s.lessons.some(function (l) { return l.id === Page.data.lesson.id; }); });
+        return { curriculum: curriculum, open: open, side: side, saving: false, error: '', SOURCES: ELearn.SOURCES };
+      },
+      computed: {
+        courseUrl: function () { return this.base; },
+        list: function () { return [].concat.apply([], this.curriculum.map(function (s) { return s.lessons; })); },
+        index: function () { var id = this.lesson.id; return this.list.findIndex(function (l) { return l.id === id; }); },
+        current: function () { return this.list[this.index] || { done: false }; },
+        prev: function () { return this.index > 0 ? this.list[this.index - 1] : null; },
+        next: function () { return this.index >= 0 && this.index < this.list.length - 1 ? this.list[this.index + 1] : null; },
+        section: function () { var id = this.lesson.sectionId; return this.curriculum.filter(function (s) { return s.id === id; })[0] || null; },
+        total: function () { return this.list.length; },
+        graded: function () { return this.lesson.type === 'quiz' || this.lesson.type === 'assignment'; },
+        done: function () { return this.list.filter(function (l) { return l.done; }).length; }
+      },
+      methods: {
+        md: ELearn.md, duration: ELearn.duration, pct: ELearn.pct,
+        lessonUrl: function (l) { return this.courseUrl + '/lessons/' + l.id; },
+        typeIcon: function (l) { return { video: 'fas fa-play', quiz: 'fas fa-question-circle', assignment: 'fas fa-clipboard-check' }[l.type] || 'far fa-file-alt'; },
+        passed: function () { this.current.done = true; },
+        sectionDone: function (s) { return s.lessons.filter(function (l) { return l.done; }).length; },
+        toggleSide: function () {
+          this.side = !this.side;
+          try { localStorage.setItem(SIDE_KEY, this.side ? 'shown' : 'hidden'); } catch (e) { /* private mode */ }
+        },
+        setDone: function (value) {
+          var self = this;
+          this.saving = true;
+          this.error = '';
+          return ELearn.post(this.lessonUrl(this.lesson) + '/complete', { done: value })
+            .then(function (r) { self.current.done = r.done; })
+            .catch(function (err) { self.error = err.message; throw err; })
+            .finally(function () { self.saving = false; });
+        },
+        // Next / Finish counts the lesson as complete, then goes on
+        completeAndGo: function (e) {
+          if (this.current.done || this.graded) return;
+          e.preventDefault();
+          var href = e.currentTarget.getAttribute('href');
+          this.setDone(true).then(function () { location.href = href; }).catch(function () { /* the error is shown */ });
+        }
+      }
+    });
+  })();
+</script>

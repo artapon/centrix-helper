@@ -1,22 +1,22 @@
   <div class="col-sm-12">
     <div class="card">
       <div class="card-header" style="display:flex;align-items:center;gap:8px;">
-        <i class="fas fa-filter" style="color:#2563eb;"></i>
-        <span>Filter Patient Orders</span>
+        <i class="fas fa-search" style="color:#2563eb;"></i>
+        <span>Search & Filter Patient Orders</span>
       </div>
       <div class="card-body">
-        <form method="get" action="/billing/patient-orders" class="form-group">
+        <form method="get" action="/billing/patient-orders">
           <div class="form-row">
-            <div class="form-group col-sm-3">
-              <label>VN / AN : &nbsp;</label>
-              <input type="text" class="form-control" name="vn">
+            <div class="form-group col-sm-3 mb-3">
+              <label><i class="fas fa-hospital-user mr-1" style="color:#94a3b8;"></i>VN / AN</label>
+              <input type="text" class="form-control" name="vn" :value="query.vn" placeholder="VN or AN">
             </div>
-            <div class="form-group col-sm-3">
-              <label>HN : &nbsp;</label>
-              <input type="text" class="form-control" name="mrn">
+            <div class="form-group col-sm-3 mb-3">
+              <label><i class="fas fa-id-card mr-1" style="color:#94a3b8;"></i>HN</label>
+              <input type="text" class="form-control" name="mrn" :value="query.mrn" placeholder="HN">
             </div>
-            <div class="form-group col-sm-3">
-              <label>Order Category Type : &nbsp;</label>
+            <div class="form-group col-sm-3 mb-3">
+              <label><i class="fas fa-tags mr-1" style="color:#94a3b8;"></i>Order Category Type</label>
               <select name="ordercattype" class="form-control">
                 <option value="">ทั้งหมด</option>
                 <option value="LAB">LAB</option>
@@ -34,8 +34,10 @@
             </div>
           </div>
           <div class="form-row">
-            <div class="form-group col-sm-3">
-              <input type="submit" value="กรองข้อมูล" class="btn btn-success">
+            <div class="form-group col-sm-3 mb-0">
+              <button type="submit" class="btn btn-primary w-100">
+                <i class="fas fa-filter mr-1"></i> Filter Data
+              </button>
             </div>
           </div>
         </form>
@@ -101,6 +103,8 @@
       <div class="card-header" style="display:flex;align-items:center;gap:8px;">
         <i class="fas fa-table" style="color:#2563eb;"></i>
         <span>Patient Orders</span>
+        <!-- Previous / Next: right after the table filter app.js adds -->
+        <page-pager :paging="paging"></page-pager>
       </div>
       <div class="card-body p-0">
         <div class="table-responsive">
@@ -127,6 +131,8 @@
             </tbody>
           </table>
         </div>
+        <!-- The same pages under the table -->
+        <div class="pg-foot"><page-pager :paging="paging"></page-pager></div>
       </div>
     </div>
   </div>

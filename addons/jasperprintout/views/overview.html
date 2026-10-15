@@ -1,0 +1,333 @@
+<div class="col-12">
+<div class="rov" ref="root">
+
+  <!-- Header and the one filter row (period) above every chart -->
+  <header class="rov-top">
+    <span class="rov-top-icon"><i class="fas fa-chart-pie"></i></span>
+    <div class="rov-top-title">
+      <h1>Reports Overview</h1>
+      <p>The reports work at a glance: designs, publishing, UAT → Production deploys{{ data && data.site ? ' and ' + data.site.name + '\'s HIS report templates' : '' }}.</p>
+    </div>
+    <div class="rov-filter" role="group" aria-label="Period">
+      <span class="rov-filter-label">Period</span>
+      <div class="rov-seg">
+        <button v-for="m in [6, 12, 24]" :key="m" type="button" :class="{ 'is-on': months === m }" :aria-pressed="months === m ? 'true' : 'false'" @click="setMonths(m)">{{ m }} months</button>
+      </div>
+      <button type="button" class="btn btn-sm btn-light" @click="load" :disabled="loading" title="Read the numbers again"><i class="fas fa-sync-alt" :class="{ 'fa-spin': loading }"></i></button>
+    </div>
+  </header>
+
+  <div v-if="error" class="rov-msg is-error" role="alert"><i class="fas fa-exclamation-triangle"></i> {{ error }}</div>
+
+  <!-- Headline numbers -->
+  <section class="rov-tiles" v-if="data" aria-label="Totals">
+    <a class="rov-tile" href="/reports/jasper-designer" title="Open the Jasper Designer">
+      <span class="rov-tile-label"><i class="fas fa-drafting-compass"></i> Designs</span>
+      <b>{{ fmt(data.tiles.designs) }}</b>
+      <small>in {{ fmt(data.tiles.folders) }} folder{{ data.tiles.folders === 1 ? '' : 's' }}</small>
+    </a>
+    <a class="rov-tile" href="/reports/publish" title="Open Publish Report">
+      <span class="rov-tile-label"><i class="fas fa-paper-plane"></i> Published</span>
+      <b>{{ fmt(data.tiles.published30) }}</b>
+      <small>last 30 days · {{ fmt(data.tiles.published) }} in all</small>
+    </a>
+    <a class="rov-tile" href="/reports/publish" title="Reports waiting for a review on UAT">
+      <span class="rov-tile-label"><i class="fas fa-hourglass-half rov-st-warning"></i> Waiting for review</span>
+      <b>{{ fmt(data.tiles.waiting) }}</b>
+      <small>on UAT</small>
+    </a>
+    <a class="rov-tile" href="/reports/publish" title="Designs whose latest version is in Production">
+      <span class="rov-tile-label"><i class="fas fa-check-circle rov-st-good"></i> In Production</span>
+      <b>{{ fmt(data.tiles.production) }}</b>
+      <small>designs</small>
+    </a>
+    <a class="rov-tile" href="/reports/viewer" :title="data.tiles.templates == null ? 'Connect to a Centrix site to count its report templates' : 'Open the Jasper Viewer'">
+      <span class="rov-tile-label"><i class="fas fa-hospital"></i> HIS report templates</span>
+      <b>{{ data.tiles.templates == null ? '—' : fmt(data.tiles.templates) }}</b>
+      <small>{{ data.tiles.templates == null ? 'no site connected' : 'active · ' + data.site.name }}</small>
+    </a>
+    <a class="rov-tile" :href="isAdmin ? '/reports/settings' : null" :title="serversTitle">
+      <span class="rov-tile-label"><i class="fas fa-server"></i> JasperServers</span>
+      <b>{{ fmt(serversReady) }}</b>
+      <small>set up{{ serversReady < servers.length ? ' · ' + (servers.length - serversReady) + ' incomplete' : '' }}{{ directPublish ? '' : ' · deploy workflow only' }}</small>
+    </a>
+  </section>
+  <section v-else-if="loading" class="rov-tiles is-loading" aria-hidden="true"><span v-for="n in 6" :key="n" class="rov-tile"></span></section>
+
+  <!-- Charts: each card has its chart and a table of the same numbers -->
+  <div class="rov-grid" v-if="data">
+    <section v-for="c in cards" :key="c.key" class="rov-card" :class="{ 'is-wide': c.wide }">
+      <div class="rov-card-head">
+        <h2><i :class="c.icon"></i> {{ c.title }}</h2>
+        <small class="rov-card-note">{{ c.note }}</small>
+        <button type="button" class="rov-tab" :class="{ 'is-on': tables[c.key] }" @click="$set(tables, c.key, !tables[c.key])" :aria-pressed="tables[c.key] ? 'true' : 'false'"
+                :title="tables[c.key] ? 'Show the chart' : 'Show the numbers as a table'"><i class="fas" :class="tables[c.key] ? 'fa-chart-bar' : 'fa-table'"></i> {{ tables[c.key] ? 'Chart' : 'Table' }}</button>
+      </div>
+      <div v-if="c.empty" class="rov-empty"><i :class="c.icon"></i> {{ c.empty }}</div>
+      <template v-else>
+        <div v-show="!tables[c.key]" class="rov-chart" :style="{ height: c.height + 'px' }"><canvas :ref="'chart-' + c.key" :aria-label="c.title" role="img"></canvas></div>
+        <div v-if="tables[c.key]" class="rov-table-wrap">
+          <table class="rov-table">
+            <thead><tr><th>{{ c.table.head[0] }}</th><th v-for="h in c.table.head.slice(1)" :key="h" class="is-num">{{ h }}</th></tr></thead>
+            <tbody><tr v-for="(r, i) in c.table.rows" :key="i"><td>{{ r[0] }}</td><td v-for="(v, j) in r.slice(1)" :key="j" class="is-num">{{ fmt(v) }}</td></tr></tbody>
+          </table>
+        </div>
+      </template>
+    </section>
+  </div>
+</div>
+</div>
+
+<style>
+  /* Chart roles (reference palette, light): categorical slots 1-4 for series, status colors for the deploy stages */
+  .rov {
+    --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100;
+    --status-good: #0ca30c; --status-warning: #fab219; --status-serious: #ec835a; --status-critical: #d03b3b; --status-neutral: #a8a7a1;
+    --chart-grid: #ecebe7; --chart-text: var(--text-2, #52514e); --chart-surface: var(--surface, #fcfcfb);
+    display: flex; flex-direction: column; gap: 14px; padding-bottom: 16px;
+  }
+  .rov-top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+  .rov-top-icon { width: 40px; height: 40px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; background: var(--primary-soft); color: var(--primary); font-size: 1.1rem; }
+  .rov-top-title { flex: 1 1 280px; min-width: 0; }
+  .rov-top-title h1 { font-size: 1.15rem; font-weight: 700; margin: 0; }
+  .rov-top-title p { margin: 0; font-size: .8rem; color: var(--text-2); }
+  .rov-filter { display: flex; align-items: center; gap: 8px; }
+  .rov-filter-label { font-size: .74rem; font-weight: 600; color: var(--text-2); }
+  .rov-seg { display: flex; border: 1px solid var(--border-strong, var(--border)); border-radius: 8px; overflow: hidden; background: var(--surface); }
+  .rov-seg button { border: 0; background: none; padding: 5px 12px; font-size: .78rem; font-weight: 600; color: var(--text-2); cursor: pointer; }
+  .rov-seg button + button { border-left: 1px solid var(--border); }
+  .rov-seg button.is-on { background: var(--primary); color: #fff; }
+  .rov-msg { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-radius: 8px; font-size: .82rem; }
+  .rov-msg.is-error { background: var(--danger-soft); color: var(--danger); }
+
+  .rov-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+  .rov-tile { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text) !important; text-decoration: none !important; min-height: 92px; }
+  a.rov-tile[href]:hover { border-color: var(--primary); box-shadow: var(--shadow-sm); }
+  .rov-tile-label { font-size: .74rem; font-weight: 600; color: var(--text-2); display: flex; align-items: center; gap: 6px; }
+  .rov-tile-label i { color: var(--text-2); }
+  .rov-tile b { font-size: 1.7rem; font-weight: 700; line-height: 1.15; font-variant-numeric: tabular-nums; color: var(--text); }
+  .rov-tile small { font-size: .72rem; color: var(--muted); }
+  .rov-tiles.is-loading .rov-tile { background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface) 50%, var(--surface-2) 100%); background-size: 200% 100%; animation: rov-shine 1.2s linear infinite; }
+  @keyframes rov-shine { to { background-position: -200% 0; } }
+  .rov-st-good { color: var(--status-good) !important; } .rov-st-warning { color: #b7790a !important; }
+
+  .rov-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .rov-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px 14px; min-width: 0; }
+  .rov-card.is-wide { grid-column: 1 / -1; }
+  .rov-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .rov-card-head h2 { font-size: .9rem; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 8px; color: var(--text); }
+  .rov-card-head h2 i { color: var(--primary); }
+  .rov-card-note { flex: 1; min-width: 0; font-size: .72rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rov-tab { border: 1px solid var(--border); background: var(--surface); color: var(--text-2); border-radius: 6px; padding: 2px 8px; font-size: .72rem; font-weight: 600; cursor: pointer; }
+  .rov-tab:hover, .rov-tab.is-on { border-color: var(--primary); color: var(--primary); }
+  .rov-chart { position: relative; }
+  .rov-empty { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 140px; color: var(--muted); font-size: .82rem; border: 1px dashed var(--border); border-radius: 8px; }
+  .rov-table-wrap { max-height: 320px; overflow: auto; }
+  .rov-table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+  .rov-table th { position: sticky; top: 0; background: var(--surface-2); color: var(--text-2); font-weight: 600; text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  .rov-table td { padding: 5px 8px; border-bottom: 1px solid var(--surface-3, var(--border)); color: var(--text); }
+  .rov-table .is-num { text-align: right; font-variant-numeric: tabular-nums; }
+  @media (max-width: 991px) { .rov-grid { grid-template-columns: 1fr; } }
+</style>
+
+<script src="/lib/chart.js/dist/chart.umd.min.js"></script>
+<script>
+  (function () {
+    'use strict';
+    var BASE = '/reports/overview';
+    var MONTH_KEY = 'reports_overview_months';
+    var MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    // Deploy stages: reserved status colors, each with an icon in its label (never color alone).
+    var STAGES = {
+      none: { role: '--status-neutral', icon: '○' }, uat: { role: '--status-warning', icon: '◔' },
+      approved: { role: '--series-1', icon: '✔' }, rejected: { role: '--status-critical', icon: '✖' }, production: { role: '--status-good', icon: '✓' }
+    };
+
+    var css = function (el, name) { return getComputedStyle(el).getPropertyValue(name).trim(); };
+    var monthLabel = function (k, all) {
+      var p = k.split('-'), m = MONTH_NAMES[parseInt(p[1], 10) - 1];
+      return all.length > 12 || p[1] === '01' || k === all[0] ? m + ' ' + p[0].slice(2) : m;
+    };
+
+    // Line ends: each series named at its last point (<= 4 series are direct-labeled), nudged apart when close.
+    var endLabels = {
+      id: 'rovEndLabels',
+      afterDatasetsDraw: function (chart) {
+        if (!chart.options.plugins.rovEndLabels) return;
+        var ctx = chart.ctx, items = [];
+        chart.data.datasets.forEach(function (ds, i) {
+          var meta = chart.getDatasetMeta(i);
+          if (meta.hidden || !meta.data.length) return;
+          var pt = meta.data[meta.data.length - 1];
+          items.push({ y: pt.y, x: pt.x, text: ds.label, color: ds.borderColor });
+        });
+        items.sort(function (a, b) { return a.y - b.y; });
+        for (var i = 1; i < items.length; i++) if (items[i].y - items[i - 1].y < 13) items[i].y = items[i - 1].y + 13;
+        ctx.save();
+        ctx.font = '600 11px ' + Chart.defaults.font.family;
+        ctx.textBaseline = 'middle';
+        items.forEach(function (it) {
+          ctx.fillStyle = it.color; ctx.fillRect(it.x + 8, it.y - 1, 6, 2);           // the series' mark beside its name
+          ctx.fillStyle = chart.options.plugins.rovEndLabels.color; ctx.fillText(it.text, it.x + 18, it.y);   // text in ink, not the series color
+        });
+        ctx.restore();
+      }
+    };
+    // A vertical guide at the hovered month of the line chart.
+    var crosshair = {
+      id: 'rovCrosshair',
+      afterDatasetsDraw: function (chart) {
+        var act = chart.tooltip && chart.tooltip.getActiveElements();
+        if (!chart.options.plugins.rovCrosshair || !act || !act.length) return;
+        var x = act[0].element.x, a = chart.chartArea, ctx = chart.ctx;
+        ctx.save(); ctx.strokeStyle = chart.options.plugins.rovCrosshair.color; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(x, a.top); ctx.lineTo(x, a.bottom); ctx.stroke(); ctx.restore();
+      }
+    };
+
+    Page.setup({
+      data: function () {
+        var saved = parseInt((function () { try { return localStorage.getItem(MONTH_KEY); } catch (e) { return ''; } })(), 10);
+        return { months: [6, 12, 24].indexOf(saved) >= 0 ? saved : 12, data: null, loading: false, error: '', tables: {} };
+      },
+      computed: {
+        serversTitle: function () { return (this.servers || []).map(function (s) { return s.name; }).join(', '); },
+        serversReady: function () { return (this.servers || []).filter(function (s) { return s.configured; }).length; },
+        // Every card: its chart (built in draw) and the same numbers as a table.
+        cards: function () {
+          var d = this.data, vm = this;
+          if (!d) return [];
+          var sum = function (list) { return list.reduce(function (s, x) { return s + x.n; }, 0); };
+          var bars = function (key, title, icon, note, list, empty, head) {
+            return { key: key, title: title, icon: icon, note: note, kind: 'bars', list: list, height: Math.max(120, list.length * 30 + 30),
+              empty: !list.length || !sum(list) ? empty : '', table: { head: head, rows: list.map(function (x) { return [x.label, x.n]; }) } };
+          };
+          var act = d.activity;
+          var since = MONTH_NAMES[parseInt(d.since.slice(5), 10) - 1] + ' ' + d.since.slice(0, 4);      // e.g. Nov 2025
+          return [
+            { key: 'activity', title: 'Activity per month', icon: 'fas fa-chart-line', note: 'last ' + vm.months + ' months · count per month', kind: 'line', wide: true, height: 280,
+              empty: act.series.every(function (s) { return s.data.every(function (v) { return !v; }); }) ? 'Nothing was designed, published or deployed in the last ' + vm.months + ' months.' : '',
+              table: { head: ['Month'].concat(act.series.map(function (s) { return s.label; })), rows: act.months.map(function (m, i) { return [monthLabel(m, act.months) + (m.slice(5) === '01' || i === 0 ? '' : ' ' + m.slice(0, 4)), ].concat(act.series.map(function (s) { return s.data[i]; })); }) } },
+            { key: 'pipeline', title: 'Where the designs are', icon: 'fas fa-route', note: 'latest deploy of each saved design', kind: 'stages', list: d.pipeline, height: 190,
+              empty: !sum(d.pipeline) ? 'No design has been saved yet.' : '', table: { head: ['Stage', 'Designs'], rows: d.pipeline.map(function (x) { return [x.label, x.n]; }) } },
+            bars('byServer', 'Published per JasperServer', 'fas fa-server', 'since ' + since, d.byServer, 'Nothing was published in this period.', ['JasperServer', 'Publishes']),
+            bars('byFolder', 'Designs per folder', 'fas fa-folder', 'top-level folders of the library', d.byFolder, 'No design has been saved yet.', ['Folder', 'Designs']),
+            bars('byUser', 'Most active people', 'fas fa-user-friends', 'publishes and deploys since ' + since, d.byUser, 'Nobody published or deployed in this period.', ['User', 'Publishes and deploys']),
+            d.templates ? bars('templates', 'HIS report templates per type', 'fas fa-hospital', (d.site ? d.site.name + ' · ' : '') + 'active templates, by paramtype', d.templates, 'This site has no active report template.', ['Type', 'Templates'])
+              : { key: 'templates', title: 'HIS report templates per type', icon: 'fas fa-hospital', note: '', kind: 'none', height: 0, empty: 'Connect to a Centrix site to see its report templates.', table: { head: [], rows: [] } }
+          ];
+        }
+      },
+      mounted: function () { this._charts = {}; this.load(); },
+      beforeDestroy: function () { this.destroyCharts(); },
+      methods: {
+        fmt: function (n) { return n == null ? '—' : Number(n).toLocaleString('en-US'); },
+        setMonths: function (m) {
+          if (this.months === m) return;
+          this.months = m;
+          try { localStorage.setItem(MONTH_KEY, String(m)); } catch (e) { /* storage off */ }
+          this.load();
+        },
+        load: function () {
+          var vm = this;
+          vm.loading = true; vm.error = '';
+          fetch(BASE + '/data?months=' + vm.months, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+            .then(function (r) { return r.json().then(function (d) { if (!r.ok || d.error) throw new Error(d.error || ('HTTP ' + r.status)); return d; }); })
+            .then(function (d) { vm.data = Object.freeze(d); vm.$nextTick(vm.draw); })
+            .catch(function (err) { vm.error = err.message; })
+            .then(function () { vm.loading = false; });
+        },
+        destroyCharts: function () {
+          var charts = this._charts || {};
+          Object.keys(charts).forEach(function (k) { charts[k].destroy(); });
+          this._charts = {};
+        },
+        draw: function () {
+          var vm = this, root = vm.$refs.root;
+          if (!window.Chart || !root) { if (!window.Chart) vm.error = 'The charts could not load (Chart.js is missing). The tables still show the numbers.'; return; }
+          vm.destroyCharts();
+          var ink = css(root, '--chart-text') || '#52514e', grid = css(root, '--chart-grid'), surface = css(root, '--chart-surface') || '#fff';
+          Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+          Chart.defaults.font.size = 11;
+          Chart.defaults.color = ink;
+          var tooltip = { backgroundColor: '#0b0b0b', titleColor: '#fff', bodyColor: '#fff', padding: 8, cornerRadius: 6, boxPadding: 4, usePointStyle: true,
+            callbacks: { label: function (c) { return ' ' + (c.dataset.label ? c.dataset.label + ': ' : '') + vm.fmt(c.parsed.y != null && c.chart.config.type === 'line' ? c.parsed.y : c.parsed.x); } } };
+          vm.cards.forEach(function (c) {
+            var el = vm.$refs['chart-' + c.key];
+            el = Array.isArray(el) ? el[0] : el;
+            if (!el || c.empty) return;
+            if (c.kind === 'line') vm._charts[c.key] = vm.lineChart(el, c, root, { ink: ink, grid: grid, surface: surface, tooltip: tooltip });
+            else vm._charts[c.key] = vm.barChart(el, c, root, { ink: ink, grid: grid, surface: surface, tooltip: tooltip });
+          });
+        },
+        // Activity: one axis, one count per month, four series in the fixed categorical order.
+        lineChart: function (el, c, root, t) {
+          var act = this.data.activity;
+          return new Chart(el, {
+            type: 'line',
+            data: {
+              labels: act.months.map(function (m) { return monthLabel(m, act.months); }),
+              datasets: act.series.map(function (s, i) {
+                var color = css(root, '--series-' + (i + 1));
+                return { label: s.label, data: s.data, borderColor: color, backgroundColor: color, borderWidth: 2, tension: 0.25,
+                  pointRadius: 0, pointHoverRadius: 5, pointHoverBorderWidth: 2, pointHoverBorderColor: t.surface, pointHitRadius: 12 };
+              })
+            },
+            options: {
+              maintainAspectRatio: false, animation: { duration: 250 },
+              interaction: { mode: 'index', intersect: false },
+              layout: { padding: { right: 150, top: 4 } },
+              scales: {
+                x: { grid: { display: false }, border: { color: t.grid }, ticks: { color: t.ink, maxRotation: 0, autoSkipPadding: 12 } },
+                y: { beginAtZero: true, grid: { color: t.grid }, border: { display: false }, ticks: { color: t.ink, precision: 0, maxTicksLimit: 6 } }
+              },
+              plugins: {
+                legend: { position: 'top', align: 'start', labels: { usePointStyle: true, pointStyle: 'line', boxWidth: 18, color: t.ink, padding: 14 } },
+                tooltip: t.tooltip, rovEndLabels: { color: t.ink }, rovCrosshair: { color: '#9a9994' }
+              }
+            },
+            plugins: [endLabels, crosshair]
+          });
+        },
+        // Horizontal bars: one series (the title names it, no legend), the value at each bar's end.
+        barChart: function (el, c, root, t) {
+          var stages = c.kind === 'stages';
+          var colors = c.list.map(function (x) { return stages ? css(root, STAGES[x.key].role) : css(root, '--series-1'); });
+          var valueLabels = {
+            id: 'rovValues',
+            afterDatasetsDraw: function (chart) {
+              var ctx = chart.ctx, meta = chart.getDatasetMeta(0);
+              ctx.save(); ctx.font = '600 11px ' + Chart.defaults.font.family; ctx.fillStyle = t.ink; ctx.textBaseline = 'middle';
+              meta.data.forEach(function (bar, i) { var v = chart.data.datasets[0].data[i]; ctx.fillText(Number(v).toLocaleString('en-US'), bar.x + 6, bar.y); });
+              ctx.restore();
+            }
+          };
+          return new Chart(el, {
+            type: 'bar',
+            data: {
+              labels: c.list.map(function (x) { return stages ? STAGES[x.key].icon + '  ' + x.label : x.label; }),
+              datasets: [{ label: c.table.head[1], data: c.list.map(function (x) { return x.n; }), backgroundColor: colors, hoverBackgroundColor: colors,
+                borderRadius: 4, borderSkipped: 'start', maxBarThickness: 18, categoryPercentage: 0.8, barPercentage: 0.9,
+                borderColor: t.surface, borderWidth: { top: 1, bottom: 1 } }]
+            },
+            options: {
+              indexAxis: 'y', maintainAspectRatio: false, animation: { duration: 250 },
+              layout: { padding: { right: 36 } },
+              scales: {
+                x: { beginAtZero: true, grid: { color: t.grid }, border: { display: false }, ticks: { color: t.ink, precision: 0, maxTicksLimit: 5 } },
+                y: { grid: { display: false }, border: { color: t.grid }, ticks: { color: t.ink, autoSkip: false,
+                  callback: function (v) { var s = this.getLabelForValue(v); return s.length > 34 ? s.slice(0, 33) + '…' : s; } } }
+              },
+              plugins: { legend: { display: false }, tooltip: Object.assign({}, t.tooltip, { callbacks: { label: function (x) { return ' ' + c.table.head[1] + ': ' + Number(x.parsed.x).toLocaleString('en-US'); } } }) }
+            },
+            plugins: [valueLabels]
+          });
+        }
+      },
+      watch: {
+        // A table view switched back to the chart: draw the charts again at their size.
+        tables: { deep: true, handler: function () { var vm = this; vm.$nextTick(function () { Object.keys(vm._charts || {}).forEach(function (k) { vm._charts[k].resize(); }); }); } }
+      }
+    });
+  })();
+</script>

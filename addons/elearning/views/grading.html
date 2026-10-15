@@ -1,0 +1,246 @@
+<div class="col-12">
+<div class="el">
+
+  <header class="el-pagehead">
+    <div>
+      <nav class="el-crumbs" aria-label="Breadcrumb">
+        <a href="/e-learning">Courses</a><i class="fas fa-chevron-right" aria-hidden="true"></i>
+        <a :href="'/e-learning/courses/' + course.id">{{ course.title }}</a><i class="fas fa-chevron-right" aria-hidden="true"></i><span>Grading</span>
+      </nav>
+      <h1>Grading</h1>
+      <p>Grade assignment submissions and see how learners did on the quizzes of this course.</p>
+    </div>
+    <div class="el-pagehead-tools">
+      <a class="el-btn" :href="'/e-learning/courses/' + course.id + '/edit'"><i class="fas fa-pen" aria-hidden="true"></i> Edit course</a>
+    </div>
+  </header>
+
+  <div v-if="!items.length" class="el-empty">
+    <div class="el-empty-icon"><i class="fas fa-clipboard-check" aria-hidden="true"></i></div>
+    <h3>No quizzes or assignments</h3>
+    <p>Add a quiz or an assignment to the curriculum in the course editor; results and submissions show up here.</p>
+  </div>
+
+  <template v-else>
+    <div class="el-qstats is-wide">
+      <div><small>To grade</small><b :style="{ color: pendingCount ? 'var(--el-warn)' : null }">{{ pendingCount }}</b></div>
+      <div><small>Submissions</small><b>{{ subs.length }}</b></div>
+      <div><small>Quiz takers</small><b>{{ takers }}</b></div>
+      <div><small>Learners in the course</small><b>{{ course.learners }}</b></div>
+    </div>
+
+    <div>
+      <nav class="el-tabs" role="tablist">
+        <button type="button" role="tab" class="el-tab" :class="{ 'is-on': tab === 'assignments' }" :aria-selected="tab === 'assignments'" @click="tab = 'assignments'">
+          Assignments <span v-if="pendingCount" class="el-badge is-draft" style="height: 20px; margin-left: 4px;">{{ pendingCount }}</span></button>
+        <button type="button" role="tab" class="el-tab" :class="{ 'is-on': tab === 'quizzes' }" :aria-selected="tab === 'quizzes'" @click="tab = 'quizzes'">Quiz results</button>
+      </nav>
+
+      <!-- Assignments -->
+      <div v-show="tab === 'assignments'" class="el-tabpanel" role="tabpanel">
+        <div v-if="!assignmentItems.length" class="el-muted">This course has no assignments.</div>
+        <template v-else>
+          <div class="el-filterbar">
+            <select v-model="fAssign" class="el-select" aria-label="Assignment">
+              <option value="">All assignments</option>
+              <option v-for="a in assignmentItems" :key="a.id" :value="a.id">{{ a.title }}</option>
+            </select>
+            <div class="el-seg" role="group" aria-label="Status">
+              <button v-for="s in STATUS" :key="s.key" type="button" :class="{ 'is-on': fStatus === s.key }" @click="fStatus = s.key">{{ s.label }}</button>
+            </div>
+            <label class="el-search"><i class="fas fa-search" aria-hidden="true"></i><span class="sr-only">Search learners</span><input v-model.trim="q" type="search" placeholder="Learner"></label>
+          </div>
+          <div v-if="!shownSubs.length" class="el-muted" style="padding: 20px 0; text-align: center;">{{ subs.length ? 'No submissions match.' : 'No one has handed in an assignment yet.' }}</div>
+          <div v-else class="el-table-wrap">
+            <table class="el-table is-hover">
+              <thead><tr><th>Learner</th><th>Assignment</th><th>Submitted</th><th>Status</th><th></th></tr></thead>
+              <tbody>
+                <tr v-for="s in shownSubs" :key="s.id" @click="open(s)" :class="{ 'is-sel': cur && cur.id === s.id }">
+                  <td><b>{{ s.learner }}</b><small v-if="s.username && s.username !== s.learner" class="el-sub">{{ s.username }}</small></td>
+                  <td>{{ itemTitle(s.lessonId) }}<small v-if="s.count > 1" class="el-sub">submission {{ s.count }}</small></td>
+                  <td class="el-nowrap">{{ when(s.submittedAt) }}</td>
+                  <td>
+                    <span v-if="s.status === 'submitted'" class="el-badge is-draft"><i class="far fa-clock" aria-hidden="true"></i> To grade</span>
+                    <span v-else class="el-badge" :class="s.passed ? 'is-done' : 'is-bad'">{{ s.passed ? 'Passed' : 'Not passed' }} · {{ s.score }}/{{ item(s.lessonId).settings.maxPoints }}</span>
+                  </td>
+                  <td class="el-nowrap" style="text-align: right;"><span class="el-link">{{ s.status === 'submitted' ? 'Grade' : 'View' }} <i class="fas fa-chevron-right" aria-hidden="true"></i></span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </template>
+      </div>
+
+      <!-- Quizzes -->
+      <div v-show="tab === 'quizzes'" class="el-tabpanel" role="tabpanel">
+        <div v-if="!quizItems.length" class="el-muted">This course has no quizzes.</div>
+        <template v-else>
+          <div class="el-filterbar">
+            <select v-model="fQuiz" class="el-select" aria-label="Quiz">
+              <option v-for="a in quizItems" :key="a.id" :value="a.id">{{ a.title }}</option>
+            </select>
+            <span class="el-muted" style="font-size: 13px;">{{ quizInfo }}</span>
+          </div>
+          <div class="el-qstats" style="margin-bottom: 16px;">
+            <div><small>Took it</small><b>{{ quizRows.length }}</b></div>
+            <div><small>Passed</small><b>{{ quizPassed }}<small v-if="quizRows.length"> ({{ pct(quizPassed, quizRows.length) }}%)</small></b></div>
+            <div><small>Average best score</small><b>{{ quizRows.length ? quizAvg + '%' : '—' }}</b></div>
+            <div><small>Attempts</small><b>{{ quizAttempts }}</b></div>
+          </div>
+          <div v-if="!quizRows.length" class="el-muted" style="padding: 12px 0; text-align: center;">No one has taken this quiz yet.</div>
+          <div v-else class="el-table-wrap">
+            <table class="el-table">
+              <thead><tr><th>Learner</th><th>Attempts</th><th>Best</th><th>Last</th><th>Result</th><th>Last attempt</th></tr></thead>
+              <tbody>
+                <tr v-for="r in quizRows" :key="r.userId">
+                  <td><b>{{ r.learner }}</b><small v-if="r.username && r.username !== r.learner" class="el-sub">{{ r.username }}</small></td>
+                  <td>{{ r.attempts }}<template v-if="item(fQuiz).settings.maxAttempts"> / {{ item(fQuiz).settings.maxAttempts }}</template></td>
+                  <td><b>{{ r.best }}%</b></td>
+                  <td>{{ r.lastPct }}%</td>
+                  <td><span class="el-badge" :class="r.passed ? 'is-done' : 'is-bad'">{{ r.passed ? 'Passed' : 'Not passed' }}</span></td>
+                  <td class="el-nowrap">{{ when(r.lastAt) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </template>
+      </div>
+    </div>
+  </template>
+
+  <!-- A submission -->
+  <div v-if="cur" class="el-modal" role="dialog" aria-modal="true" aria-labelledby="el-sub-title" @mousedown.self="cur = null">
+    <div class="el-modal-box">
+      <div class="el-modal-head">
+        <div>
+          <h3 id="el-sub-title">{{ cur.learner }}</h3>
+          <small class="el-muted">{{ itemTitle(cur.lessonId) }} · submitted {{ when(cur.submittedAt) }}</small>
+        </div>
+        <button type="button" class="el-icon-btn" title="Close" @click="cur = null"><i class="fas fa-times" aria-hidden="true"></i><span class="sr-only">Close</span></button>
+      </div>
+      <div class="el-modal-body">
+        <div v-if="loading" class="el-muted"><i class="fas fa-spinner fa-spin"></i> Loading…</div>
+        <template v-else-if="detail">
+          <div class="el-field">Answer
+            <div v-if="detail.text" class="el-assign-text">{{ detail.text }}</div>
+            <span v-else class="el-muted" style="font-weight: 400;">No written answer.</span>
+          </div>
+          <div v-if="detail.file" class="el-field">File
+            <a class="el-file" :href="detail.file.url"><i class="fas fa-download" aria-hidden="true"></i>{{ detail.file.name }} <small>{{ size(detail.file.size) }}</small></a>
+          </div>
+          <div class="el-grade">
+            <label class="el-field">Score <small>0 to {{ curItem.settings.maxPoints }}; passes at {{ curItem.settings.passPoints }}</small>
+              <span class="el-unit"><input v-model.number="g.score" type="number" min="0" :max="curItem.settings.maxPoints" step="1" class="el-input" required><span>/ {{ curItem.settings.maxPoints }}</span></span>
+            </label>
+            <div class="el-grade-verdict" :class="gPass === null ? '' : gPass ? 'is-pass' : 'is-fail'">
+              <template v-if="gPass === null">Enter a score</template>
+              <template v-else><i :class="gPass ? 'fas fa-check-circle' : 'fas fa-redo'" aria-hidden="true"></i> {{ gPass ? 'Passed: the lesson is completed for the learner' : 'Not passed' + (curItem.settings.resubmit ? ': the learner can submit again' : '') }}</template>
+            </div>
+          </div>
+          <div class="el-field">Feedback <span class="el-opt">(shown to the learner)</span>
+            <el-md-editor v-model="g.feedback" :rows="5" placeholder="What was good, what to improve…"></el-md-editor>
+          </div>
+          <small v-if="detail.status === 'graded'" class="el-muted">Graded by {{ detail.gradedBy }} on {{ when(detail.gradedAt) }}. Saving again changes the grade.</small>
+        </template>
+        <div v-if="gError" class="el-msg is-error" role="alert"><i class="fas fa-exclamation-triangle"></i><span>{{ gError }}</span></div>
+      </div>
+      <div class="el-modal-foot">
+        <button v-if="nextToGrade" type="button" class="el-btn is-ghost el-grow" style="justify-content: flex-start;" @click="open(nextToGrade)">Next to grade <i class="fas fa-chevron-right" aria-hidden="true"></i></button>
+        <button type="button" class="el-btn" @click="cur = null">Close</button>
+        <button type="button" class="el-btn is-primary" :disabled="saving || !detail || gPass === null" @click="saveGrade"><i :class="saving ? 'fas fa-spinner fa-spin' : 'fas fa-check'" aria-hidden="true"></i> Save grade</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<script src="/e-learning/assets/elearning.js"></script>
+<script>
+  (function () {
+    'use strict';
+    var STATUS = [{ key: 'submitted', label: 'To grade' }, { key: 'graded', label: 'Graded' }, { key: '', label: 'All' }];
+
+    Page.setup({
+      data: function () {
+        var d = Page.data, quizzes = d.items.filter(function (i) { return i.type === 'quiz'; });
+        var pending = d.submissions.some(function (s) { return s.status === 'submitted'; });
+        return {
+          subs: d.submissions.slice(), STATUS: STATUS,
+          tab: d.items.some(function (i) { return i.type === 'assignment'; }) && (pending || !quizzes.length) ? 'assignments' : 'quizzes',
+          fAssign: '', fStatus: pending ? 'submitted' : '', q: '', fQuiz: quizzes.length ? quizzes[0].id : null,
+          cur: null, detail: null, loading: false, g: { score: null, feedback: '' }, saving: false, gError: ''
+        };
+      },
+      computed: {
+        assignmentItems: function () { return this.items.filter(function (i) { return i.type === 'assignment'; }); },
+        quizItems: function () { return this.items.filter(function (i) { return i.type === 'quiz'; }); },
+        pendingCount: function () { return this.subs.filter(function (s) { return s.status === 'submitted'; }).length; },
+        takers: function () { var u = {}; this.results.forEach(function (r) { u[r.userId] = 1; }); return Object.keys(u).length; },
+        shownSubs: function () {
+          var f = this, q = this.q.toLowerCase();
+          return this.subs.filter(function (s) {
+            return (!f.fAssign || s.lessonId === f.fAssign) && (!f.fStatus || s.status === f.fStatus) &&
+              (!q || (s.learner + ' ' + (s.username || '')).toLowerCase().indexOf(q) >= 0);
+          });
+        },
+        nextToGrade: function () {
+          var cur = this.cur;
+          return this.shownSubs.filter(function (s) { return s.status === 'submitted' && (!cur || s.id !== cur.id); })[0] || null;
+        },
+        curItem: function () { return this.cur ? this.item(this.cur.lessonId) : null; },
+        gPass: function () {
+          var n = this.g.score;
+          if (n === '' || n == null || isNaN(n) || !this.curItem) return null;
+          return n >= this.curItem.settings.passPoints;
+        },
+        quizRows: function () { var id = this.fQuiz; return this.results.filter(function (r) { return r.lessonId === id; }); },
+        quizPassed: function () { return this.quizRows.filter(function (r) { return r.passed; }).length; },
+        quizAvg: function () { return Math.round(this.quizRows.reduce(function (n, r) { return n + r.best; }, 0) / (this.quizRows.length || 1)); },
+        quizAttempts: function () { return this.quizRows.reduce(function (n, r) { return n + r.attempts; }, 0); },
+        quizInfo: function () {
+          var s = this.fQuiz ? this.item(this.fQuiz).settings : null;
+          return s ? s.questions + ' questions · pass mark ' + s.passPct + '% · ' + (s.maxAttempts ? s.maxAttempts + ' attempts' : 'unlimited attempts') : '';
+        }
+      },
+      mounted: function () {
+        var self = this;
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && self.cur) self.cur = null; });
+      },
+      methods: {
+        when: function (iso) { return iso ? new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : ''; },
+        size: ELearn.size, pct: ELearn.pct,
+        item: function (id) { return this.items.filter(function (i) { return i.id === id; })[0] || { title: '(deleted)', settings: {} }; },
+        itemTitle: function (id) { return this.item(id).title; },
+        open: function (s) {
+          var self = this;
+          this.cur = s;
+          this.detail = null;
+          this.gError = '';
+          this.loading = true;
+          ELearn.getJson('/e-learning/submissions/' + s.id)
+            .then(function (r) {
+              self.detail = r.submission;
+              self.g = { score: r.submission.score, feedback: r.submission.feedback || '' };
+            })
+            .catch(function (err) { self.gError = err.message; })
+            .finally(function () { self.loading = false; });
+        },
+        saveGrade: function () {
+          var self = this;
+          this.saving = true;
+          this.gError = '';
+          ELearn.post('/e-learning/submissions/' + this.cur.id + '/grade', this.g)
+            .then(function (r) {
+              var sub = r.submission, i = self.subs.findIndex(function (x) { return x.id === sub.id; });
+              if (i >= 0) self.subs.splice(i, 1, Object.assign({}, self.subs[i], { status: sub.status, score: sub.score, passed: sub.passed, gradedAt: sub.gradedAt, gradedBy: sub.gradedBy }));
+              var next = self.nextToGrade;
+              if (next) self.open(next); else self.cur = null;
+            })
+            .catch(function (err) { self.gError = err.message; })
+            .finally(function () { self.saving = false; });
+        }
+      }
+    });
+  })();
+</script>

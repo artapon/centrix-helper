@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
-const activeConnection = require('../models/activeConnection');
+const activeConnection = require('../models/activeconnection.service');
 const model = require('../models/dbconnections.model');
-const mongoUri = require('../models/mongoUri');
+const mongoUri = require('../models/mongouri.helper');
 const view = require('../../../core/view')('setting');
 const permissions = require('../../../core/permissions');
 
@@ -16,7 +16,7 @@ async function connectTo(req, siteIndex) {
 exports.index = async function (req, res) {
   const connections = await model.list();
   return res.renderPage(view('dbconnections'), {
-    title: 'Manage DB Connections',
+    title: 'DB Connections',
     connections: connections.map((c) => ({
       ID: c.ID,
       SITE_INDEX: c.SITE_INDEX,
@@ -54,6 +54,7 @@ exports.getOne = async function (req, res) {
 // Save, then optionally connect ("Save & Connect").
 async function saveAndMaybeConnect(req, res, id, verb) {
   if (!String(req.body.name || '').trim()) return back(res, 'error', 'Connection name is required');
+  if (!String(req.body.default_site_code || '').trim()) return back(res, 'error', 'Default site code is required');
   if (!String(req.body.mongodb_host || '').trim()) return back(res, 'error', 'Server is required');
 
   let savedId;
@@ -143,7 +144,7 @@ exports.uri = async function (req, res) {
   }
 };
 
-// Switches the active Mongo connection to the site of a Manage Connections row.
+// Switches the active Mongo connection to the site of a DB Connections row.
 // Top bar "Connect DB" / "Reconnect DB": the last connection used (or the first one listed), then
 // back to the page it was pressed on (next: a path of this app only).
 exports.reconnect = async function (req, res) {

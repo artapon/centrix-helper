@@ -2,24 +2,27 @@
 
   <!-- ── Search Form ──────────────────────────────────────────────── -->
   <div class="card mb-3">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-search" style="color:#2563eb;"></i>
+      <span>Search & Filter Patient Summary</span>
+    </div>
     <div class="card-body">
       <form method="get" action="/patients/summary">
-        <div class="form-row" style="align-items:flex-end;gap:0;">
-          <div class="form-group col-sm-3 mb-0">
-            <label
-              style="font-size:.75rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.04em;"><i
-                class="fas fa-id-card mr-1"></i>HN</label>
+        <div class="form-row">
+          <div class="form-group col-sm-3 mb-3">
+            <label><i class="fas fa-id-card mr-1" style="color:#94a3b8;"></i>HN</label>
             <input type="text" class="form-control" name="hn" placeholder="Patient HN">
           </div>
-          <div class="form-group col-sm-3 mb-0">
-            <label
-              style="font-size:.75rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.04em;"><i
-                class="fas fa-hospital-user mr-1"></i>VN / AN</label>
+          <div class="form-group col-sm-3 mb-3">
+            <label><i class="fas fa-hospital-user mr-1" style="color:#94a3b8;"></i>VN / AN</label>
             <input type="text" class="form-control" name="vn" placeholder="Visit or Admission No.">
           </div>
-          <div class="form-group col-sm-2 mb-0">
-            <label style="font-size:.75rem;opacity:0;">x</label>
-            <button type="submit" class="btn btn-primary w-100"><i class="fas fa-search mr-1"></i>Search</button>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-sm-3 mb-0">
+            <button type="submit" class="btn btn-primary w-100">
+              <i class="fas fa-filter mr-1"></i> Filter Data
+            </button>
           </div>
         </div>
       </form>

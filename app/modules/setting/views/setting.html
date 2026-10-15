@@ -1,6 +1,6 @@
 
 <div class="col-sm-12">
-  <!-- The connection is chosen on Manage Connections; this page shows the connected site. -->
+  <!-- The connection is chosen on DB Connections; this page shows the connected site. -->
   <div v-if="dberror == 'F'" class="alert alert-success" role="alert">
     <i class="fas fa-check-circle mr-2"></i>
     <strong>{{ sitename }}</strong> — Database connected successfully.
@@ -23,7 +23,7 @@
       <template v-if="connectError">Automatic connection failed: {{ connectError }}</template>
       <template v-else>The database could not be reached.</template>
     </span>
-    <a v-if="canManageConnections" href="/database/connections" class="btn btn-sm btn-danger"><i class="fas fa-plug mr-1"></i> Manage Connections</a>
+    <a v-if="canManageConnections" href="/database/connections" class="btn btn-sm btn-danger"><i class="fas fa-plug mr-1"></i> DB Connections</a>
     <span v-else>Ask an administrator to check the connection.</span>
   </div>
 </div>

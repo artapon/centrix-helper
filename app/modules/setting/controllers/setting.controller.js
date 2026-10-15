@@ -1,6 +1,6 @@
 const axios = require('axios');
 const dbConnectionsModel = require('../models/dbconnections.model');
-const activeConnection = require('../models/activeConnection');
+const activeConnection = require('../models/activeconnection.service');
 const permissions = require('../../../core/permissions');
 const settingsModel = require("../models/setting.model");
 const logModel = require("../../logs/models/log.model");
@@ -80,7 +80,7 @@ exports.index = async function (req, res) {
   const connectionCount = (await dbConnectionsModel.list()).length;
   const canManageConnections = permissions.canAccessPath(req.user, '/database/connections');
 
-  // The connection is chosen on Manage Connections; this page joins it, or auto-connects.
+  // The connection is chosen on DB Connections; this page joins it, or auto-connects.
   let connectError = '';
   if (connectionCount) {
     try {

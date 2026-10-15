@@ -53,7 +53,7 @@ exports.modality = async function (req, res) {
   let org = await organisationsModel.getOrgData(orgcode);
 
   return res.renderPage(view('xray_table'), {
-    title:  'List Empty Default modality : ' + org[0].name,
+    title:  'List Empty Modality : ' + org[0].name,
     xrays : xrays,
   });
 }

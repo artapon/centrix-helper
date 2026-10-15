@@ -1,5 +1,5 @@
 // Example sidebar menu: copy to menu.config.js. Grouped by data domain. Each item's link is also its permission in Roles &
-// Permissions and owns every URL under it (see app/core/permissions.js and app/core/routeMap.js).
+// Permissions and owns every URL under it (see app/core/permissions.js and app/core/routemap.js).
 // Add-on sections (Query Studio, Jasper Printout) and Marketplace are added by app/core/addons.js.
 const menu = [
   {
@@ -10,11 +10,18 @@ const menu = [
     ]
   },
   {
+    header: "Tools",
+    icon: "fas fa-toolbox",
+    items: [
+      { text: "Shortcuts", icon: "fas fa-keyboard", link: "/tools/shortcuts", active: true }
+    ]
+  },
+  {
     header: "Database",
     icon: "fas fa-server",
     items: [
       {
-        text: "Manage Connections",
+        text: "DB Connections",
         icon: "fas fa-list",
         link: "/database/connections",
         match: ["/api/database/connections"],   // editor API (returns connection details)
@@ -53,7 +60,7 @@ const menu = [
     header: "Radiology (RIS)",
     icon: "fas fa-x-ray",
     items: [
-      { text: "Empty Default Modality", icon: "fas fa-x-ray", link: "/radiology/default-modality", active: true },
+      { text: "Empty Modality", icon: "fas fa-x-ray", link: "/radiology/default-modality", active: true },
       { text: "Xray Orders", icon: "fas fa-clipboard", link: "/radiology/orders", active: true },
       { text: "Xray Mirth Log (ORM)", icon: "fas fa-stream", link: "/radiology/mirth-log/orm", active: true },
       { text: "Xray Mirth Log (ORU)", icon: "fas fa-stream", link: "/radiology/mirth-log/oru", active: true }
@@ -117,16 +124,7 @@ const menu = [
     header: "Data Management",
     icon: "fas fa-database",
     items: [
-      { text: "นับจำนวน Migration", icon: "fas fa-exchange-alt", link: "/migration/counts", active: true },
-      { text: "Check Interface Setting", icon: "fas fa-cogs", link: "/interfaces/settings", active: true },
-      { text: "Export Data", icon: "fas fa-file-export", link: "/exports", active: true }
-    ]
-  },
-  {
-    header: "Tools",
-    icon: "fas fa-toolbox",
-    items: [
-      { text: "Shortcuts", icon: "fas fa-keyboard", link: "/tools/shortcuts", active: true }
+      { text: "Check Interface Setting", icon: "fas fa-cogs", link: "/interfaces/settings", active: true }
     ]
   },
   {

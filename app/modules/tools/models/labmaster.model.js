@@ -1,6 +1,9 @@
 const mongoose = require("mongoose");
 
-exports.getlabMasterData = async function (labcode) {
+// opts (optional): { skip, limit } for the Lab Master pages; without them every row (the export).
+exports.getlabMasterData = async function (labcode, opts) {
+  const skip = Math.max(0, parseInt(opts && opts.skip, 10) || 0);
+  const limit = opts && opts.limit ? Math.min(1000, Math.max(1, parseInt(opts.limit, 10) || 50)) : 0;
   let search = {};
   if(labcode)
     search.code = labcode;
@@ -184,7 +187,10 @@ exports.getlabMasterData = async function (labcode) {
                 }
         },
         { $match : search },
-        {$sort : {"code" : -1}}
+        // code, then result item: one order, so the pages neither repeat nor skip rows
+        {$sort : {"code" : -1, "resultitem" : 1, "specimens" : 1}},
+        ...(skip ? [{ $skip : skip }] : []),
+        ...(limit ? [{ $limit : limit }] : [])
     ],
     { allowDiskUse: true }
     )

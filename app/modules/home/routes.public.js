@@ -1,7 +1,7 @@
 // Signed-in users, no DB connection needed. Editing shortcuts is for administrators.
 const router = require('express').Router();
-const asyncHandler = require('../../core/http/asyncHandler');
-const { requireAdmin } = require('../../core/middleware/requireAuth');
+const asyncHandler = require('../../core/http/async.handler');
+const { requireAdmin } = require('../../core/middleware/requireauth.middleware');
 const shortcutsController = require('./controllers/shortcuts.controller');
 
 router.get('/tools/shortcuts', asyncHandler(shortcutsController.index));

@@ -5,7 +5,7 @@ const patientModel = require("../../patients/models/patient.model");
 const patientvisitModel = require("../../patients/models/patientvisits.model");
 let moment = require("moment-timezone");
 const view = require('../../../core/view')('billing');
-const renderPage = require('../../../core/middleware/renderPage');
+const renderPage = require('../../../core/middleware/renderpage.middleware');
 
 exports.patientUnBills = async function (req, res) {
   let dateat = moment().toISOString();

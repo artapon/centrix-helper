@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const asyncHandler = require('../../core/http/asyncHandler');
+const asyncHandler = require('../../core/http/async.handler');
 const billingController = require('./controllers/billing.controller');
 const unBillController = require('./controllers/unbilling.controller');
 const depositsController = require('./controllers/deposits.controller');

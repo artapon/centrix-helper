@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
+const paging = require('../../../core/http/paging');        // optional Previous / Next paging of the list pages
 
-exports.getIPFillOrders = async function (orguid, patientuid, visituid) {
+exports.getIPFillOrders = async function (orguid, patientuid, visituid, page = null) {
   let initfilter = {};
   initfilter.orguid = mongoose.Types.ObjectId(orguid);
   initfilter.statusflag = 'A';
@@ -28,9 +29,8 @@ exports.getIPFillOrders = async function (orguid, patientuid, visituid) {
     });
   }
 
-  if(!visituid && !patientuid) {
-    pipeline.push({ $limit: 50 });
-  }
+  // Paged: a patient or visit is paged too; else as before (50, or every item of a patient / visit).
+  pipeline.push(...paging.stages(page, !visituid && !patientuid ? 50 : 0));
 
   // Continue with the remaining stages
   pipeline = pipeline.concat([

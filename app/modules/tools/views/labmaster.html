@@ -1,20 +1,22 @@
 <div class="col-sm-12">
   <div class="card">
     <div class="card-header" style="display:flex;align-items:center;gap:8px;">
-      <i class="fas fa-filter" style="color:#2563eb;"></i>
-      <span>Filter</span>
+      <i class="fas fa-search" style="color:#2563eb;"></i>
+      <span>Search & Filter Lab Master</span>
     </div>
     <div class="card-body">
-      <form method="get" action="/lab/master" class="form-group">
+      <form method="get" action="/lab/master">
         <div class="form-row">
-          <div class="form-group col-sm-3">
-            <label>Lab Code : &nbsp;</label>
-            <input type="text" class="form-control" name="labcode">
+          <div class="form-group col-sm-3 mb-3">
+            <label><i class="fas fa-flask mr-1" style="color:#94a3b8;"></i>Lab Code</label>
+            <input type="text" class="form-control" name="labcode" :value="labcode" placeholder="Lab code">
           </div>
         </div>
         <div class="form-row">
-          <div class="form-group col-sm-6">
-            <input type="submit" value="กรองข้อมูล" class="btn btn-success">
+          <div class="form-group col-sm-3 mb-0">
+            <button type="submit" class="btn btn-primary w-100">
+              <i class="fas fa-filter mr-1"></i> Filter Data
+            </button>
           </div>
         </div>
       </form>
@@ -28,7 +30,17 @@
         <i class="fas fa-flask" style="color:#2563eb;"></i>
         Lab Master
       </span>
-      <a href="/lab/master/export" class="btn btn-success btn-sm"><i class="fas fa-download mr-1"></i> ดาวน์โหลดทั้งหมด</a>
+      <!-- Download all, then the pages: right after the table filter app.js adds -->
+      <div class="pg-tools">
+        <a href="/lab/master/export" class="btn btn-success btn-sm"><i class="fas fa-download mr-1"></i> ดาวน์โหลดทั้งหมด</a>
+        <span class="pg-range" v-if="labmasters.length">Page {{ page + 1 }} · rows {{ page * perPage + 1 }}–{{ page * perPage + labmasters.length }}</span>
+        <a :href="page > 0 ? `/lab/master?labcode=${encodeURIComponent(labcode)}&page=${lastpage}` : null" class="btn btn-secondary btn-sm" :class="{ disabled: page === 0 }" :aria-disabled="page === 0 ? 'true' : 'false'">
+          <i class="fas fa-chevron-left mr-1"></i> Previous
+        </a>
+        <a :href="hasMore ? `/lab/master?labcode=${encodeURIComponent(labcode)}&page=${nextpage}` : null" class="btn btn-secondary btn-sm" :class="{ disabled: !hasMore }" :aria-disabled="hasMore ? 'false' : 'true'">
+          Next <i class="fas fa-chevron-right ml-1"></i>
+        </a>
+      </div>
     </div>
     <div class="card-body p-0">
       <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
@@ -74,7 +86,24 @@
             </tr>
           </tbody>
         </table>
+        <p v-if="!labmasters.length" class="text-muted text-center small py-3 mb-0">{{ page > 0 ? 'No more rows.' : 'No lab master found.' }}</p>
       </div>
+    </div>
+    <!-- The same pages under the table -->
+    <div class="card-footer" style="display:flex;justify-content:flex-end;align-items:center;gap:8px;">
+        <span class="pg-range" v-if="labmasters.length">Page {{ page + 1 }} · rows {{ page * perPage + 1 }}–{{ page * perPage + labmasters.length }}</span>
+        <a :href="page > 0 ? `/lab/master?labcode=${encodeURIComponent(labcode)}&page=${lastpage}` : null" class="btn btn-secondary btn-sm" :class="{ disabled: page === 0 }" :aria-disabled="page === 0 ? 'true' : 'false'">
+          <i class="fas fa-chevron-left mr-1"></i> Previous
+        </a>
+        <a :href="hasMore ? `/lab/master?labcode=${encodeURIComponent(labcode)}&page=${nextpage}` : null" class="btn btn-secondary btn-sm" :class="{ disabled: !hasMore }" :aria-disabled="hasMore ? 'false' : 'true'">
+          Next <i class="fas fa-chevron-right ml-1"></i>
+        </a>
     </div>
   </div>
 </div>
+<style>
+  /* Paging in the table card header: right after the table filter app.js adds (pushed right), and under the table */
+  .pg-tools { display: flex; gap: 8px; align-items: center; order: 2; flex-wrap: wrap; }
+  .card-header:not(.has-filter) > .pg-tools { margin-left: auto; }
+  .pg-range { font-size: .76rem; color: var(--muted, #64748b); white-space: nowrap; font-variant-numeric: tabular-nums; }
+</style>

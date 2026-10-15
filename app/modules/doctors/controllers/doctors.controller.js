@@ -2,7 +2,6 @@
 const organisationsModel = require("../../../core/models/organisations.model");
 const patientvisitModel = require("../../patients/models/patientvisits.model");
 let moment = require("moment-timezone");
-let _ = require('lodash');
 const view = require('../../../core/view')('doctors');
 exports.monitor = async function (req, res) {
 

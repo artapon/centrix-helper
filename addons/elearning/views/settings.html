@@ -1,0 +1,106 @@
+<div class="col-12">
+<div class="el">
+
+  <header class="el-pagehead">
+    <div>
+      <div class="el-eyebrow">E-Learning</div>
+      <h1>Settings</h1>
+      <p>The shared network folders that video lessons can play from. Only administrators can change them.</p>
+    </div>
+    <div class="el-pagehead-tools">
+      <span v-if="dirty" class="el-dirty">Unsaved changes</span>
+      <button type="button" class="el-btn is-primary" :disabled="saving || !dirty" @click="save"><i :class="saving ? 'fas fa-spinner fa-spin' : 'fas fa-save'" aria-hidden="true"></i> Save</button>
+    </div>
+  </header>
+
+  <div v-if="error" class="el-msg is-error" role="alert"><i class="fas fa-exclamation-triangle"></i><span>{{ error }}</span></div>
+  <div v-if="notice" class="el-msg is-ok" role="status"><i class="fas fa-check-circle"></i><span>{{ notice }}</span></div>
+
+  <section class="el-panel">
+    <div class="el-panel-head">
+      <div>
+        <h2>Shared folders</h2>
+        <p>Course managers pick video files from these folders (Browse in the lesson editor); the server reads the file and streams it to learners, so learners don't need access to the share themselves.</p>
+      </div>
+    </div>
+    <div class="el-panel-body">
+      <div class="el-msg is-info"><i class="fas fa-info-circle"></i>
+        <span>The folder must be readable by the account the server runs as (for a Windows service, often <b>Local System</b>, which has no access to network shares: run the service as a domain account that can read the share, or grant the server's computer account access). Mapped drive letters (Z:\) belong to a signed-in user; use the <span style="font-family: var(--font-mono);">\\server\share</span> path instead.</span>
+      </div>
+
+      <div class="el-folders">
+        <div v-for="(f, i) in folders" :key="f.uid" class="el-folder">
+          <label class="el-field">Name <input v-model.trim="f.name" class="el-input" maxlength="80" placeholder="e.g. Training videos"></label>
+          <label class="el-field">Folder path <input v-model.trim="f.path" class="el-input is-mono" maxlength="1000" placeholder="\\fileserver\training" @input="f.test = null"></label>
+          <div class="el-folder-tools" style="padding-top: 22px;">
+            <button type="button" class="el-btn" :disabled="!f.path || f.testing" @click="test(f)"><i :class="f.testing ? 'fas fa-spinner fa-spin' : 'fas fa-plug'" aria-hidden="true"></i> Test</button>
+            <button type="button" class="el-icon-btn is-danger" title="Remove" @click="remove(i)"><i class="far fa-trash-alt" aria-hidden="true"></i><span class="sr-only">Remove</span></button>
+          </div>
+          <div v-if="f.test" class="el-folder-test" :class="f.test.ok ? 'is-ok' : 'is-bad'">
+            <i :class="f.test.ok ? 'fas fa-check-circle' : 'fas fa-times-circle'" aria-hidden="true"></i>
+            <span v-if="f.test.ok">The server can read it: {{ f.test.folders }} folder{{ f.test.folders === 1 ? '' : 's' }} and {{ f.test.videos }} video file{{ f.test.videos === 1 ? '' : 's' }} at the top level.</span>
+            <span v-else>{{ f.test.error }}</span>
+          </div>
+        </div>
+        <div v-if="!folders.length" class="el-empty" style="padding: 32px 20px;">
+          <div class="el-empty-icon"><i class="fas fa-network-wired" aria-hidden="true"></i></div>
+          <h3>No shared folders</h3>
+          <p>YouTube and Google Drive videos work without any. Add a folder to play video files from your network.</p>
+        </div>
+      </div>
+      <div><button type="button" class="el-btn" @click="add"><i class="fas fa-plus" aria-hidden="true"></i> Add shared folder</button></div>
+      <small class="el-field-note">Removing a folder stops the videos of lessons that use it from playing. Changing a folder's path (the share moved) keeps them playing from the new path, as long as the files are in the same places inside it.</small>
+    </div>
+  </section>
+
+</div>
+</div>
+
+<script src="/e-learning/assets/elearning.js"></script>
+<script>
+  (function () {
+    'use strict';
+    var uid = 0;
+    var rows = function (saved) {
+      return ((saved && saved.folders) || []).map(function (f) { return { uid: ++uid, key: f.key, name: f.name, path: f.path, test: null, testing: false }; });
+    };
+    var plain = function (list) { return JSON.stringify(list.map(function (f) { return { key: f.key || null, name: f.name, path: f.path }; })); };
+
+    Page.setup({
+      data: function () {
+        var folders = rows(Page.data.saved);
+        return { folders: folders, current: plain(folders), saving: false, error: '', notice: '' };
+      },
+      computed: { dirty: function () { return plain(this.folders) !== this.current; } },
+      mounted: function () {
+        var self = this;
+        window.addEventListener('beforeunload', function (e) { if (self.dirty) { e.preventDefault(); e.returnValue = ''; } });
+      },
+      methods: {
+        add: function () { this.folders.push({ uid: ++uid, key: null, name: '', path: '', test: null, testing: false }); },
+        remove: function (i) { this.folders.splice(i, 1); },
+        test: function (f) {
+          f.testing = true;
+          ELearn.post('/e-learning/settings/test', { path: f.path })
+            .then(function (r) { f.test = r; })
+            .catch(function (err) { f.test = { ok: false, error: err.message }; })
+            .finally(function () { f.testing = false; });
+        },
+        save: function () {
+          var self = this;
+          this.saving = true;
+          this.error = '';
+          this.notice = '';
+          ELearn.post('/e-learning/settings', { folders: this.folders.map(function (f) { return { key: f.key, name: f.name, path: f.path }; }) })
+            .then(function (r) {
+              self.folders = rows(r.saved);
+              self.current = plain(self.folders);
+              self.notice = 'Saved.';
+            })
+            .catch(function (err) { self.error = err.message; })
+            .finally(function () { self.saving = false; });
+        }
+      }
+    });
+  })();
+</script>

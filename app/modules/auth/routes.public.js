@@ -1,7 +1,7 @@
 // Signed-in users, no DB connection needed.
 const router = require('express').Router();
-const asyncHandler = require('../../core/http/asyncHandler');
-const { requireAdmin } = require('../../core/middleware/requireAuth');
+const asyncHandler = require('../../core/http/async.handler');
+const { requireAdmin } = require('../../core/middleware/requireauth.middleware');
 const usersController = require('./controllers/users.controller');
 const rolesController = require('./controllers/roles.controller');
 

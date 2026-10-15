@@ -1,0 +1,1949 @@
+<div class="col-12">
+<div class="smon" :class="{ 'is-dark': isDark, 'is-fullscreen': fullscreen }" ref="root">
+
+  <!-- Title and the page's main buttons -->
+  <header class="smon-head">
+    <div class="smon-head-title">
+      <div class="smon-eyebrow">Service Monitor</div>
+      <h1>Service Health</h1>
+    </div>
+    <div class="smon-head-btns">
+      <button v-if="can.check" type="button" class="smon-btn" @click="checkAll(null)" :disabled="checkingAll || !services.length">
+        <i class="fas fa-bolt" :class="{ 'fa-pulse': checkingAll }"></i> {{ checkingAll ? 'Checking…' : 'Check all' }}
+      </button>
+      <button v-if="can.clear" type="button" class="smon-btn" @click="openReset('all')" :disabled="!services.length"><i class="fas fa-eraser"></i> Reset statistics</button>
+      <template v-if="can.manage">
+        <button type="button" class="smon-btn" @click="openGroup(null)"><i class="fas fa-layer-group"></i> New group</button>
+        <button type="button" class="smon-btn is-primary" @click="openService(null)"><i class="fas fa-plus"></i> New monitor</button>
+      </template>
+      <button v-if="notifyAllowed" type="button" class="smon-btn is-icon" :class="{ 'is-bell-on': notify.on }" @click="toggleNotify" :aria-pressed="notify.on ? 'true' : 'false'" :aria-label="notifyTitle" :title="notifyTitle"><i class="fas" :class="notify.on ? 'fa-bell' : 'fa-bell-slash'"></i></button>
+      <button v-if="isAdmin" type="button" class="smon-btn" @click="openShare"><i class="fas fa-share-alt"></i> Share</button>
+      <button type="button" class="smon-btn is-icon" @click="toggleFullscreen" :aria-pressed="fullscreen ? 'true' : 'false'" :aria-label="fullscreen ? 'Exit full screen' : 'Full screen'" :title="fullscreen ? 'Exit full screen (Esc)' : 'Full screen'"><i class="fas" :class="fullscreen ? 'fa-compress' : 'fa-expand'"></i></button>
+    </div>
+  </header>
+
+  <!-- Overall status -->
+  <section v-if="data" class="smon-banner" :class="'is-' + banner.tone" aria-live="polite">
+    <span class="smon-banner-icon"><i :class="banner.icon"></i></span>
+    <div class="smon-banner-text">
+      <b>{{ banner.title }}</b>
+      <span>{{ banner.sub }}</span>
+    </div>
+    <div class="smon-live">
+      <span class="smon-live-dot" :class="{ 'is-off': !!error }"></span>
+      <span>{{ error ? 'Not refreshing' : 'Live · updated ' + ago(loadedAt) }}</span>
+      <button type="button" class="smon-icon-btn" @click="load" :disabled="loading" aria-label="Refresh now" title="Refresh now"><i class="fas fa-sync-alt" :class="{ 'fa-spin': loading }"></i></button>
+    </div>
+  </section>
+
+  <div v-if="error" class="smon-msg is-error" role="alert"><i class="fas fa-exclamation-triangle"></i> {{ error }}</div>
+  <div v-if="notice" class="smon-msg is-ok" role="status"><i class="fas fa-check-circle"></i> {{ notice }}</div>
+
+  <!-- Key numbers; most of them filter the list -->
+  <section v-if="data" class="smon-kpis" aria-label="Totals">
+    <component :is="k.filter ? 'button' : 'div'" v-for="k in kpis" :key="k.key" :type="k.filter ? 'button' : null" class="smon-kpi"
+               :class="{ 'is-on': k.filter && filter === k.filter, 'is-click': !!k.filter }" @click="k.filter && (filter = filter === k.filter ? 'all' : k.filter)"
+               :aria-pressed="k.filter ? (filter === k.filter ? 'true' : 'false') : null">
+      <span class="smon-kpi-label"><span class="smon-dot" :class="'is-' + k.tone"></span>{{ k.label }}</span>
+      <b class="smon-kpi-value" :class="'is-' + k.valueTone">{{ k.value }}</b>
+      <small>{{ k.note }}</small>
+    </component>
+  </section>
+  <section v-else-if="loading" class="smon-kpis is-loading" aria-hidden="true"><span v-for="n in 6" :key="n" class="smon-kpi"></span></section>
+
+  <div v-if="data" class="smon-layout">
+    <main class="smon-main">
+      <!-- Search, status filter, sort -->
+      <div class="smon-toolbar">
+        <label class="smon-search">
+          <i class="fas fa-search" aria-hidden="true"></i>
+          <input type="search" v-model.trim="q" placeholder="Search monitors, URLs, hosts" aria-label="Search monitors">
+        </label>
+        <div class="smon-chips" role="group" aria-label="Filter by status">
+          <button v-for="c in chips" :key="c.key" type="button" class="smon-chip" :class="{ 'is-on': filter === c.key }" :aria-pressed="filter === c.key ? 'true' : 'false'" @click="filter = c.key">
+            {{ c.label }} <span>{{ c.n }}</span>
+          </button>
+        </div>
+        <span class="smon-grow"></span>
+        <div class="smon-seg" role="group" aria-label="Sort">
+          <button v-for="o in SORTS" :key="o.key" type="button" :class="{ 'is-on': sort === o.key }" :aria-pressed="sort === o.key ? 'true' : 'false'" @click="setSort(o.key)">{{ o.label }}</button>
+        </div>
+      </div>
+
+      <div v-if="!services.length" class="smon-empty is-big">
+        <span class="smon-empty-icon"><i class="fas fa-heartbeat"></i></span>
+        <b>No monitors yet</b>
+        <span v-if="can.manage">Add the web apps, APIs, ports, hosts and DNS names to watch. Groups keep them in order.</span>
+        <span v-else>A user who may manage services adds them here.</span>
+        <div v-if="can.manage" class="smon-empty-btns">
+          <button type="button" class="smon-btn" @click="openGroup(null)"><i class="fas fa-layer-group"></i> New group</button>
+          <button type="button" class="smon-btn is-primary" @click="openService(null)"><i class="fas fa-plus"></i> New monitor</button>
+        </div>
+      </div>
+      <div v-else-if="!visibleGroups.length" class="smon-empty"><i class="fas fa-filter"></i> No monitor matches the search or filter. <button type="button" class="smon-link" @click="q = ''; filter = 'all'">Show all</button></div>
+
+      <!-- Groups -->
+      <section v-for="g in visibleGroups" :key="g.id" class="smon-group">
+        <div class="smon-group-head">
+          <button type="button" class="smon-icon-btn" @click="toggleGroup(g.id)" :aria-expanded="isCollapsed(g.id) ? 'false' : 'true'" :aria-label="(isCollapsed(g.id) ? 'Show ' : 'Hide ') + g.name">
+            <i class="fas" :class="isCollapsed(g.id) ? 'fa-chevron-right' : 'fa-chevron-down'"></i>
+          </button>
+          <span class="smon-group-color" :style="{ background: g.color }"></span>
+          <h2>{{ g.name }}</h2>
+          <span class="smon-group-sum">{{ g.summary }}</span>
+          <span class="smon-grow"></span>
+          <!-- collapsed: the group's heartbeat bar stands in for its rows -->
+          <span v-if="isCollapsed(g.id) && g.all.length && groupBeats[g.id]" class="smon-group-beats">
+            <span class="smon-beats is-bar" role="img" :aria-label="groupBeats[g.id].label" :style="groupBeats[g.id].style" @mousemove="groupBeatHover($event, g)" @mouseleave="beatTip = null"></span>
+          </span>
+          <span v-if="g.uptime != null" class="smon-group-up">{{ pct(g.uptime) }} uptime 24h</span>
+          <button v-if="can.check || can.manage" type="button" class="smon-icon-btn" @click.stop="openMenu($event, 'group', g)" :aria-label="'Actions for ' + g.name" aria-haspopup="menu"><i class="fas fa-ellipsis-h"></i></button>
+        </div>
+        <p v-if="g.description && !isCollapsed(g.id)" class="smon-group-desc">{{ g.description }}</p>
+
+        <div v-if="!isCollapsed(g.id)" class="smon-table" role="table" :aria-label="g.name">
+          <div class="smon-row is-head" role="row">
+            <span role="columnheader">Monitor</span><span role="columnheader">Last {{ SPARK }} checks</span>
+            <span role="columnheader" class="is-num">Response</span><span role="columnheader" class="is-num">Uptime</span>
+            <span role="columnheader">Expiry</span><span role="columnheader"><span class="sr-only">Actions</span></span>
+          </div>
+          <div v-if="!g.list.length" class="smon-empty is-row">{{ g.all.length ? 'No monitor of this group matches.' : 'No monitors in this group yet.' }}
+            <button v-if="!g.all.length && can.manage" type="button" class="smon-link" @click="openService(null, g.id)">Add one</button></div>
+          <div v-for="s in g.list.slice(0, rowLimit[g.id] || ROW_PAGE)" :key="s.id" class="smon-row" :class="'is-' + s.status" role="row" tabindex="0" @click="openDetail(s)" @keydown.enter="openDetail(s)" :aria-label="s.name + ', ' + statusText(s.status)">
+            <span role="cell" class="smon-mon">
+              <span class="smon-badge" :class="'is-' + s.status"><span class="smon-dot" :class="'is-' + s.status"></span>{{ statusText(s.status) }}</span>
+              <span class="smon-mon-text">
+                <span class="smon-mon-name"><b :title="s.name">{{ s.name }}</b><span class="smon-type">{{ typeLabel(s) }}</span></span>
+                <code :title="targetText(s)">{{ targetText(s) }}</code>
+                <small v-if="s.lastError && s.status !== 'up' && s.status !== 'paused'" class="smon-err" :title="s.lastError">{{ s.lastError }}</small>
+              </span>
+            </span>
+            <span role="cell" class="smon-beats-cell">
+              <!-- one element per bar (a gradient), with one shared tooltip: light even with hundreds of monitors -->
+              <span class="smon-beats is-bar" role="img" :aria-label="beatLabel(s)" :style="beatStyles[s.id]" @mousemove="beatHover($event, s)" @mouseleave="beatTip = null"></span>
+              <span class="smon-beats-axis"><span>{{ s.status === 'paused' ? 'paused' : s.spark.length ? ago(s.spark[0].at) : 'waiting' }}</span><span>{{ s.lastCheckedAt ? ago(s.lastCheckedAt) : 'now' }}</span></span>
+            </span>
+            <span role="cell" class="is-num"><b class="smon-mono">{{ s.lastMs == null ? '—' : fmtMs(s.lastMs) }}</b><small>avg {{ s.avgMs24 == null ? '—' : fmtMs(s.avgMs24) }}</small></span>
+            <span role="cell" class="is-num"><b class="smon-mono" :class="uptimeClass(s.uptime24)">{{ pct(s.uptime24) }}</b><small>7d {{ pct(s.uptime7) }}</small></span>
+            <span role="cell" class="smon-expiry">
+              <span v-if="s.cert" class="smon-pill" :class="'is-' + s.cert.state" :title="certTitle(s.cert)"><i :class="certIcon(s.cert.state)"></i> {{ shortDays(s.cert) }}</span>
+              <span v-else-if="certPending(s)" class="smon-muted smon-small">reading…</span>
+              <span v-if="s.domain && s.domain.state !== 'skipped'" class="smon-pill" :class="'is-' + s.domain.state" :title="domainTitle(s.domain)"><i class="fas fa-globe"></i> {{ shortDays(s.domain) }}</span>
+              <span v-if="!s.cert && !certPending(s) && !(s.domain && s.domain.state !== 'skipped')" class="smon-muted">—</span>
+            </span>
+            <span role="cell" class="smon-row-act">
+              <button type="button" class="smon-icon-btn" @click.stop="openMenu($event, 'svc', s)" @keydown.enter.stop :aria-label="'Actions for ' + s.name" aria-haspopup="menu" :disabled="!!busy[s.id]">
+                <i class="fas" :class="busy[s.id] ? 'fa-spinner fa-spin' : 'fa-ellipsis-h'"></i>
+              </button>
+            </span>
+          </div>
+          <button v-if="g.list.length > (rowLimit[g.id] || ROW_PAGE)" type="button" class="smon-more" @click="$set(rowLimit, g.id, (rowLimit[g.id] || ROW_PAGE) + ROW_PAGE)">
+            Show {{ Math.min(ROW_PAGE, g.list.length - (rowLimit[g.id] || ROW_PAGE)) }} more of {{ g.list.length - (rowLimit[g.id] || ROW_PAGE) }}
+          </button>
+        </div>
+      </section>
+    </main>
+    <div v-if="beatTip" class="smon-beat-tip" :style="{ left: beatTip.x + 'px', top: beatTip.y + 'px' }" role="tooltip">{{ beatTip.text }}</div>
+
+    <!-- Right rail: only while something is expiring (the groups take the full width otherwise) -->
+    <aside v-if="expiring.length" class="smon-rail">
+      <!-- Only while a certificate or domain is past its warning / critical days -->
+      <section v-if="expiring.length" class="smon-card">
+        <div class="smon-card-head"><h2>Expiring soon</h2></div>
+        <div class="smon-seg is-sm is-wide-seg" role="group" aria-label="Show">
+          <button v-for="f in EXPIRING_FILTERS" :key="f[0]" type="button" :class="{ 'is-on': expiringFilter === f[0] }" :aria-pressed="expiringFilter === f[0] ? 'true' : 'false'" @click="expiringFilter = f[0]">{{ f[1] }} {{ expiringCount(f[0]) }}</button>
+        </div>
+        <div v-if="expiring.length && !expiringShown.length" class="smon-empty is-small">Nothing {{ expiringFilter === 'critical' ? 'critical' : 'in the warning range' }}.</div>
+        <ul v-if="expiringShown.length" class="smon-list">
+          <li v-for="x in expiringShown.slice(0, certLimit)" :key="x.key">
+            <button type="button" class="smon-list-btn" @click="openDetail(x.service)">
+              <span class="smon-days" :class="'is-' + x.state"><b>{{ x.days == null ? '!' : x.days }}</b><small>{{ x.days == null ? 'error' : Math.abs(x.days) === 1 ? 'day' : 'days' }}</small></span>
+              <span class="smon-list-text">
+                <b>{{ x.kind === 'cert' ? x.service.name + ' · certificate' : x.domain + ' · domain' }}</b>
+                <small v-if="x.date">{{ x.days < 0 ? 'expired' : 'expires' }} {{ dmy(x.date) }}{{ x.by ? ' · ' + x.by : '' }}</small>
+                <small v-else class="smon-err">{{ x.error }}</small>
+                <small class="smon-exp-why" :class="'is-' + x.state">{{ expiryWhy(x) }}</small>
+              </span>
+            </button>
+          </li>
+        </ul>
+        <button v-if="expiringShown.length > certLimit" type="button" class="smon-link" @click="certLimit += 10">Show {{ Math.min(10, expiringShown.length - certLimit) }} more</button>
+      </section>
+    </aside>
+  </div>
+
+  <!-- Incidents: full width under the groups -->
+  <section v-if="data && services.length" class="smon-card is-flush smon-incidents">
+    <div class="smon-card-head is-pad"><h2>Incidents</h2><small>latest status changes</small></div>
+    <div v-if="!incidents.length" class="smon-empty is-small is-pad">No status changes yet.</div>
+    <div v-else class="smon-table-wrap">
+      <table class="smon-tbl">
+        <thead><tr><th>When</th><th>Monitor</th><th>Change</th><th>Cause</th><th>Duration</th></tr></thead>
+        <tbody>
+          <tr v-for="e in incidents" :key="e.id" class="smon-inc-row" tabindex="0" @click="openDetail(byId[e.serviceId])" @keydown.enter="openDetail(byId[e.serviceId])">
+            <td class="smon-mono smon-nowrap" :title="when(e.at)">{{ dayTime(e.at) }}</td>
+            <td><span class="smon-inc-mon"><span class="smon-dot" :class="'is-' + e.to"></span><b>{{ e.name }}</b></span></td>
+            <td class="smon-nowrap"><span class="smon-badge is-sm" :class="'is-' + e.to">{{ statusText(e.to) }}</span> <span class="smon-text-2">{{ e.change }}</span></td>
+            <td class="smon-text-2">{{ e.message || '—' }}</td>
+            <td class="smon-nowrap">
+              <span v-if="e.ongoing" class="smon-dur is-ongoing">Ongoing · {{ e.duration }}</span>
+              <span v-else-if="e.resolved" class="smon-resolved">{{ e.resolved }}</span>
+              <span v-else class="smon-muted">—</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Row / group actions menu -->
+  <div v-if="menu" class="smon-menu" role="menu" :style="{ top: menu.y + 'px', left: menu.x + 'px' }" @click.stop>
+    <template v-if="menu.kind === 'svc'">
+      <button v-if="can.check" type="button" role="menuitem" @click="menuDo('check')"><i class="fas fa-bolt"></i> Check now</button>
+      <button type="button" role="menuitem" @click="menuDo('detail')"><i class="fas fa-chart-line"></i> Details</button>
+      <template v-if="can.manage">
+        <button type="button" role="menuitem" @click="menuDo('toggle')"><i class="fas" :class="menu.target.enabled ? 'fa-pause' : 'fa-play'"></i> {{ menu.target.enabled ? 'Pause' : 'Resume' }}</button>
+        <button type="button" role="menuitem" @click="menuDo('edit')"><i class="fas fa-pen"></i> Edit</button>
+      </template>
+      <button v-if="can.clear" type="button" role="menuitem" @click="menuDo('reset')"><i class="fas fa-eraser"></i> Reset statistics</button>
+      <template v-if="can.manage">
+        <hr>
+        <button type="button" role="menuitem" class="is-danger" @click="menuDo('delete')"><i class="fas fa-trash-alt"></i> Delete</button>
+      </template>
+    </template>
+    <template v-else>
+      <button v-if="can.check && menu.target.all.length" type="button" role="menuitem" @click="menuDo('checkGroup')"><i class="fas fa-bolt"></i> Check this group</button>
+      <button v-if="can.clear && menu.target.all.length" type="button" role="menuitem" @click="menuDo('resetGroup')"><i class="fas fa-eraser"></i> Reset statistics</button>
+      <template v-if="can.manage">
+        <button type="button" role="menuitem" @click="menuDo('addHere')"><i class="fas fa-plus"></i> Add monitor here</button>
+        <template v-if="menu.target.id">
+          <button type="button" role="menuitem" @click="menuDo('editGroup')"><i class="fas fa-pen"></i> Edit group</button>
+          <hr>
+          <button type="button" role="menuitem" class="is-danger" @click="menuDo('deleteGroup')"><i class="fas fa-trash-alt"></i> Delete group</button>
+        </template>
+      </template>
+    </template>
+  </div>
+
+  <!-- New / edit monitor -->
+  <div v-if="form" class="smon-overlay" role="dialog" aria-modal="true" aria-labelledby="smon-form-title" @click.self="closeForm">
+    <form class="smon-dialog is-form" @submit.prevent="saveService">
+      <div class="smon-dialog-head">
+        <div class="smon-grow">
+          <h3 id="smon-form-title">{{ form.id ? 'Edit monitor' : 'New monitor' }}</h3>
+          <p>Checked in the background on its own interval.</p>
+        </div>
+        <button type="button" class="smon-icon-btn smon-close" @click="closeForm" aria-label="Close"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="smon-dialog-body">
+       <div class="smon-form-cols">
+       <div class="smon-form-col">
+        <fieldset class="smon-plain">
+          <legend class="smon-label">Monitor type</legend>
+          <div class="smon-types">
+            <button v-for="t in TYPES" :key="t.key" type="button" class="smon-type-card" :class="{ 'is-on': form.type === t.key }" :aria-pressed="form.type === t.key ? 'true' : 'false'" @click="setType(t.key)">
+              <span><i :class="t.icon"></i> {{ t.label }}</span><small>{{ t.sub }}</small>
+            </button>
+          </div>
+          <p class="smon-help">{{ typeOf(form.type).hint }}</p>
+        </fieldset>
+
+        <section class="smon-form-sec">
+          <h4>General</h4>
+          <div class="smon-grid-2">
+            <label class="smon-field">Friendly name<input v-model="form.name" type="text" maxlength="120" required placeholder="e.g. HIS Web (PRD)" ref="firstField"></label>
+            <label class="smon-field">Group
+              <select v-model="form.groupId"><option :value="null">Ungrouped</option><option v-for="g in data.groups" :key="g.id" :value="g.id">{{ g.name }}</option></select>
+            </label>
+            <label class="smon-field is-full">{{ typeOf(form.type).targetLabel }}
+              <input v-model.trim="form.target" type="text" maxlength="2000" required :placeholder="typeOf(form.type).placeholder" spellcheck="false" autocomplete="off" class="is-mono">
+            </label>
+          </div>
+          <div v-if="form.type === 'http'" class="smon-grid-http">
+            <label class="smon-field">Method<select v-model="form.method"><option>GET</option><option>HEAD</option><option>POST</option></select></label>
+            <label class="smon-field">Accepted status codes<input v-model.trim="form.expectedStatus" type="text" maxlength="100" placeholder="200-399" spellcheck="false" class="is-mono"></label>
+            <label class="smon-field">Max. redirects <small>0 = don't follow</small>
+              <input v-model.number="form.maxRedirects" type="number" min="0" max="20" step="1" class="is-mono" title="Follow up to this many redirects (301, 302, 303, 307, 308) and judge the page it ends on">
+            </label>
+            <label class="smon-field">Response contains <small>optional keyword</small><input v-model="form.keyword" type="text" maxlength="200" placeholder="e.g. OK" :disabled="form.method === 'HEAD'"></label>
+          </div>
+          <div v-if="form.type === 'dns'" class="smon-grid-http">
+            <label class="smon-field">Record type<select v-model="form.dnsType"><option v-for="t in dnsTypes" :key="t">{{ t }}</option></select></label>
+            <label class="smon-field">DNS server <small>optional</small><input v-model.trim="form.dnsServer" type="text" maxlength="60" placeholder="server default" spellcheck="false" class="is-mono"></label>
+            <label class="smon-field">Answer contains <small>optional</small><input v-model.trim="form.keyword" type="text" maxlength="200" placeholder="e.g. 10.0.0.15" spellcheck="false" class="is-mono"></label>
+          </div>
+          <label class="smon-field">Notes <small>optional</small><textarea v-model="form.notes" rows="3" maxlength="1000" placeholder="Owner, contact, what to do when it is down…"></textarea></label>
+        </section>
+
+       </div>
+       <div class="smon-form-col">
+        <section class="smon-form-sec">
+          <h4>Heartbeat</h4>
+          <div class="smon-grid-2">
+            <label class="smon-field">Heartbeat interval
+              <span class="smon-unit"><input v-model.number="form.intervalSec" type="number" min="20" max="86400" step="1" required @change="intervalChanged"><span>seconds</span></span>
+              <small class="smon-help">Check every {{ duration(form.intervalSec) }}</small>
+            </label>
+            <label class="smon-field">Request timeout
+              <span class="smon-unit"><input v-model.number="form.timeoutSec" type="number" min="1" max="300" step="1" required><span>seconds</span></span>
+              <small class="smon-help" :class="{ 'is-warn': form.timeoutSec >= form.intervalSec }">{{ form.timeoutSec >= form.intervalSec ? 'Longer than the heartbeat interval' : 'Timeout after ' + duration(form.timeoutSec) }}</small>
+            </label>
+            <label class="smon-field">Retries
+              <input v-model.number="form.retries" type="number" min="0" max="20" step="1" class="is-mono">
+              <small class="smon-help">Failed checks in a row before the monitor is marked down</small>
+            </label>
+            <label class="smon-field">Heartbeat retry interval
+              <span class="smon-unit" :class="{ 'is-disabled': !form.retries }"><input v-model.number="form.retryIntervalSec" type="number" min="20" max="86400" step="1" :disabled="!form.retries"><span>seconds</span></span>
+              <small class="smon-help">{{ form.retries ? 'While retrying, check again after ' + duration(form.retryIntervalSec || form.intervalSec) : 'Used when Retries is above 0' }}</small>
+            </label>
+            <label class="smon-field">Slow above
+              <span class="smon-unit"><input v-model.number="form.slowMs" type="number" min="0" max="300000" step="50"><span>ms</span></span>
+              <small class="smon-help">Slower answers show as Degraded · 0 = off</small>
+            </label>
+          </div>
+        </section>
+
+        <section class="smon-form-sec">
+          <h4>Advanced</h4>
+          <label v-if="certCapable" class="smon-toggle">
+            <input type="checkbox" class="smon-switch" v-model="form.checkCert">
+            <span><b>{{ form.type === 'tcp' ? 'Certificate expiry (this port speaks TLS)' : 'Certificate expiry notification' }}</b>
+              <small>Reads the TLS certificate every hour and warns before it expires.</small></span>
+          </label>
+          <div v-if="certCapable && form.checkCert" class="smon-grid-2 smon-indent smon-thresholds">
+            <label class="smon-field"><span><i class="fas fa-exclamation-triangle is-warn" aria-hidden="true"></i> Warn when fewer than</span>
+              <span class="smon-unit"><input v-model.number="form.certWarnDays" type="number" min="1" max="3650" required><span>days</span></span></label>
+            <label class="smon-field"><span><i class="fas fa-exclamation-circle is-crit" aria-hidden="true"></i> Critical when fewer than</span>
+              <span class="smon-unit" :class="{ 'is-bad': form.certCritDays >= form.certWarnDays }"><input v-model.number="form.certCritDays" type="number" min="0" max="3650" required><span>days</span></span></label>
+            <small class="smon-help smon-span-2" :class="{ 'is-warn': form.certCritDays >= form.certWarnDays }">{{ thresholdText(form.certWarnDays, form.certCritDays) }}</small>
+          </div>
+          <label class="smon-toggle">
+            <input type="checkbox" class="smon-switch" v-model="form.checkDomain">
+            <span><b>Domain name expiry notification</b>
+              <small>Reads the domain registration over RDAP once a day.<template v-if="form.checkDomain && domainHint.domain"> Domain: {{ domainHint.domain }}</template></small>
+              <small v-if="form.checkDomain && domainHint.skipped" class="smon-note">{{ domainHint.skipped }}, so it is not a candidate for domain expiry monitoring.</small></span>
+          </label>
+          <div v-if="form.checkDomain" class="smon-grid-2 smon-indent smon-thresholds">
+            <label class="smon-field"><span><i class="fas fa-exclamation-triangle is-warn" aria-hidden="true"></i> Warn when fewer than</span>
+              <span class="smon-unit"><input v-model.number="form.domainWarnDays" type="number" min="1" max="3650" required><span>days</span></span></label>
+            <label class="smon-field"><span><i class="fas fa-exclamation-circle is-crit" aria-hidden="true"></i> Critical when fewer than</span>
+              <span class="smon-unit" :class="{ 'is-bad': form.domainCritDays >= form.domainWarnDays }"><input v-model.number="form.domainCritDays" type="number" min="0" max="3650" required><span>days</span></span></label>
+            <small class="smon-help smon-span-2" :class="{ 'is-warn': form.domainCritDays >= form.domainWarnDays }">{{ thresholdText(form.domainWarnDays, form.domainCritDays) }}</small>
+          </div>
+          <label v-if="form.type === 'http' && /^https:/i.test(form.target || 'https:')" class="smon-toggle">
+            <input type="checkbox" class="smon-switch" v-model="form.ignoreTls">
+            <span><b>Ignore TLS/SSL errors for HTTPS websites</b>
+              <small>Self-signed or invalid certificates do not fail the check; the certificate is still read and shown.</small></span>
+          </label>
+          <label class="smon-toggle">
+            <input type="checkbox" class="smon-switch" v-model="form.enabled">
+            <span><b>Active</b><small>Off: saved as paused, not checked.</small></span>
+          </label>
+        </section>
+       </div>
+       </div>
+
+        <div v-if="tested" class="smon-test" :class="'is-' + tested.result.status" role="status">
+          <span class="smon-test-title"><span class="smon-dot" :class="'is-' + tested.result.status"></span>{{ tested.result.status === 'down' ? 'Test failed' : tested.result.status === 'slow' ? 'Test passed, slow' : 'Test passed' }}</span>
+          <span class="smon-mono">{{ testSummary }}</span>
+        </div>
+        <div v-if="formError" class="smon-msg is-error" role="alert"><i class="fas fa-exclamation-triangle"></i> {{ formError }}</div>
+      </div>
+      <div class="smon-dialog-foot">
+        <button type="button" class="smon-btn" @click="testService" :disabled="testing || saving"><i class="fas" :class="testing ? 'fa-spinner fa-spin' : 'fa-vial'"></i> {{ testing ? 'Testing…' : 'Test' }}</button>
+        <span class="smon-grow"></span>
+        <button type="button" class="smon-btn" @click="closeForm">Cancel</button>
+        <button type="submit" class="smon-btn is-primary" :disabled="saving"><i v-if="saving" class="fas fa-spinner fa-spin"></i> {{ form.id ? 'Save changes' : 'Create monitor' }}</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Group form -->
+  <div v-if="groupForm" class="smon-overlay" role="dialog" aria-modal="true" aria-labelledby="smon-group-title" @click.self="groupForm = null">
+    <form class="smon-dialog is-small" @submit.prevent="saveGroup">
+      <div class="smon-dialog-head">
+        <div class="smon-grow"><h3 id="smon-group-title">{{ groupForm.id ? 'Edit group' : 'New group' }}</h3><p>Groups keep related monitors together.</p></div>
+        <button type="button" class="smon-icon-btn smon-close" @click="groupForm = null" aria-label="Close"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="smon-dialog-body">
+        <label class="smon-field">Name<input v-model="groupForm.name" type="text" maxlength="80" required placeholder="e.g. Core HIS, Interfaces" ref="groupName"></label>
+        <label class="smon-field">Description <small>optional</small><input v-model="groupForm.description" type="text" maxlength="300"></label>
+        <div class="smon-field">Colour
+          <div class="smon-swatches">
+            <button v-for="c in COLORS" :key="c" type="button" class="smon-swatch" :style="{ background: c }" :class="{ 'is-on': groupForm.color === c }" @click="groupForm.color = c" :aria-label="'Colour ' + c" :aria-pressed="groupForm.color === c ? 'true' : 'false'"></button>
+            <input type="color" v-model="groupForm.color" aria-label="Other colour">
+          </div>
+        </div>
+        <label class="smon-field">Order <small>lower comes first</small><input v-model.number="groupForm.sortOrder" type="number" min="-9999" max="9999" class="is-mono"></label>
+        <div v-if="formError" class="smon-msg is-error" role="alert"><i class="fas fa-exclamation-triangle"></i> {{ formError }}</div>
+      </div>
+      <div class="smon-dialog-foot">
+        <span class="smon-grow"></span>
+        <button type="button" class="smon-btn" @click="groupForm = null">Cancel</button>
+        <button type="submit" class="smon-btn is-primary" :disabled="saving"><i v-if="saving" class="fas fa-spinner fa-spin"></i> {{ groupForm.id ? 'Save changes' : 'Create group' }}</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Reset statistics: clear check history and / or incidents, with what it deletes shown first -->
+  <div v-if="reset" class="smon-overlay" role="dialog" aria-modal="true" aria-labelledby="smon-reset-title" @click.self="reset = null">
+    <form class="smon-dialog is-small" @submit.prevent="runReset">
+      <div class="smon-dialog-head">
+        <div class="smon-grow"><h3 id="smon-reset-title">Reset statistics</h3><p>Clears tracking data. Monitors, their settings and current status are kept.</p></div>
+        <button type="button" class="smon-icon-btn smon-close" @click="reset = null" aria-label="Close"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="smon-dialog-body">
+        <label class="smon-field">Monitors
+          <select v-model="reset.scope">
+            <option value="all">All monitors</option>
+            <option value="group">One group</option>
+            <option value="service">One monitor</option>
+          </select>
+        </label>
+        <label v-if="reset.scope === 'group'" class="smon-field">Group
+          <select v-model.number="reset.groupId">
+            <option v-for="g in data.groups" :key="g.id" :value="g.id">{{ g.name }}</option>
+            <option :value="0">Ungrouped</option>
+          </select>
+        </label>
+        <label v-if="reset.scope === 'service'" class="smon-field">Monitor
+          <select v-model.number="reset.serviceId">
+            <option v-for="s in sortedServices" :key="s.id" :value="s.id">{{ s.name }}</option>
+          </select>
+        </label>
+        <div class="smon-field">Clear
+          <label class="smon-toggle is-tight">
+            <input type="checkbox" class="smon-switch" v-model="reset.checks">
+            <span><b>Check history</b><small>Uptime, response times and heartbeats start again from the next check.</small></span>
+          </label>
+          <label class="smon-toggle is-tight">
+            <input type="checkbox" class="smon-switch" v-model="reset.events">
+            <span><b>Incidents</b><small>The status changes listed under Incidents.</small></span>
+          </label>
+        </div>
+        <label class="smon-field">Data
+          <select v-model.number="reset.olderThanDays">
+            <option :value="0">Everything</option>
+            <option :value="1">Older than 24 hours</option>
+            <option :value="7">Older than 7 days</option>
+            <option :value="30">Older than 30 days</option>
+          </select>
+        </label>
+        <div class="smon-reset-preview" :class="{ 'is-none': resetPreview && !resetPreview.checks && !resetPreview.events }" role="status" aria-live="polite">
+          <template v-if="!reset.checks && !reset.events">Choose check history, incidents or both.</template>
+          <template v-else-if="!resetPreview"><i class="fas fa-spinner fa-spin"></i> Counting…</template>
+          <template v-else-if="!resetPreview.checks && !resetPreview.events"><i class="fas fa-check-circle"></i> Nothing to clear for this choice.</template>
+          <template v-else><i class="fas fa-exclamation-triangle"></i> Deletes <b>{{ num(resetPreview.checks) }}</b> check{{ resetPreview.checks === 1 ? '' : 's' }} and <b>{{ num(resetPreview.events) }}</b> incident{{ resetPreview.events === 1 ? '' : 's' }} of {{ resetPreview.monitors }} monitor{{ resetPreview.monitors === 1 ? '' : 's' }}. This cannot be undone.</template>
+        </div>
+        <div v-if="formError" class="smon-msg is-error" role="alert"><i class="fas fa-exclamation-triangle"></i> {{ formError }}</div>
+      </div>
+      <div class="smon-dialog-foot">
+        <span class="smon-grow"></span>
+        <button type="button" class="smon-btn" @click="reset = null">Cancel</button>
+        <button type="submit" class="smon-btn is-danger" :disabled="saving || !resetPreview || (!resetPreview.checks && !resetPreview.events)"><i class="fas" :class="saving ? 'fa-spinner fa-spin' : 'fa-eraser'"></i> Clear data</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Share: the public, view-only status page -->
+  <div v-if="share" class="smon-overlay" role="dialog" aria-modal="true" aria-labelledby="smon-share-title" @click.self="share = null">
+    <div class="smon-dialog is-small">
+      <div class="smon-dialog-head">
+        <div class="smon-grow"><h3 id="smon-share-title">Share status page</h3><p>A public, view-only page of Service Health. Anyone with the link can open it, without signing in.</p></div>
+        <button type="button" class="smon-icon-btn smon-close" @click="share = null" aria-label="Close"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="smon-dialog-body">
+        <div v-if="share.loading" class="smon-muted"><i class="fas fa-spinner fa-spin"></i> Loading…</div>
+        <template v-else>
+          <label class="smon-toggle is-tight">
+            <input type="checkbox" class="smon-switch" :checked="share.enabled" @change="saveShare({ enabled: $event.target.checked })" :disabled="share.saving">
+            <span><b>Public link {{ share.enabled ? 'on' : 'off' }}</b><small>{{ share.enabled ? 'The page below answers to anyone with the link.' : 'Turned off, the link answers "not available".' }}</small></span>
+          </label>
+          <div v-if="share.enabled && share.url" class="smon-field">Link
+            <div class="smon-share-url">
+              <input type="text" readonly :value="share.url" ref="shareUrl" @focus="$event.target.select()" aria-label="Public link">
+              <button type="button" class="smon-btn" @click="copyShare"><i class="fas" :class="share.copied ? 'fa-check' : 'fa-copy'"></i> {{ share.copied ? 'Copied' : 'Copy' }}</button>
+              <a class="smon-btn is-icon" :href="share.url" target="_blank" rel="noopener" aria-label="Open the public page" title="Open"><i class="fas fa-external-link-alt"></i></a>
+            </div>
+          </div>
+          <label class="smon-field">Page title
+            <input type="text" v-model="share.title" maxlength="80" @change="saveShare({ title: share.title })" :disabled="share.saving">
+          </label>
+          <label class="smon-toggle is-tight">
+            <input type="checkbox" class="smon-switch" :checked="share.showTargets" @change="saveShare({ showTargets: $event.target.checked })" :disabled="share.saving">
+            <span><b>Show targets and errors</b><small>URLs, hosts, ports and error messages. Off keeps internal addresses private; names, statuses, heartbeats, uptime and response times always show.</small></span>
+          </label>
+          <label class="smon-toggle is-tight">
+            <input type="checkbox" class="smon-switch" :checked="share.expandGroups" @change="saveShare({ expandGroups: $event.target.checked })" :disabled="share.saving">
+            <span><b>Expand groups</b><small>On: every group shows its monitors. Off: groups start collapsed to their name and heartbeat bar; visitors can open them.</small></span>
+          </label>
+          <div class="smon-share-foot">
+            <button v-if="share.url" type="button" class="smon-link" @click="saveShare({ regenerate: true })" :disabled="share.saving"><i class="fas fa-sync-alt"></i> New link (the current one stops working)</button>
+            <span class="smon-grow"></span>
+            <small v-if="share.updatedAt" class="smon-muted">Changed {{ when(share.updatedAt).slice(0, 16) }}<template v-if="share.updatedBy"> by {{ share.updatedBy }}</template></small>
+          </div>
+          <div v-if="share.error" class="smon-msg is-error" role="alert"><i class="fas fa-exclamation-triangle"></i> {{ share.error }}</div>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete confirmation -->
+  <div v-if="confirm" class="smon-overlay" role="alertdialog" aria-modal="true" aria-labelledby="smon-confirm-title" @click.self="confirm = null">
+    <div class="smon-dialog is-small">
+      <div class="smon-dialog-body smon-confirm">
+        <span class="smon-confirm-icon"><i class="fas fa-trash-alt"></i></span>
+        <h3 id="smon-confirm-title">{{ confirm.title }}</h3>
+        <p>{{ confirm.text }}</p>
+        <div v-if="formError" class="smon-msg is-error" role="alert"><i class="fas fa-exclamation-triangle"></i> {{ formError }}</div>
+      </div>
+      <div class="smon-dialog-foot">
+        <span class="smon-grow"></span>
+        <button type="button" class="smon-btn" @click="confirm = null">Cancel</button>
+        <button type="button" class="smon-btn is-danger" @click="confirm.run" :disabled="saving" ref="confirmBtn"><i class="fas" :class="saving ? 'fa-spinner fa-spin' : 'fa-trash-alt'"></i> Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Monitor detail -->
+  <div v-if="detail" class="smon-overlay is-detail" role="dialog" aria-modal="true" aria-labelledby="smon-detail-title" @click.self="closeDetail">
+    <div class="smon-detail">
+      <div class="smon-detail-head">
+        <span class="smon-detail-icon" :class="'is-' + detail.service.status"><span class="smon-dot is-lg" :class="'is-' + detail.service.status"></span></span>
+        <div class="smon-grow smon-minw">
+          <div class="smon-detail-title">
+            <h3 id="smon-detail-title">{{ detail.service.name }}</h3>
+            <span class="smon-badge" :class="'is-' + detail.service.status">{{ statusText(detail.service.status) }}<template v-if="detail.service.lastChangeAt && detail.service.status !== 'pending'"> · {{ since(detail.service.lastChangeAt) }}</template></span>
+          </div>
+          <div class="smon-detail-sub"><code>{{ typeLabel(detail.service) }} {{ targetText(detail.service) }}</code> · {{ groupName(detail.service.groupId) }} · every {{ every(detail.service.intervalSec) }}{{ detail.service.retries ? ', ' + detail.service.retries + ' retr' + (detail.service.retries === 1 ? 'y' : 'ies') : '' }}</div>
+        </div>
+        <div class="smon-head-btns">
+          <button v-if="can.check" type="button" class="smon-btn" @click="checkOne(detail.service)" :disabled="!!busy[detail.service.id]"><i class="fas fa-bolt" :class="{ 'fa-pulse': busy[detail.service.id] }"></i> Check now</button>
+          <template v-if="can.manage">
+            <button type="button" class="smon-btn" @click="toggle(detail.service)" :disabled="!!busy[detail.service.id]"><i class="fas" :class="detail.service.enabled ? 'fa-pause' : 'fa-play'"></i> {{ detail.service.enabled ? 'Pause' : 'Resume' }}</button>
+            <button type="button" class="smon-btn" @click="openService(detail.service)"><i class="fas fa-pen"></i> Edit</button>
+            <button type="button" class="smon-btn is-icon is-danger-text" @click="askDeleteService(detail.service)" aria-label="Delete monitor"><i class="fas fa-trash-alt"></i></button>
+          </template>
+          <button type="button" class="smon-icon-btn smon-close" @click="closeDetail" aria-label="Close"><i class="fas fa-times"></i></button>
+        </div>
+      </div>
+
+      <div class="smon-detail-body">
+        <div v-if="detail.service.lastError && ['down', 'retry', 'slow'].indexOf(detail.service.status) >= 0" class="smon-alert" :class="'is-' + detail.service.status">
+          <i class="fas fa-exclamation-circle"></i>
+          <span><b>{{ detail.service.lastError }}</b><template v-if="detail.service.status === 'down' && detail.service.failCount"> · failed {{ detail.service.failCount }} check{{ detail.service.failCount === 1 ? '' : 's' }} in a row</template></span>
+        </div>
+
+        <section class="smon-card">
+          <div class="smon-card-head"><h2>Heartbeats</h2><small>last {{ detailBeats.length }} checks</small></div>
+          <div class="smon-beats is-lg" role="img" :aria-label="'Last ' + detailBeats.length + ' checks'">
+            <span v-for="(b, i) in detailBeats" :key="i" class="smon-beat" :class="'is-' + b.s" :title="b.title"></span>
+          </div>
+          <div class="smon-beats-axis"><span>{{ detailBeatsFrom }}</span><span>now</span></div>
+        </section>
+
+        <div class="smon-stats">
+          <div><small>Uptime {{ periodLabel }}</small><b class="smon-mono" :class="uptimeClass(detailStats.uptime)">{{ pct(detailStats.uptime) }}</b><span>{{ detailStats.downText }}</span></div>
+          <div><small>Avg response</small><b class="smon-mono">{{ detailStats.avg == null ? '—' : fmtMs(detailStats.avg) }}</b><span>p95 {{ detailStats.p95 == null ? '—' : fmtMs(detailStats.p95) }}</span></div>
+          <div><small>Checks</small><b class="smon-mono">{{ detail.checks.length }}</b><span>{{ detailStats.failed }} failed</span></div>
+          <div><small>Uptime 7d</small><b class="smon-mono" :class="uptimeClass(detailSvc.uptime7)">{{ pct(detailSvc.uptime7) }}</b><span>{{ detailIncidents.length }} incident{{ detailIncidents.length === 1 ? '' : 's' }} listed</span></div>
+          <div><small>Last check</small><b class="smon-mono">{{ detail.service.lastCheckedAt ? ago(detail.service.lastCheckedAt).replace(' ago', '') : '—' }}</b><span>{{ nextCheck }}</span></div>
+        </div>
+
+        <section class="smon-card">
+          <div class="smon-card-head">
+            <h2>Response time</h2>
+            <span class="smon-grow"></span>
+            <div class="smon-seg" role="group" aria-label="Period">
+              <button v-for="h in HOURS" :key="h" type="button" :class="{ 'is-on': detailHours === h }" :aria-pressed="detailHours === h ? 'true' : 'false'" @click="loadDetail(detail.service.id, h)">{{ h < 24 ? h + 'h' : h / 24 + 'd' }}</button>
+            </div>
+          </div>
+          <div class="smon-chart" v-show="detail.checks.length"><canvas ref="chart" role="img" :aria-label="'Response time of ' + detail.service.name"></canvas></div>
+          <div v-if="!detail.checks.length" class="smon-empty">No checks in this period.</div>
+        </section>
+
+        <div class="smon-detail-cols">
+          <section class="smon-card is-flush">
+            <div class="smon-card-head is-pad"><h2>Incidents</h2><small>last {{ checkDays }}+ days</small></div>
+            <div v-if="!detailIncidents.length" class="smon-empty is-small is-pad">No incidents. Status changes show here.</div>
+            <div v-else class="smon-table-wrap">
+              <table class="smon-tbl">
+                <thead><tr><th>Started</th><th>Status</th><th>Duration</th><th>Cause</th></tr></thead>
+                <tbody>
+                  <tr v-for="(i, n) in detailIncidents" :key="n">
+                    <td class="smon-mono smon-nowrap">{{ when(i.at).slice(0, 16) }}</td>
+                    <td><span class="smon-badge is-sm" :class="'is-' + i.to">{{ statusText(i.to) }}</span></td>
+                    <td><span class="smon-dur" :class="{ 'is-ongoing': i.ongoing }">{{ i.ongoing ? 'Ongoing · ' : '' }}{{ i.duration }}</span></td>
+                    <td class="smon-text-2">{{ i.message || '—' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="smon-card">
+            <div class="smon-card-head"><h2>Configuration</h2></div>
+            <dl class="smon-dl">
+              <dt>Type</dt><dd>{{ typeOf(detail.service.type).label }}</dd>
+              <template v-if="detail.service.type === 'http'"><dt>Request</dt><dd>{{ detail.service.method }} · accepts {{ detail.service.expectedStatus }} · {{ detail.service.maxRedirects ? 'follows up to ' + detail.service.maxRedirects + ' redirect' + (detail.service.maxRedirects === 1 ? '' : 's') : 'redirects not followed' }}<template v-if="detail.service.keyword"> · contains "{{ detail.service.keyword }}"</template></dd></template>
+              <template v-if="detail.service.type === 'dns'"><dt>Query</dt><dd>{{ detail.service.dnsType }} on {{ detail.service.dnsServer || 'the server\'s DNS' }}<template v-if="detail.service.keyword"> · answer contains "{{ detail.service.keyword }}"</template></dd></template>
+              <dt>Interval</dt><dd>{{ every(detail.service.intervalSec) }} · timeout {{ every(detail.service.timeoutMs / 1000) }}<template v-if="detail.service.slowMs"> · slow above {{ fmtMs(detail.service.slowMs) }}</template></dd>
+              <dt>Retries</dt><dd>{{ detail.service.retries ? detail.service.retries + ', every ' + every(detail.service.retryIntervalSec || detail.service.intervalSec) : 'None: down at the first failed check' }}</dd>
+              <dt>Certificate</dt>
+              <dd v-if="detail.service.cert && detail.service.cert.validTo">
+                <span class="smon-pill" :class="'is-' + detail.service.cert.state"><i :class="certIcon(detail.service.cert.state)"></i> {{ certText(detail.service.cert) }}</span>
+                <span class="smon-dd-sub">Warning below {{ detail.service.certWarnDays }} days · critical below {{ detail.service.certCritDays }}</span>
+                <span class="smon-dd-sub">{{ detail.service.cert.subject }} · {{ detail.service.cert.issuerOrg || detail.service.cert.issuer }}</span>
+                <span class="smon-dd-sub">{{ day(detail.service.cert.validFrom) }} → {{ day(detail.service.cert.validTo) }}<template v-if="!detail.service.cert.authorized"> · {{ detail.service.cert.error }}</template></span>
+                <span class="smon-dd-sub smon-break" v-if="detail.service.cert.altNames">{{ detail.service.cert.altNames }}</span>
+              </dd>
+              <dd v-else-if="detail.service.cert" class="smon-err">{{ detail.service.cert.error }}</dd>
+              <dd v-else class="smon-muted">{{ certPending(detail.service) ? 'Reading…' : detail.service.type === 'tcp' ? 'Not a TLS port' : detail.service.type === 'http' && !/^https:/i.test(detail.service.target) ? 'Plain HTTP' : 'Not watched' }}</dd>
+              <dt>Domain expiry</dt>
+              <dd v-if="detail.service.domain && detail.service.domain.skipped" class="smon-muted">{{ detail.service.domain.skipped }}, not a candidate</dd>
+              <dd v-else-if="detail.service.domain">
+                <span class="smon-pill" :class="'is-' + detail.service.domain.state"><i class="fas fa-globe"></i> {{ domainText(detail.service.domain) }}</span>
+                <span class="smon-dd-sub">Warning below {{ detail.service.domainWarnDays }} days · critical below {{ detail.service.domainCritDays }}</span>
+                <span class="smon-dd-sub">{{ detail.service.domain.domain }}<template v-if="detail.service.domain.expiresAt"> · expires {{ day(detail.service.domain.expiresAt) }}</template><template v-if="detail.service.domain.registrar"> · {{ detail.service.domain.registrar }}</template></span>
+                <span v-if="detail.service.domain.error" class="smon-dd-sub">{{ detail.service.domain.error }}</span>
+              </dd>
+              <dd v-else class="smon-muted">{{ detail.service.checkDomain ? 'Reading…' : 'Not watched' }}</dd>
+              <template v-if="detail.service.notes"><dt>Notes</dt><dd class="smon-pre">{{ detail.service.notes }}</dd></template>
+              <dt>Last changed</dt><dd>{{ when(detail.service.updatedAt).slice(0, 16) }}<template v-if="detail.service.updatedBy"> by {{ detail.service.updatedBy }}</template></dd>
+            </dl>
+          </section>
+        </div>
+
+        <section class="smon-card is-flush">
+          <div class="smon-card-head is-pad"><h2>Latest checks</h2><small>{{ latestChecks.length }} of {{ detail.checks.length }}</small></div>
+          <div class="smon-table-wrap is-tall">
+            <table class="smon-tbl">
+              <thead><tr><th>Time</th><th>Status</th><th class="is-num">Response</th><th>Detail</th></tr></thead>
+              <tbody>
+                <tr v-for="(c, i) in latestChecks" :key="i">
+                  <td class="smon-mono smon-nowrap">{{ when(c.at) }}</td>
+                  <td><span class="smon-badge is-sm" :class="'is-' + c.status">{{ statusText(c.status) }}</span></td>
+                  <td class="is-num smon-mono">{{ c.ms == null ? '—' : fmtMs(c.ms) }}</td>
+                  <td class="smon-text-2">{{ c.code ? 'HTTP ' + c.code : '' }}{{ c.code && c.error ? ' · ' : '' }}{{ c.error }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<style>
+  /* Service Monitor: an operations-console look. Status colours: green up, amber degraded / retrying,
+     red down, grey paused; each one always comes with a word or an icon, never colour alone. */
+  .smon {
+    --sm-bg: #F5F6F8; --sm-surface: var(--surface, #FFFFFF); --sm-sunken: #F9FAFB; --sm-line: #E4E7EC; --sm-line-soft: #F2F4F7;
+    --sm-input: #D0D5DD; --sm-text: #101828; --sm-text-2: #475467; --sm-muted: #667085; --sm-faint: #98A2B3;
+    --sm-accent: var(--primary, #2563EB); --sm-accent-soft: #EFF4FF;
+    --up: #12B76A; --up-text: #067647; --up-soft: #ECFDF3; --up-ring: #ABEFC6;
+    --warn: #F79009; --warn-text: #B54708; --warn-soft: #FFFAEB; --warn-ring: #FEDF89;
+    --down: #F04438; --down-text: #B42318; --down-soft: #FEF3F2; --down-ring: #FECDCA;
+    --idle: #D0D5DD; --idle-text: #475467; --idle-soft: #F2F4F7; --idle-ring: #EAECF0;
+    --sm-text-3: #344054; --sm-on: #101828; --sm-on-text: #FFFFFF;
+    --up-halo: #D1FADF; --up-row: #F6FEF9; --down-strong: #D92D20; --down-row: #FFFBFA; --down-row-hover: #FFF4F2;
+    --sm-mono: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+    display: flex; flex-direction: column; gap: 16px; padding-bottom: 32px; color: var(--sm-text);
+  }
+  /* Dark mode (Service Monitor > Settings): the same roles, stepped for a dark surface; the page sits on its own dark panel. */
+  .smon.is-dark {
+    color-scheme: dark;
+    --sm-bg: #0C111D; --sm-surface: #161B26; --sm-sunken: #1F242F; --sm-line: #333741; --sm-line-soft: #1F242F;
+    --sm-input: #414651; --sm-text: #F5F5F6; --sm-text-2: #CECFD2; --sm-text-3: #CECFD2; --sm-muted: #94969C; --sm-faint: #85888E;
+    --sm-accent: #4C8DF6; --sm-accent-soft: rgba(76, 141, 246, .16); --primary-ring: rgba(76, 141, 246, .3); --primary-hover: #3B7BE8;
+    --up: #17B26A; --up-text: #47CD89; --up-soft: rgba(23, 178, 106, .14); --up-ring: rgba(23, 178, 106, .4); --up-halo: rgba(23, 178, 106, .25); --up-row: rgba(23, 178, 106, .08);
+    --warn: #F79009; --warn-text: #FDB022; --warn-soft: rgba(247, 144, 9, .14); --warn-ring: rgba(247, 144, 9, .4);
+    --down: #F04438; --down-text: #F97066; --down-soft: rgba(240, 68, 56, .14); --down-ring: rgba(240, 68, 56, .4); --down-strong: #F97066;
+    --down-row: rgba(240, 68, 56, .07); --down-row-hover: rgba(240, 68, 56, .12);
+    --idle: #61646C; --idle-text: #CECFD2; --idle-soft: #1F242F; --idle-ring: #333741;
+    --sm-on: #F5F5F6; --sm-on-text: #0C111D;
+    background: var(--sm-bg); padding: 20px 20px 32px; border-radius: 0; min-height: calc(100vh - var(--topbar-h, 56px) - 48px);
+  }
+  /* Full screen: the panel fills the screen and scrolls on its own */
+  .smon:fullscreen { background: var(--sm-bg); padding: 24px 32px 40px; overflow-y: auto; border-radius: 0; min-height: 0; }
+  .smon:-webkit-full-screen { background: var(--sm-bg); padding: 24px 32px 40px; overflow-y: auto; border-radius: 0; min-height: 0; }
+  .smon.is-dark .smon-overlay { background: rgba(0, 0, 0, .65); }
+  .smon.is-dark .smon-switch::after { background: #F5F5F6; }
+  .smon *, .smon *::before, .smon *::after { box-sizing: border-box; }
+  /* headings follow the theme (the app's h1-h6 use its own, always-light text colour) */
+  .smon h1, .smon h2, .smon h3, .smon h4, .smon h5, .smon h6 { color: var(--sm-text); }
+  .smon .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .smon-grow { flex: 1 1 auto; }
+  .smon-minw { min-width: 0; }
+  .smon-mono, .smon code { font-family: var(--sm-mono); font-variant-numeric: tabular-nums; }
+  .smon code { color: inherit; background: none; padding: 0; font-size: inherit; }
+  .smon-muted { color: var(--sm-faint); } .smon-text-2 { color: var(--sm-text-2); } .smon-small { font-size: 12px; }
+  .smon-nowrap { white-space: nowrap; } .smon-break { word-break: break-all; } .smon-pre { white-space: pre-wrap; }
+  .smon-err { color: var(--down-text) !important; }
+  .smon-up-good { color: var(--up-text); } .smon-up-warn { color: var(--warn-text); } .smon-up-bad { color: var(--down-text); }
+
+  /* buttons */
+  .smon-btn { height: 36px; padding: 0 12px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid var(--sm-input); background: var(--sm-surface); border-radius: 8px; font-size: 14px; font-weight: 500; color: var(--sm-text-3); cursor: pointer; white-space: nowrap; box-shadow: 0 1px 2px rgba(16, 24, 40, .05); }
+  .smon-btn:hover:not(:disabled) { background: var(--sm-sunken); color: var(--sm-text); }
+  .smon-btn:focus-visible, .smon-icon-btn:focus-visible, .smon-chip:focus-visible, .smon-kpi.is-click:focus-visible, .smon-row:focus-visible, .smon-seg button:focus-visible { outline: 2px solid var(--sm-accent); outline-offset: 2px; }
+  .smon-btn:disabled { opacity: .55; cursor: default; }
+  .smon-btn.is-primary { background: var(--sm-accent); border-color: var(--sm-accent); color: #FFFFFF; font-weight: 600; }
+  .smon-btn.is-primary:hover:not(:disabled) { background: var(--primary-hover, #1D4ED8); color: #FFFFFF; }
+  .smon-btn.is-danger { background: var(--down-strong); border-color: var(--down-strong); color: #FFFFFF; font-weight: 600; }
+  .smon-btn.is-danger:hover:not(:disabled) { background: var(--down-text); color: #FFFFFF; }
+  .smon-btn.is-icon { width: 36px; padding: 0; }
+  .smon-btn.is-bell-on { color: var(--sm-accent); border-color: var(--sm-accent); background: var(--sm-accent-soft); }
+  .smon-btn.is-danger-text { color: var(--down-text); }
+  .smon-icon-btn { width: 32px; height: 32px; flex: none; border: 0; background: transparent; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; color: var(--sm-text-2); cursor: pointer; font-size: 13px; }
+  .smon-icon-btn:hover:not(:disabled) { background: var(--idle-soft); color: var(--sm-text); }
+  .smon-icon-btn:disabled { opacity: .5; cursor: default; }
+  .smon-link { border: 0; background: none; color: var(--sm-accent); font-size: 13px; font-weight: 600; padding: 4px 0; cursor: pointer; }
+
+  /* header */
+  .smon-head { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; }
+  .smon-head-title { flex: 1 1 280px; min-width: 0; }
+  .smon-eyebrow { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--sm-muted); }
+  .smon-head h1 { margin: 0; font-size: 24px; line-height: 32px; font-weight: 700; letter-spacing: -.01em; }
+  .smon-head-btns { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+  /* overall status */
+  .smon-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 14px 18px; background: var(--sm-surface); border: 1px solid var(--sm-line); border-radius: 12px; }
+  .smon-banner-icon { width: 40px; height: 40px; flex: none; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; font-size: 17px; }
+  .smon-banner.is-ok .smon-banner-icon { background: var(--up-soft); color: var(--up-text); }
+  .smon-banner.is-warn .smon-banner-icon { background: var(--warn-soft); color: var(--warn-text); }
+  .smon-banner.is-down .smon-banner-icon { background: var(--down-soft); color: var(--down-strong); }
+  .smon-banner.is-down { border-color: var(--down-ring); }
+  .smon-banner.is-idle .smon-banner-icon { background: var(--idle-soft); color: var(--idle-text); }
+  .smon-banner-text { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; }
+  .smon-banner-text b { font-size: 16px; font-weight: 600; }
+  .smon-banner-text span { font-size: 13px; color: var(--sm-muted); }
+  .smon-live { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--sm-text-2); }
+  .smon-live-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--up); box-shadow: 0 0 0 4px var(--up-halo); animation: smon-pulse 2s ease-in-out infinite; }
+  .smon-live-dot.is-off { background: var(--idle); box-shadow: 0 0 0 4px var(--idle-soft); animation: none; }
+  @keyframes smon-pulse { 50% { box-shadow: 0 0 0 7px rgba(18, 183, 106, .12); } }
+  @media (prefers-reduced-motion: reduce) { .smon-live-dot { animation: none; } }
+
+  .smon-msg { display: flex; gap: 8px; align-items: center; padding: 10px 14px; border-radius: 10px; font-size: 13px; }
+  .smon-msg.is-error { background: var(--down-soft); color: var(--down-text); border: 1px solid var(--down-ring); }
+  .smon-msg.is-ok { background: var(--up-soft); color: var(--up-text); border: 1px solid var(--up-ring); }
+
+  /* key numbers */
+  .smon-kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); background: var(--sm-surface); border: 1px solid var(--sm-line); border-radius: 12px; overflow: hidden; }
+  .smon-kpi { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 14px 18px; border: 0; border-left: 1px solid var(--sm-line); background: none; text-align: left; color: inherit; font: inherit; min-width: 0; }
+  .smon-kpi:first-child { border-left: 0; }
+  .smon-kpi.is-click { cursor: pointer; }
+  .smon-kpi.is-click:hover { background: var(--sm-sunken); }
+  .smon-kpi.is-on { background: var(--sm-accent-soft); box-shadow: inset 0 -3px 0 var(--sm-accent); }
+  .smon-kpi-label { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--sm-text-2); }
+  .smon-kpi-value { font-family: var(--sm-mono); font-size: 26px; line-height: 34px; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .smon-kpi-value.is-warn { color: var(--warn-text); } .smon-kpi-value.is-down { color: var(--down-text); }
+  .smon-kpi small { font-size: 12px; color: var(--sm-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .smon-kpis.is-loading .smon-kpi { min-height: 88px; background: linear-gradient(90deg, var(--sm-sunken) 0%, var(--sm-surface) 50%, var(--sm-sunken) 100%); background-size: 200% 100%; animation: smon-shine 1.2s linear infinite; }
+  @keyframes smon-shine { to { background-position: -200% 0; } }
+  @media (max-width: 1100px) { .smon-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } .smon-kpi:nth-child(4) { border-left: 0; } .smon-kpi:nth-child(n+4) { border-top: 1px solid var(--sm-line); } }
+  @media (max-width: 600px) { .smon-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .smon-kpi:nth-child(odd) { border-left: 0; } .smon-kpi:nth-child(4) { border-left: 1px solid var(--sm-line); } .smon-kpi:nth-child(n+3) { border-top: 1px solid var(--sm-line); } }
+
+  /* status dot, badge, pill */
+  .smon-dot { width: 8px; height: 8px; flex: none; border-radius: 999px; background: var(--idle); display: inline-block; }
+  .smon-dot.is-lg { width: 14px; height: 14px; }
+  .smon-dot.is-up { background: var(--up); } .smon-dot.is-slow, .smon-dot.is-retry, .smon-dot.is-warn { background: var(--warn); }
+  .smon-dot.is-down { background: var(--down); } .smon-dot.is-accent { background: var(--sm-accent); } .smon-dot.is-violet { background: #7A5AF8; } .smon-dot.is-grey { background: var(--sm-muted); }
+  .smon-badge { display: inline-flex; align-items: center; gap: 6px; width: fit-content; white-space: nowrap; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 3px 10px; border: 1px solid var(--idle-ring); background: var(--idle-soft); color: var(--idle-text); }
+  .smon-badge.is-sm { padding: 1px 8px; }
+  .smon-badge.is-up { background: var(--up-soft); color: var(--up-text); border-color: var(--up-ring); }
+  .smon-badge.is-slow, .smon-badge.is-retry { background: var(--warn-soft); color: var(--warn-text); border-color: var(--warn-ring); }
+  .smon-badge.is-down { background: var(--down-soft); color: var(--down-text); border-color: var(--down-ring); }
+  .smon-pill { display: inline-flex; align-items: center; gap: 5px; width: fit-content; white-space: nowrap; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 2px 8px; background: var(--idle-soft); color: var(--idle-text); }
+  .smon-pill i { font-size: 10px; }
+  .smon-pill.is-ok { background: var(--up-soft); color: var(--up-text); } .smon-pill.is-warning { background: var(--warn-soft); color: var(--warn-text); }
+  .smon-pill.is-critical, .smon-pill.is-expired, .smon-pill.is-error { background: var(--down-soft); color: var(--down-text); }
+
+  /* layout */
+  .smon-layout { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+  .smon-main { flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .smon-rail { flex: 1 1 300px; max-width: 380px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+  @media (max-width: 1000px) { .smon-rail { max-width: none; } }
+
+  /* toolbar */
+  .smon-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .smon-search { flex: 1 1 220px; max-width: 340px; height: 36px; display: flex; align-items: center; gap: 8px; padding: 0 12px; margin: 0; background: var(--sm-surface); border: 1px solid var(--sm-input); border-radius: 8px; color: var(--sm-muted); }
+  .smon-search:focus-within { border-color: var(--sm-accent); box-shadow: 0 0 0 3px var(--primary-ring, rgba(37, 99, 235, .15)); }
+  .smon-search input { border: 0; outline: 0; flex: 1; min-width: 0; font: inherit; font-size: 14px; background: transparent; color: var(--sm-text); }
+  .smon-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .smon-chip { height: 34px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--sm-input); background: var(--sm-surface); font-size: 13px; font-weight: 600; color: var(--sm-text-3); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  .smon-chip span { font-family: var(--sm-mono); font-size: 12px; opacity: .75; }
+  .smon-chip:hover { background: var(--sm-sunken); }
+  .smon-chip.is-on { background: var(--sm-on); border-color: var(--sm-on); color: var(--sm-on-text); }
+  .smon-seg { display: inline-flex; border: 1px solid var(--sm-input); border-radius: 8px; overflow: hidden; background: var(--sm-surface); flex: none; }
+  .smon-seg button { height: 32px; padding: 0 12px; border: 0; background: none; font-size: 13px; font-weight: 500; color: var(--sm-text-2); cursor: pointer; }
+  .smon-seg button + button { border-left: 1px solid var(--sm-input); }
+  .smon-seg button.is-on { background: var(--idle-soft); color: var(--sm-text); font-weight: 600; }
+
+  /* groups and rows */
+  .smon-group { background: var(--sm-surface); border: 1px solid var(--sm-line); border-radius: 12px; overflow: hidden; }
+  .smon-group-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 8px; border-bottom: 1px solid var(--sm-line); }
+  .smon-group-color { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+  .smon-group-head h2 { margin: 0; font-size: 15px; font-weight: 600; white-space: nowrap; }
+  .smon-group-beats { flex: 0 1 280px; min-width: 120px; display: flex; }
+  .smon-group-beats .smon-beats { height: 20px; }
+  @media (max-width: 760px) { .smon-group-beats { display: none; } }
+  .smon-group-sum { font-size: 13px; color: var(--sm-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .smon-group-up { font-family: var(--sm-mono); font-size: 12px; color: var(--sm-text-2); white-space: nowrap; }
+  .smon-group-desc { margin: 0; padding: 8px 16px; font-size: 13px; color: var(--sm-muted); border-bottom: 1px solid var(--sm-line-soft); }
+  .smon-row { display: grid; grid-template-columns: minmax(230px, 2fr) minmax(180px, 2fr) 92px 92px 132px 40px; gap: 16px; align-items: center; padding: 12px 12px 12px 16px; border-bottom: 1px solid var(--sm-line-soft); cursor: pointer; }
+  .smon-row:last-child { border-bottom: 0; }
+  .smon-row:hover:not(.is-head) { background: var(--sm-sunken); }
+  .smon-row.is-down { background: var(--down-row); } .smon-row.is-down:hover { background: var(--down-row-hover); }
+  .smon-row.is-paused .smon-mon-text, .smon-row.is-paused .smon-beats-cell { opacity: .6; }
+  .smon-row.is-head { cursor: default; padding-top: 8px; padding-bottom: 8px; background: var(--sm-sunken); border-bottom: 1px solid var(--sm-line); font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--sm-muted); }
+  .smon-row > span { min-width: 0; }
+  .smon-row .is-num { display: flex; flex-direction: column; align-items: flex-end; text-align: right; }
+  .smon-row .is-num b { font-size: 14px; font-weight: 600; }
+  .smon-row small { font-size: 12px; color: var(--sm-muted); }
+  .smon-mon { display: flex; align-items: center; gap: 12px; }
+  .smon-mon .smon-badge { width: 96px; justify-content: flex-start; flex: none; }
+  .smon-mon-text { display: flex; flex-direction: column; min-width: 0; }
+  .smon-mon-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .smon-mon-name b { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .smon-mon-text code, .smon-mon-text small { font-size: 12px; color: var(--sm-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .smon-type { flex: none; font-family: var(--sm-mono); font-size: 10px; font-weight: 600; color: var(--sm-text-2); background: var(--idle-soft); border-radius: 4px; padding: 1px 5px; }
+  .smon-beats-cell { display: flex; flex-direction: column; gap: 4px; }
+  .smon-beats { display: flex; gap: 2px; height: 24px; }
+  .smon-beats.is-bar { display: block; width: 100%; background-repeat: no-repeat; border-radius: 2px; cursor: default; }
+  .smon-beat-tip { position: fixed; z-index: 1070; pointer-events: none; background: #101828; color: #FFFFFF; font-size: 12px; padding: 6px 10px; border-radius: 6px; white-space: nowrap; box-shadow: 0 4px 12px rgba(16, 24, 40, .2); }
+  .smon-more { display: block; width: 100%; padding: 10px; border: 0; border-top: 1px solid var(--sm-line-soft); background: var(--sm-sunken); color: var(--sm-accent); font-size: 13px; font-weight: 600; cursor: pointer; }
+  .smon-more:hover { background: var(--idle-soft); }
+  .smon-beats.is-lg { height: 34px; }
+  .smon-beat { flex: 1 1 0; min-width: 2px; border-radius: 2px; background: var(--up); }
+  .smon-beat.is-slow, .smon-beat.is-retry { background: var(--warn); } .smon-beat.is-down { background: var(--down); }
+  .smon-beat.is-empty { background: var(--idle-ring); }
+  .smon-beat:hover { opacity: .7; }
+  .smon-beats-axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--sm-faint); }
+  .smon-expiry { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+  .smon-row-act { display: flex; justify-content: flex-end; }
+  @media (max-width: 1280px) { .smon-row { grid-template-columns: minmax(200px, 2fr) minmax(140px, 1.6fr) 84px 84px 40px; } .smon-row > span:nth-child(5) { display: none; } }
+  @media (max-width: 760px) {
+    .smon-row { grid-template-columns: minmax(0, 1fr) 76px 40px; }
+    .smon-row > span:nth-child(2), .smon-row > span:nth-child(3) { display: none; }
+    .smon-mon { flex-direction: column; align-items: flex-start; gap: 6px; }
+  }
+
+  /* right rail */
+  .smon-card { background: var(--sm-surface); border: 1px solid var(--sm-line); border-radius: 12px; padding: 16px; min-width: 0; }
+  .smon-card.is-flush { padding: 0; overflow: hidden; }
+  .smon-card-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .smon-card-head.is-pad { padding: 14px 16px 0; }
+  .smon-card-head h2 { margin: 0; font-size: 15px; font-weight: 600; }
+  .smon-card-head small { margin-left: auto; font-size: 12px; color: var(--sm-muted); }
+  .smon-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+  .smon-list li + li { border-top: 1px solid var(--sm-line-soft); }
+  .smon-list-btn { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 4px; border: 0; background: none; text-align: left; cursor: pointer; border-radius: 8px; color: inherit; }
+  .smon-list-btn:hover { background: var(--sm-sunken); }
+  .smon-list-text { display: flex; flex-direction: column; min-width: 0; }
+  .smon-list-text b { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .smon-list-text small { font-size: 12px; color: var(--sm-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .smon-days { flex: none; width: 48px; height: 44px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; background: var(--idle-soft); color: var(--idle-text); }
+  .smon-days b { font-family: var(--sm-mono); font-size: 16px; font-weight: 600; } .smon-days small { font-size: 10px; font-weight: 600; }
+  .smon-days.is-ok { background: var(--up-soft); color: var(--up-text); } .smon-days.is-warning { background: var(--warn-soft); color: var(--warn-text); }
+  .smon-days.is-critical, .smon-days.is-expired, .smon-days.is-error { background: var(--down-soft); color: var(--down-text); }
+  .smon-incidents .smon-table-wrap { max-height: 420px; margin-top: 12px; }
+  .smon-inc-row { cursor: pointer; }
+  .smon-inc-row:hover td, .smon-inc-row:focus-visible td { background: var(--sm-sunken); }
+  .smon-inc-row:focus-visible { outline: 2px solid var(--sm-accent); outline-offset: -2px; }
+  .smon-inc-mon { display: inline-flex; align-items: center; gap: 8px; }
+  .smon-timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+  .smon-timeline li { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 8px; position: relative; }
+  .smon-timeline li:not(:last-child)::before { content: ''; position: absolute; left: 7px; top: 22px; bottom: -6px; width: 2px; background: var(--sm-line-soft); }
+  .smon-tl-dot { width: 10px; height: 10px; margin: 13px 0 0 3px; border-radius: 999px; background: var(--idle); box-shadow: 0 0 0 3px var(--idle-soft); position: relative; }
+  .smon-tl-dot.is-up { background: var(--up); box-shadow: 0 0 0 3px var(--up-soft); }
+  .smon-tl-dot.is-slow, .smon-tl-dot.is-retry { background: var(--warn); box-shadow: 0 0 0 3px var(--warn-soft); }
+  .smon-tl-dot.is-down { background: var(--down); box-shadow: 0 0 0 3px var(--down-soft); }
+  .smon-tl-body { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 6px; border: 0; background: none; text-align: left; cursor: pointer; border-radius: 8px; font-size: 13px; color: inherit; min-width: 0; }
+  .smon-tl-body:hover { background: var(--sm-sunken); }
+  .smon-tl-body small { font-size: 12px; color: var(--sm-muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .smon-ongoing { margin-top: 2px; font-size: 11px; font-weight: 600; color: var(--down-text); background: var(--down-soft); border: 1px solid var(--down-ring); border-radius: 999px; padding: 1px 8px; }
+  .smon-resolved { color: var(--up-text) !important; }
+
+  .smon-empty { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; min-height: 80px; color: var(--sm-muted); font-size: 13px; background: var(--sm-surface); border: 1px dashed var(--sm-input); border-radius: 12px; text-align: center; padding: 16px; }
+  .smon-empty.is-big { flex-direction: column; min-height: 260px; }
+  .smon-empty.is-big b { color: var(--sm-text); font-size: 16px; }
+  .smon-empty-icon { width: 48px; height: 48px; border-radius: 12px; background: var(--sm-accent-soft); color: var(--sm-accent); display: inline-flex; align-items: center; justify-content: center; font-size: 20px; }
+  .smon-empty.is-small { min-height: 0; border: 0; padding: 4px 0; justify-content: flex-start; text-align: left; font-size: 13px; }
+  .smon-empty.is-small.is-pad { padding: 12px 16px 16px; }
+  .smon-empty.is-row { border: 0; border-radius: 0; min-height: 56px; }
+  .smon-empty-btns { display: flex; gap: 8px; margin-top: 6px; }
+
+  /* actions menu */
+  .smon-menu { position: fixed; z-index: 1060; min-width: 190px; padding: 4px; background: var(--sm-surface); border: 1px solid var(--sm-line); border-radius: 10px; box-shadow: 0 12px 24px -6px rgba(16, 24, 40, .18), 0 4px 8px -4px rgba(16, 24, 40, .08); display: flex; flex-direction: column; }
+  .smon-menu button { display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 10px; border: 0; background: none; border-radius: 6px; font-size: 14px; color: var(--sm-text-3); cursor: pointer; text-align: left; }
+  .smon-menu button i { width: 16px; text-align: center; color: var(--sm-muted); font-size: 13px; }
+  .smon-menu button:hover, .smon-menu button:focus-visible { background: var(--idle-soft); outline: 0; }
+  .smon-menu button.is-danger, .smon-menu button.is-danger i { color: var(--down-text); }
+  .smon-menu hr { margin: 4px 0; border: 0; border-top: 1px solid var(--sm-line-soft); }
+
+  /* dialogs */
+  .smon-overlay { position: fixed; inset: 0; z-index: 1050; background: rgba(16, 24, 40, .55); display: flex; align-items: flex-start; justify-content: center; padding: 4vh 16px; overflow: auto; }
+  .smon-dialog { background: var(--sm-surface); border-radius: 16px; box-shadow: 0 24px 48px -12px rgba(16, 24, 40, .25); width: 100%; max-width: 720px; display: flex; flex-direction: column; max-height: 92vh; }
+  .smon-dialog.is-small { max-width: 460px; }
+  .smon-dialog-head { display: flex; align-items: flex-start; gap: 12px; padding: 20px 60px 16px 24px; border-bottom: 1px solid var(--sm-line); }
+  /* Close (✕): always in the popup's top-right corner, however its header wraps */
+  .smon-dialog, .smon-detail { position: relative; }
+  .smon-close { position: absolute; top: 12px; right: 12px; z-index: 2; width: 36px; height: 36px; font-size: 15px; }
+  .smon-dialog-head h3 { margin: 0; font-size: 18px; font-weight: 600; }
+  .smon-dialog-head p { margin: 2px 0 0; font-size: 13px; color: var(--sm-muted); }
+  .smon-dialog-body { padding: 20px 24px; overflow: auto; display: flex; flex-direction: column; gap: 22px; }
+  .smon-dialog.is-small .smon-dialog-body { gap: 14px; }
+  .smon-dialog-foot { display: flex; align-items: center; gap: 8px; padding: 16px 24px; border-top: 1px solid var(--sm-line); background: var(--sm-sunken); border-radius: 0 0 16px 16px; }
+  .smon-plain { border: 0; padding: 0; margin: 0; min-width: 0; }
+  .smon-label { font-size: 13px; font-weight: 600; color: var(--sm-text-3); margin-bottom: 8px; padding: 0; width: auto; }
+  .smon-types { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .smon-type-card { min-height: 64px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; padding: 10px 12px; border: 1px solid var(--sm-input); background: var(--sm-surface); border-radius: 10px; cursor: pointer; text-align: left; color: var(--sm-text); }
+  .smon-type-card span { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .smon-type-card span i { color: var(--sm-muted); font-size: 13px; }
+  .smon-type-card small { font-size: 12px; color: var(--sm-muted); }
+  .smon-type-card:hover { border-color: var(--sm-faint); }
+  .smon-type-card.is-on { border: 2px solid var(--sm-accent); background: var(--sm-accent-soft); padding: 9px 11px; }
+  .smon-type-card.is-on span i { color: var(--sm-accent); }
+  @media (max-width: 560px) { .smon-types { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .smon-form-sec { display: flex; flex-direction: column; gap: 14px; }
+  .smon-form-sec h4 { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--sm-muted); }
+  .smon-grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; }
+  /* Add / edit monitor: a wide, square-cornered panel with General on the left, Heartbeat and Advanced on the right */
+  .smon-dialog.is-form { max-width: 1180px; border-radius: 6px; }
+  .smon-dialog.is-form .smon-dialog-foot { border-radius: 0 0 6px 6px; }
+  .smon-dialog.is-form .smon-type-card, .smon-dialog.is-form .smon-test { border-radius: 4px; }
+  .smon-dialog.is-form .smon-field input:not([type=checkbox]):not([type=color]), .smon-dialog.is-form .smon-field select, .smon-dialog.is-form .smon-field textarea, .smon-dialog.is-form .smon-unit { border-radius: 4px; }
+  .smon-form-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 32px; }
+  .smon-form-col { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+  .smon-form-col + .smon-form-col { border-left: 1px solid var(--sm-line); padding-left: 32px; }
+  @media (max-width: 900px) { .smon-form-cols { grid-template-columns: 1fr; gap: 22px; } .smon-form-col + .smon-form-col { border-left: 0; padding-left: 0; } }
+  .smon-grid-http { display: grid; grid-template-columns: 110px minmax(0, 1fr) 120px minmax(0, 1.3fr); gap: 14px; }
+  .smon-indent { padding-left: 52px; }
+  .smon-seg.is-wide-seg { display: flex; margin-bottom: 8px; }
+  .smon-seg.is-wide-seg button { flex: 1; height: 28px; padding: 0 8px; font-size: 12px; }
+  .smon-exp-why { font-weight: 600; }
+  .smon-exp-why.is-warning { color: var(--warn-text) !important; }
+  .smon-exp-why.is-critical, .smon-exp-why.is-expired, .smon-exp-why.is-error { color: var(--down-text) !important; }
+  .smon-all-ok { color: var(--up-text); gap: 8px; align-items: flex-start; }
+  .smon-all-ok i { margin-top: 3px; }
+  .smon-block-link { display: block; margin-top: 8px; text-decoration: none; }
+  .smon-thresholds { margin: -6px 0 6px; }
+  .smon-thresholds .smon-field > span:first-child { display: inline-flex; align-items: center; gap: 6px; }
+  .smon-thresholds i.is-warn { color: var(--warn); } .smon-thresholds i.is-crit { color: var(--down); }
+  .smon-unit.is-bad { border-color: var(--down); }
+  .smon-span-2 { grid-column: 1 / -1; margin-top: -6px; }
+  @media (max-width: 600px) { .smon-grid-2, .smon-grid-http { grid-template-columns: 1fr; } .smon-indent { padding-left: 0; } }
+  .smon-field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 500; color: var(--sm-text-3); margin: 0; min-width: 0; }
+  .smon-field.is-full { grid-column: 1 / -1; }
+  .smon-field > small { font-weight: 400; color: var(--sm-muted); }
+  .smon-field input:not([type=checkbox]):not([type=color]), .smon-field select, .smon-field textarea { height: 40px; width: 100%; padding: 0 12px; border: 1px solid var(--sm-input); border-radius: 8px; background: var(--sm-surface); font: inherit; font-size: 14px; font-weight: 400; color: var(--sm-text); box-shadow: 0 1px 2px rgba(16, 24, 40, .05); }
+  .smon-field textarea { height: auto; padding: 10px 12px; resize: vertical; }
+  .smon-field select { padding: 0 10px; }
+  .smon-field .is-mono { font-family: var(--sm-mono); font-size: 13px; }
+  .smon-field input:focus, .smon-field select:focus, .smon-field textarea:focus { outline: 0; border-color: var(--sm-accent); box-shadow: 0 0 0 3px var(--primary-ring, rgba(37, 99, 235, .15)); }
+  .smon-field input:disabled { background: var(--sm-sunken); color: var(--sm-faint); }
+  .smon-unit { display: flex; align-items: stretch; border: 1px solid var(--sm-input); border-radius: 8px; overflow: hidden; background: var(--sm-surface); box-shadow: 0 1px 2px rgba(16, 24, 40, .05); }
+  .smon-unit:focus-within { border-color: var(--sm-accent); box-shadow: 0 0 0 3px var(--primary-ring, rgba(37, 99, 235, .15)); }
+  .smon-field .smon-unit input { border: 0 !important; box-shadow: none !important; height: 38px !important; font-family: var(--sm-mono); font-size: 14px; flex: 1; min-width: 0; }
+  .smon-unit > span { padding: 0 12px; display: inline-flex; align-items: center; background: var(--sm-sunken); border-left: 1px solid var(--sm-input); font-size: 13px; color: var(--sm-text-2); font-weight: 400; }
+  .smon-unit.is-disabled { background: var(--sm-sunken); }
+  .smon-help { font-size: 12px; font-weight: 400; color: var(--sm-muted); margin: 0; }
+  .smon-help.is-warn { color: var(--warn-text); }
+  .smon-toggle { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 12px; align-items: start; padding: 12px 0; margin: 0; border-top: 1px solid var(--sm-line-soft); cursor: pointer; }
+  .smon-toggle > span { display: flex; flex-direction: column; gap: 2px; }
+  .smon-toggle b { font-size: 14px; font-weight: 600; }
+  .smon-toggle small { font-size: 13px; color: var(--sm-muted); }
+  .smon-toggle.is-tight { padding: 10px 0; }
+  .smon-toggle.is-tight:first-of-type { border-top: 0; padding-top: 4px; }
+  .smon-share-url { display: flex; gap: 6px; }
+  .smon-share-url input { flex: 1; min-width: 0; font-family: var(--sm-mono); font-size: 12px !important; }
+  .smon-share-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .smon-share-foot .smon-link i { margin-right: 4px; }
+  .smon-reset-preview { display: flex; align-items: flex-start; gap: 8px; padding: 12px 14px; border-radius: 10px; font-size: 13px; background: var(--down-soft); color: var(--down-text); border: 1px solid var(--down-ring); }
+  .smon-reset-preview i { margin-top: 2px; }
+  .smon-reset-preview.is-none { background: var(--sm-sunken); color: var(--sm-text-2); border-color: var(--sm-line); }
+  .smon-note { margin-top: 4px; color: var(--warn-text) !important; background: var(--warn-soft); border-radius: 6px; padding: 6px 8px; font-size: 12px !important; }
+  .smon-switch { appearance: none; -webkit-appearance: none; width: 40px; height: 22px; margin: 1px 0 0; border-radius: 999px; background: var(--idle); position: relative; cursor: pointer; transition: background .15s; flex: none; }
+  .smon-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 999px; background: #FFFFFF; box-shadow: 0 1px 2px rgba(16, 24, 40, .2); transition: transform .15s; }
+  .smon-switch:checked { background: var(--sm-accent); }
+  .smon-switch:checked::after { transform: translateX(18px); }
+  .smon-switch:focus-visible { outline: 2px solid var(--sm-accent); outline-offset: 2px; }
+  .smon-test { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 12px 14px; border-radius: 10px; font-size: 13px; border: 1px solid var(--up-ring); background: var(--up-row); }
+  .smon-test.is-slow { border-color: var(--warn-ring); background: var(--warn-soft); }
+  .smon-test.is-down { border-color: var(--down-ring); background: var(--down-soft); }
+  .smon-test-title { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+  .smon-test.is-up .smon-test-title { color: var(--up-text); } .smon-test.is-slow .smon-test-title { color: var(--warn-text); } .smon-test.is-down .smon-test-title { color: var(--down-text); }
+  .smon-test .smon-mono { color: var(--sm-text-3); word-break: break-word; }
+  .smon-swatches { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .smon-swatch { width: 28px; height: 28px; border-radius: 8px; border: 2px solid var(--sm-surface); box-shadow: 0 0 0 1px var(--sm-line); cursor: pointer; }
+  .smon-swatch.is-on { box-shadow: 0 0 0 2px var(--sm-text); }
+  .smon-swatches input[type=color] { width: 36px; height: 30px; padding: 0 2px; border: 1px solid var(--sm-input); border-radius: 8px; background: var(--sm-surface); }
+  .smon-confirm { align-items: flex-start; }
+  .smon-confirm h3 { margin: 0; font-size: 18px; font-weight: 600; }
+  .smon-confirm p { margin: -6px 0 0; font-size: 14px; color: var(--sm-text-2); }
+  .smon-confirm-icon { width: 44px; height: 44px; border-radius: 999px; background: var(--down-soft); color: var(--down-strong); display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 0 0 6px var(--down-row); }
+
+  /* detail */
+  .smon-overlay.is-detail { padding: 3vh 16px; }
+  .smon-detail { width: 100%; max-width: 1080px; background: var(--sm-bg); border-radius: 16px; box-shadow: 0 24px 48px -12px rgba(16, 24, 40, .3); display: flex; flex-direction: column; max-height: 94vh; overflow: hidden; }
+  .smon-detail-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; padding: 18px 60px 18px 20px; background: var(--sm-surface); border-bottom: 1px solid var(--sm-line); }
+  .smon-detail-icon { width: 48px; height: 48px; flex: none; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; background: var(--idle-soft); }
+  .smon-detail-icon.is-up { background: var(--up-soft); } .smon-detail-icon.is-slow, .smon-detail-icon.is-retry { background: var(--warn-soft); } .smon-detail-icon.is-down { background: var(--down-soft); }
+  .smon-detail-icon.is-down .smon-dot { box-shadow: 0 0 0 6px var(--down-ring); } .smon-detail-icon.is-up .smon-dot { box-shadow: 0 0 0 6px var(--up-halo); }
+  .smon-detail-title { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .smon-detail-title h3 { margin: 0; font-size: 20px; font-weight: 700; }
+  .smon-detail-sub { font-size: 13px; color: var(--sm-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .smon-detail-sub code { color: var(--sm-text-3); }
+  .smon-detail-body { padding: 16px 20px 20px; overflow: auto; display: flex; flex-direction: column; gap: 16px; }
+  .smon-alert { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 10px; font-size: 13px; }
+  .smon-alert.is-down { background: var(--down-soft); border: 1px solid var(--down-ring); color: var(--down-text); }
+  .smon-alert.is-slow, .smon-alert.is-retry { background: var(--warn-soft); border: 1px solid var(--warn-ring); color: var(--warn-text); }
+  .smon-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+  .smon-stats > div { background: var(--sm-surface); border: 1px solid var(--sm-line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .smon-stats small { font-size: 12px; font-weight: 600; color: var(--sm-text-2); }
+  .smon-stats b { font-size: 22px; font-weight: 600; }
+  .smon-stats span { font-size: 12px; color: var(--sm-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  @media (max-width: 800px) { .smon-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .smon-chart { position: relative; height: 220px; }
+  .smon-detail-cols { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .smon-detail-cols { grid-template-columns: 1fr; } }
+  .smon-table-wrap { max-height: 300px; overflow: auto; margin-top: 12px; }
+  .smon-table-wrap.is-tall { max-height: 340px; }
+  .smon-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .smon-tbl th { position: sticky; top: 0; background: var(--sm-sunken); color: var(--sm-muted); font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; text-align: left; padding: 8px 16px; border-top: 1px solid var(--sm-line); border-bottom: 1px solid var(--sm-line); }
+  .smon-tbl td { padding: 9px 16px; border-bottom: 1px solid var(--sm-line-soft); vertical-align: middle; }
+  .smon-tbl td.smon-mono { font-size: 12px; }
+  .smon-tbl .is-num { text-align: right; }
+  .smon-dur { font-size: 12px; font-weight: 600; border-radius: 999px; padding: 2px 8px; background: var(--idle-soft); color: var(--sm-text-3); white-space: nowrap; }
+  .smon-dur.is-ongoing { background: var(--down-soft); color: var(--down-text); }
+  .smon-dl { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 10px 12px; margin: 0; font-size: 13px; }
+  .smon-dl dt { color: var(--sm-muted); font-weight: 500; }
+  .smon-dl dd { margin: 0; display: flex; flex-direction: column; gap: 3px; align-items: flex-start; min-width: 0; }
+  .smon-dd-sub { font-size: 12px; color: var(--sm-muted); }
+</style>
+
+<script src="/lib/chart.js/dist/chart.umd.min.js"></script>
+<script>
+  (function () {
+    'use strict';
+    var BASE = '/service-monitor';
+    var REFRESH_MS = 15000;
+    var COLLAPSE_KEY = 'service_monitor_collapsed';
+    var SORT_KEY = 'service_monitor_sort';
+    var SPARK = 60;
+    var TYPES = [
+      { key: 'http', label: 'HTTP(s)', sub: 'URL & status', icon: 'fas fa-globe', targetLabel: 'URL', placeholder: 'https://his.example.org/health',
+        hint: 'Requests the URL and checks the status code (and optionally the content). https:// URLs also have their certificate watched.' },
+      { key: 'tcp', label: 'TCP port', sub: 'host:port', icon: 'fas fa-plug', targetLabel: 'Host and port', placeholder: '10.0.0.5:5432',
+        hint: 'Opens a TCP connection to host:port, e.g. a database, an HL7 listener or LDAP. Turn on certificate expiry for a TLS port.' },
+      { key: 'ping', label: 'Ping', sub: 'ICMP echo', icon: 'fas fa-satellite-dish', targetLabel: 'Host or IP address', placeholder: '10.0.0.5',
+        hint: 'Sends one ICMP echo with the server\'s ping command; up when the host replies.' },
+      { key: 'dns', label: 'DNS', sub: 'resolve a name', icon: 'fas fa-sitemap', targetLabel: 'Host name to resolve', placeholder: 'his.example.org',
+        hint: 'Resolves the name; up when it answers (and the answer contains the expected value, if set).' }
+    ];
+    var STATUS = {
+      up: { text: 'Up', rank: 4 }, slow: { text: 'Degraded', rank: 2 }, retry: { text: 'Retrying', rank: 1 },
+      down: { text: 'Down', rank: 0 }, paused: { text: 'Paused', rank: 5 }, pending: { text: 'Pending', rank: 3 }
+    };
+    var CERT = { ok: 'fas fa-lock', warning: 'fas fa-exclamation-triangle', critical: 'fas fa-exclamation-circle', expired: 'fas fa-unlock', error: 'fas fa-unlink' };
+    var COLORS = ['#2563eb', '#0e7490', '#16a34a', '#ca8a04', '#ea580c', '#dc2626', '#7c3aed', '#db2777', '#475569'];
+    var HOURS = [1, 6, 24, 72, 168];
+    var SORTS = [{ key: 'status', label: 'Status' }, { key: 'name', label: 'Name' }, { key: 'response', label: 'Response' }];
+    // Mirrors models/domain.service.js registrable(), to say in the form which domain would be watched.
+    var INTERNAL = ['local', 'localhost', 'lan', 'internal', 'intranet', 'corp', 'home', 'localdomain', 'private', 'test', 'invalid', 'example', 'arpa'];
+    var SECOND_LEVEL = ['co', 'ac', 'go', 'or', 'in', 'mi', 'net', 'com', 'org', 'gov', 'edu', 'gob', 'gouv', 'ne', 'nic', 'ltd', 'plc', 'med', 'sch'];
+
+    var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+    var json = function (r) {
+      return r.json().catch(function () { return { error: 'The server answered ' + r.status + '.' }; })
+        .then(function (d) { if (!r.ok || d.error) throw new Error(d.error || ('HTTP ' + r.status)); return d; });
+    };
+    var post = function (url, body) {
+      return fetch(url, {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(body || {})
+      }).then(json);
+    };
+    var getJson = function (url) { return fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } }).then(json); };
+    var blankForm = function (groupId) {
+      return {
+        id: null, name: '', groupId: groupId || null, type: 'http', target: '', method: 'GET', expectedStatus: '200-399', keyword: '', maxRedirects: 5,
+        dnsType: 'A', dnsServer: '', intervalSec: 60, retries: 0, retryIntervalSec: 60, timeoutSec: 48, slowMs: 0,
+        checkCert: true, checkDomain: false, certWarnDays: 30, certCritDays: 7, domainWarnDays: 30, domainCritDays: 7,
+        ignoreTls: false, enabled: true, notes: ''
+      };
+    };
+    var mean = function (list) { return list.length ? list.reduce(function (s, v) { return s + v; }, 0) / list.length : null; };
+    var chart = null;
+    var ROW_PAGE = 50;                    // rows drawn per group before "Show more"
+    // Browser notifications: allowed by Settings (notifyAllowed), then turned on per browser (the bell),
+    // which needs the browser's permission and a secure page (HTTPS or localhost).
+    var notifySupport = function () {
+      if (!('Notification' in window)) return 'unsupported';
+      if (!window.isSecureContext) return 'insecure';
+      return Notification.permission;               // 'default' | 'granted' | 'denied'
+    };
+    var notifyInit = function (page) {
+      var on = false;
+      try { on = localStorage.getItem('service_monitor_notify_' + page) === '1'; } catch (e) { /* private mode */ }
+      return { page: page, on: on && notifySupport() === 'granted', state: notifySupport() };
+    };
+    var BEAT_COLOR = { up: 'var(--up)', warn: 'var(--warn)', down: 'var(--down)', empty: 'var(--idle-ring)' };
+    var beatKind = function (status) { return status === 'down' ? 'down' : status === 'slow' || status === 'retry' ? 'warn' : 'up'; };
+    // A heartbeat bar as one CSS gradient: SPARK equal slots, each a coloured bar and a small gap.
+    var beatGradient = function (kinds) {
+      var w = 100 / kinds.length, bar = w * 0.78, stops = [];
+      kinds.forEach(function (k, i) {
+        var a = (i * w).toFixed(3), b = (i * w + bar).toFixed(3), e = ((i + 1) * w).toFixed(3);
+        stops.push(BEAT_COLOR[k] + ' ' + a + '% ' + b + '%', 'transparent ' + b + '% ' + e + '%');
+      });
+      return { backgroundImage: 'linear-gradient(to right, ' + stops.join(', ') + ')' };
+    };
+    // Server data is read-only on this page: freezing it spares Vue from watching every monitor and check.
+    var deepFreeze = function (o) {
+      if (o && typeof o === 'object' && !Object.isFrozen(o)) {
+        Object.keys(o).forEach(function (k) { deepFreeze(o[k]); });
+        Object.freeze(o);
+      }
+      return o;
+    };
+
+    // Light / dark (Service Monitor > Settings: light, dark or the device's setting), from Page.data.theme.
+    Page.setup({
+      data: function () {
+        var mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+        return { sysDark: !!(mq && mq.matches), fullscreen: false };
+      },
+      computed: {
+        isDark: function () { var t = this.theme || 'light'; return t === 'dark' || (t === 'system' && this.sysDark); }
+      },
+      methods: {
+        // Full screen: the page's own panel (dialogs and menus are inside it, so they still show).
+        toggleFullscreen: function () {
+          var el = this.$refs.root, doc = document;
+          if (doc.fullscreenElement || doc.webkitFullscreenElement) (doc.exitFullscreen || doc.webkitExitFullscreen).call(doc);
+          else if (el && (el.requestFullscreen || el.webkitRequestFullscreen)) (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
+        }
+      },
+      watch: { isDark: function () { var vm = this; vm.$nextTick(function () { if (vm.detail) vm.drawChart(); }); } },
+      mounted: function () {
+        var vm = this, mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+        var onFs = function () { vm.fullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement); };
+        document.addEventListener('fullscreenchange', onFs);
+        document.addEventListener('webkitfullscreenchange', onFs);
+        if (!mq) return;
+        var on = function (e) { vm.sysDark = e.matches; };
+        if (mq.addEventListener) mq.addEventListener('change', on); else if (mq.addListener) mq.addListener(on);
+      }
+    });
+
+    Page.setup({
+      data: function () {
+        var collapsed = {}, sort = 'status';
+        try { collapsed = JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '{}') || {}; } catch (e) { collapsed = {}; }
+        try { sort = localStorage.getItem(SORT_KEY) || 'status'; } catch (e) { /* private mode */ }
+        return {
+          data: null, loading: false, error: '', notice: '', loadedAt: null, tickNow: Date.now(),
+          q: '', filter: 'all', sort: sort, collapsed: collapsed, busy: {}, checkingAll: false, certLimit: 6, menu: null,
+          form: null, groupForm: null, confirm: null, formError: '', saving: false, testing: false, tested: null,
+          reset: null, resetPreview: null, share: null, notify: notifyInit('health'), expiringFilter: 'all', rowLimit: {}, beatTip: null, ROW_PAGE: ROW_PAGE,
+          EXPIRING_FILTERS: [['all', 'Both'], ['critical', 'Critical'], ['warning', 'Warning']],
+          detail: null, detailHours: 24,
+          TYPES: TYPES, COLORS: COLORS, HOURS: HOURS, SPARK: SPARK, SORTS: SORTS
+        };
+      },
+      computed: {
+        services: function () { return this.data ? this.data.services : []; },
+        byId: function () {
+          var m = {};
+          this.services.forEach(function (s) { m[s.id] = s; });
+          return m;
+        },
+        counts: function () {
+          var c = { up: 0, slow: 0, retry: 0, down: 0, paused: 0, pending: 0 };
+          this.services.forEach(function (s) { c[s.status] = (c[s.status] || 0) + 1; });
+          return c;
+        },
+        // The one-line answer to "is everything OK?"
+        banner: function () {
+          var c = this.counts, n = this.services.length, vm = this;
+          if (!n) return { tone: 'idle', icon: 'fas fa-heartbeat', title: 'No monitors yet', sub: 'Add a monitor to start watching your services.' };
+          var downs = this.services.filter(function (s) { return s.status === 'down'; });
+          var degraded = c.slow + c.retry;
+          if (downs.length) {
+            var first = downs.slice().sort(function (a, b) { return String(a.lastChangeAt).localeCompare(String(b.lastChangeAt)); })[0];
+            return {
+              tone: 'down', icon: 'fas fa-exclamation-triangle',
+              title: downs.length + (downs.length === 1 ? ' monitor is down' : ' monitors are down') + (degraded ? ', ' + degraded + ' degraded' : ''),
+              sub: first.name + ' down for ' + vm.since(first.lastChangeAt) + (downs.length > 1 ? ' and ' + (downs.length - 1) + ' more' : '') + ' · refreshes every 15 s'
+            };
+          }
+          if (degraded) return { tone: 'warn', icon: 'fas fa-exclamation-circle', title: degraded + (degraded === 1 ? ' monitor is degraded' : ' monitors are degraded'), sub: 'Slow answers or failed checks being retried · nothing is down' };
+          if (c.up === 0) return { tone: 'idle', icon: 'fas fa-pause-circle', title: 'Nothing is being checked', sub: c.pending ? c.pending + ' waiting for a first check' : 'All monitors are paused' };
+          return { tone: 'ok', icon: 'fas fa-check', title: 'All systems operational', sub: c.up + ' of ' + n + ' monitors up' + (c.paused ? ' · ' + c.paused + ' paused' : '') + ' · refreshes every 15 s' };
+        },
+        kpis: function () {
+          var c = this.counts, n = this.services.length, active = this.services.filter(function (s) { return s.status !== 'paused'; });
+          var up = mean(active.map(function (s) { return s.uptime24; }).filter(function (v) { return v != null; }));
+          var avg = mean(active.map(function (s) { return s.avgMs24; }).filter(function (v) { return v != null; }));
+          var due = this.certs.filter(function (x) { return x.state !== 'ok'; });
+          var crit = due.filter(function (x) { return ['critical', 'expired', 'error'].indexOf(x.state) >= 0; }).length;
+          var downs = this.services.filter(function (s) { return s.status === 'down' && s.lastChangeAt; }).map(function (s) { return s.lastChangeAt; }).sort();
+          return [
+            { key: 'uptime', label: 'Uptime · 24h', value: this.pct(up), note: 'across ' + active.length + ' active monitor' + (active.length === 1 ? '' : 's'), tone: 'accent', valueTone: up != null && up < 99 ? 'warn' : '' },
+            { key: 'up', filter: 'up', label: 'Up', value: c.up, note: 'of ' + n + ' monitor' + (n === 1 ? '' : 's'), tone: 'up', valueTone: '' },
+            { key: 'degraded', filter: 'degraded', label: 'Degraded', value: c.slow + c.retry, note: c.retry ? c.retry + ' retrying · ' + c.slow + ' slow' : 'slow or retrying', tone: 'warn', valueTone: c.slow + c.retry ? 'warn' : '' },
+            { key: 'down', filter: 'down', label: 'Down', value: c.down, note: c.down ? 'since ' + this.dayTime(downs[0]) : 'all reachable', tone: 'down', valueTone: c.down ? 'down' : '' },
+            { key: 'avg', label: 'Avg response', value: avg == null ? '—' : this.fmtMs(Math.round(avg)), note: 'last 24 h', tone: 'grey', valueTone: '' },
+            { key: 'expiry', filter: 'expiry', label: 'Expiring', value: due.length, note: crit ? crit + ' critical or expired' : 'certificates · domains', tone: 'violet', valueTone: crit ? 'down' : due.length ? 'warn' : '' }
+          ];
+        },
+        chips: function () {
+          var c = this.counts, list = [
+            { key: 'all', label: 'All', n: this.services.length },
+            { key: 'down', label: 'Down', n: c.down },
+            { key: 'degraded', label: 'Degraded', n: c.slow + c.retry },
+            { key: 'up', label: 'Up', n: c.up },
+            { key: 'paused', label: 'Paused', n: c.paused + c.pending }
+          ];
+          var due = this.certs.filter(function (x) { return x.state !== 'ok'; }).length;
+          if (due || this.filter === 'expiry') list.push({ key: 'expiry', label: 'Expiring', n: due });
+          return list;
+        },
+        // Certificates and domain registrations, soonest expiry first (unreadable ones on top).
+        certs: function () {
+          var out = [], seen = {};
+          this.services.forEach(function (s) {
+            if (s.cert) out.push({ key: 'c' + s.id, kind: 'cert', service: s, state: s.cert.state, days: s.cert.daysLeft, date: s.cert.validTo, by: s.cert.issuerOrg || s.cert.issuer, error: s.cert.error, warn: s.certWarnDays, crit: s.certCritDays });
+            // One row per domain: monitors on the same domain share its registration.
+            if (s.domain && s.domain.state !== 'skipped' && !seen[s.domain.domain]) {
+              seen[s.domain.domain] = 1;
+              out.push({ key: 'd' + s.id, kind: 'domain', service: s, domain: s.domain.domain, state: s.domain.state, days: s.domain.daysLeft, date: s.domain.expiresAt, by: s.domain.registrar, error: s.domain.error, warn: s.domainWarnDays, crit: s.domainCritDays });
+            }
+          });
+          return out.sort(function (a, b) { return (a.days == null ? -1e6 : a.days) - (b.days == null ? -1e6 : b.days); });
+        },
+        // "Expiring soon": only what is past its monitor's thresholds (Warn / Critical when fewer than), critical first.
+        expiring: function () {
+          var order = { expired: 0, error: 1, critical: 2, warning: 3 };
+          return this.certs.filter(function (x) { return x.state in order; })
+            .sort(function (a, b) { return order[a.state] - order[b.state] || (a.days == null ? -1e6 : a.days) - (b.days == null ? -1e6 : b.days); });
+        },
+        expiringShown: function () {
+          var f = this.expiringFilter;
+          return this.expiring.filter(function (x) { return f === 'all' || (f === 'warning' ? x.state === 'warning' : x.state !== 'warning'); });
+        },
+        // Status changes, newest first, each with how long it lasted (or that it still does).
+        incidents: function () {
+          if (!this.data) return [];
+          var vm = this, list = this.data.events, out = [];
+          list.slice(0, 20).forEach(function (e, i) {
+            var next = null;
+            for (var j = i - 1; j >= 0; j--) if (list[j].serviceId === e.serviceId) { next = list[j]; break; }
+            var s = vm.byId[e.serviceId], item = Object.assign({}, e, { change: vm.changeText(e), ongoing: false, resolved: '', duration: '' });
+            if (e.to !== 'up') {
+              if (next) item.resolved = (next.to === 'up' ? 'Resolved after ' : vm.statusText(next.to) + ' after ') + vm.span(new Date(next.at) - new Date(e.at));
+              else if (s && s.status === e.to) { item.ongoing = true; item.duration = vm.since(e.at); }
+            }
+            out.push(item);
+          });
+          return out;
+        },
+        // Groups (and "Ungrouped" last) with the monitors that pass the search and filter, sorted.
+        visibleGroups: function () {
+          var vm = this, q = vm.q.toLowerCase();
+          var match = function (s) {
+            if (q && (s.name + ' ' + s.target).toLowerCase().indexOf(q) < 0) return false;
+            if (vm.filter === 'all') return true;
+            if (vm.filter === 'expiry') return (!!s.cert && s.cert.state !== 'ok') || (!!s.domain && ['ok', 'skipped'].indexOf(s.domain.state) < 0);
+            if (vm.filter === 'paused') return s.status === 'paused' || s.status === 'pending';
+            if (vm.filter === 'degraded') return s.status === 'slow' || s.status === 'retry';
+            return s.status === vm.filter;
+          };
+          var cmp = {
+            status: function (a, b) { return (STATUS[a.status] || STATUS.pending).rank - (STATUS[b.status] || STATUS.pending).rank || a.name.localeCompare(b.name); },
+            name: function (a, b) { return a.name.localeCompare(b.name); },
+            response: function (a, b) { return (b.lastMs == null ? -1 : b.lastMs) - (a.lastMs == null ? -1 : a.lastMs); }
+          }[vm.sort] || function () { return 0; };
+          var known = {};
+          vm.data.groups.forEach(function (g) { known[g.id] = true; });
+          var groups = vm.data.groups.map(function (g) { return { id: g.id, name: g.name, description: g.description, color: g.color, sortOrder: g.sortOrder }; });
+          if (vm.services.some(function (s) { return !known[s.groupId]; })) groups.push({ id: 0, name: 'Ungrouped', description: '', color: '#98A2B3' });
+          var filtering = !!q || vm.filter !== 'all';
+          return groups.map(function (g) {
+            var all = vm.services.filter(function (s) { return (known[s.groupId] ? s.groupId : 0) === g.id; });
+            var down = all.filter(function (s) { return s.status === 'down'; }).length;
+            var degraded = all.filter(function (s) { return s.status === 'slow' || s.status === 'retry'; }).length;
+            var up = mean(all.filter(function (s) { return s.status !== 'paused' && s.uptime24 != null; }).map(function (s) { return s.uptime24; }));
+            return Object.assign(g, {
+              all: all, list: all.filter(match).sort(cmp), uptime: up,
+              summary: all.length + ' monitor' + (all.length === 1 ? '' : 's') + (down ? ' · ' + down + ' down' : degraded ? ' · ' + degraded + ' degraded' : all.length ? ' · all operational' : '')
+            });
+          }).filter(function (g) { return !filtering || g.list.length; });
+        },
+        certCapable: function () {
+          if (!this.form) return false;
+          return this.form.type === 'tcp' || (this.form.type === 'http' && /^https:/i.test(this.form.target || 'https:'));
+        },
+        // The domain whose registration would be watched (as the server works it out), for the form.
+        domainHint: function () {
+          if (!this.form) return {};
+          var t = this.form.type, target = String(this.form.target || '').trim(), host = target;
+          if (t === 'http') { try { host = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(target) ? target : 'https://' + target).hostname; } catch (e) { host = ''; } }
+          if (t === 'tcp') host = target.replace(/:\d+$/, '').replace(/^\[|\]$/g, '');
+          host = host.toLowerCase().replace(/\.$/, '');
+          if (!host) return {};
+          if (/^[\d.]+$/.test(host) || host.indexOf(':') >= 0) return { skipped: '"' + host + '" is an IP address, not a domain name' };
+          var labels = host.split('.'), tld = labels[labels.length - 1];
+          if (labels.length < 2 || INTERNAL.indexOf(tld) >= 0) return { skipped: '"' + host + '" is not a public domain name (its suffix ".' + tld + '" is not managed by ICANN)' };
+          var take = tld.length === 2 && labels.length >= 3 && SECOND_LEVEL.indexOf(labels[labels.length - 2]) >= 0 ? 3 : 2;
+          return labels.length < take ? { skipped: '"' + host + '" is a public suffix' } : { domain: labels.slice(-take).join('.') };
+        },
+        testSummary: function () {
+          var t = this.tested, r = t.result, parts = [];
+          if (r.code) parts.push('HTTP ' + r.code);
+          if (r.ms != null) parts.push(this.fmtMs(r.ms));
+          if (r.error) parts.push(r.error);
+          if (r.answer) parts.push(r.answer);
+          if (t.cert) parts.push(t.cert.validTo ? 'certificate ' + t.cert.daysLeft + ' days (' + (t.cert.issuerOrg || t.cert.issuer) + ')' + (t.cert.error ? ', ' + t.cert.error : '') : 'certificate: ' + t.cert.error);
+          if (t.domain) parts.push(t.domain.skipped ? t.domain.skipped : t.domain.expiresAt ? 'domain ' + t.domain.domain + ' ' + t.domain.daysLeft + ' days' : 'domain: ' + t.domain.error);
+          return parts.join(' · ');
+        },
+
+        // ---- detail ----
+        detailSvc: function () { return (this.detail && this.byId[this.detail.service.id]) || {}; },
+        periodLabel: function () { return this.detailHours < 24 ? this.detailHours + 'h' : this.detailHours / 24 + 'd'; },
+        detailStats: function () {
+          var checks = this.detail ? this.detail.checks : [];
+          if (!checks.length) return { uptime: null, avg: null, p95: null, failed: 0, downText: 'no checks' };
+          var ok = checks.filter(function (c) { return c.status !== 'down'; });
+          var ms = ok.map(function (c) { return c.ms; }).filter(function (v) { return v != null; }).sort(function (a, b) { return a - b; });
+          var failed = checks.length - ok.length;
+          return {
+            uptime: Math.round(ok.length / checks.length * 10000) / 100,
+            avg: ms.length ? Math.round(mean(ms)) : null,
+            p95: ms.length ? ms[Math.min(ms.length - 1, Math.floor(ms.length * 0.95))] : null,
+            failed: failed,
+            downText: failed ? '~' + this.span(failed * this.detail.service.intervalSec * 1000) + ' down' : 'no downtime'
+          };
+        },
+        detailBeats: function () {
+          if (!this.detail) return [];
+          var vm = this, list = this.detail.checks.slice(-90), out = [];
+          for (var i = list.length; i < 90; i++) out.push({ s: 'empty', title: 'No check' });
+          list.forEach(function (c) { out.push({ s: c.status, title: vm.when(c.at) + ' · ' + vm.statusText(c.status) + (c.ms != null ? ' · ' + vm.fmtMs(c.ms) : '') + (c.error ? ' · ' + c.error : '') }); });
+          return out;
+        },
+        detailBeatsFrom: function () {
+          var list = this.detail ? this.detail.checks.slice(-90) : [];
+          return list.length ? this.dayTime(list[0].at) : '';
+        },
+        // Status changes of the shown monitor (newest first), each with its duration.
+        detailIncidents: function () {
+          if (!this.detail) return [];
+          var vm = this, ev = this.detail.events, s = this.detail.service, out = [];
+          ev.forEach(function (e, i) {
+            if (e.to === 'up') return;
+            var next = i > 0 ? ev[i - 1] : null;
+            out.push({
+              at: e.at, to: e.to, message: e.message,
+              ongoing: !next && s.status === e.to,
+              duration: next ? vm.span(new Date(next.at) - new Date(e.at)) : s.status === e.to ? vm.since(e.at) : '—'
+            });
+          });
+          return out;
+        },
+        nextCheck: function () {
+          var s = this.detail && this.detail.service;
+          if (!s || s.status === 'paused') return 'paused';
+          if (!s.lastCheckedAt) return 'waiting';
+          var every = s.status === 'retry' && s.retryIntervalSec ? s.retryIntervalSec : s.intervalSec;
+          var left = Math.round((new Date(s.lastCheckedAt).getTime() + every * 1000 - this.tickNow) / 1000);
+          return left > 0 ? 'next in ' + this.span(left * 1000) : 'due now';
+        },
+        latestChecks: function () { return this.detail ? this.detail.checks.slice(-100).reverse() : []; },
+        // Each monitor's heartbeat bar as one CSS gradient (SPARK slots: a bar and a gap each), made once per load.
+        beatStyles: function () {
+          var out = {};
+          this.services.forEach(function (s) {
+            var list = s.spark || [], pad = SPARK - list.length, kinds = [];
+            for (var i = 0; i < SPARK; i++) { var c = i < pad ? null : list[i - pad]; kinds.push(c ? beatKind(c.s) : 'empty'); }
+            out[s.id] = beatGradient(kinds);
+          });
+          return out;
+        },
+        // Each group's bar (shown while it is collapsed): slot by slot over its monitors' last SPARK checks,
+        // the worst one wins (down, then slow / retrying, then up). Paused monitors don't count.
+        groupBeats: function () {
+          var out = {};
+          (this.data ? this.visibleGroups : []).forEach(function (g) {
+            var slots = [];
+            for (var i = 0; i < SPARK; i++) slots.push({ up: 0, warn: 0, down: 0 });
+            g.all.forEach(function (s) {
+              if (s.status === 'paused') return;
+              var list = s.spark || [], pad = SPARK - list.length;
+              list.forEach(function (c, j) { slots[pad + j][beatKind(c.s)]++; });
+            });
+            var kinds = slots.map(function (x) { return x.down ? 'down' : x.warn ? 'warn' : x.up ? 'up' : 'empty'; });
+            var down = slots.filter(function (x) { return x.down; }).length;
+            out[g.id] = { style: beatGradient(kinds), slots: slots, label: 'Last ' + SPARK + ' checks of ' + g.all.length + ' monitors, ' + down + ' with failures' };
+          });
+
+          return out;
+        },
+        notifyActive: function () { return !!this.notifyAllowed && this.notify.on && this.notify.state === 'granted'; },
+        notifyTitle: function () {
+          var n = this.notify;
+          if (n.on) return 'Browser notifications on (a monitor down / back up). Click to turn off.';
+          if (n.state === 'insecure') return 'Browser notifications need HTTPS';
+          if (n.state === 'denied') return 'Notifications are blocked for this site in the browser';
+          if (n.state === 'unsupported') return 'This browser does not support notifications';
+          return 'Turn on browser notifications (a monitor down / back up)';
+        },
+        sortedServices: function () { return this.services.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }); },
+        // What the reset form asks for, as one value to watch.
+        resetKey: function () {
+          var r = this.reset;
+          return r ? [r.scope, r.groupId, r.serviceId, r.checks, r.events, r.olderThanDays].join('|') : '';
+        }
+      },
+      watch: {
+        resetKey: function (k) {
+          var vm = this;
+          vm.resetPreview = null;
+          clearTimeout(vm._resetTimer);
+          if (!k || (!vm.reset.checks && !vm.reset.events)) return;
+          vm._resetTimer = setTimeout(function () {
+            post(BASE + '/reset/preview', vm.reset).then(function (d) { if (vm.resetKey === k) vm.resetPreview = d; })
+              .catch(function (err) { vm.formError = err.message; });
+          }, 200);
+        }
+      },
+      methods: {
+        load: function () {
+          var vm = this;
+          if (vm.loading) return Promise.resolve();
+          vm.loading = true;
+          return getJson(BASE + '/data').then(function (d) {
+            var prev = vm.data ? vm.data.services : null;
+            vm.data = deepFreeze(d); vm.error = ''; vm.loadedAt = new Date().toISOString(); vm.tickNow = Date.now();
+            if (prev) vm.notifyChanges(prev, d.services);
+            if (vm.detail && vm.byId[vm.detail.service.id]) vm.detail = Object.assign({}, vm.detail, { service: vm.byId[vm.detail.service.id] });
+          }).catch(function (err) { vm.error = err.message; })
+            .then(function () { vm.loading = false; });
+        },
+        flash: function (text) {
+          var vm = this;
+          vm.notice = text;
+          clearTimeout(vm._noticeTimer);
+          vm._noticeTimer = setTimeout(function () { vm.notice = ''; }, 3500);
+        },
+        // Puts a monitor the server sent back into the list, keeping its history numbers.
+        merge: function (s) {
+          if (!this.data || !s) return;
+          var list = this.data.services.slice(), i = list.findIndex(function (x) { return x.id === s.id; });
+          if (i >= 0) list.splice(i, 1, deepFreeze(Object.assign({}, list[i], s)));
+          else list.push(deepFreeze(Object.assign({ uptime24: null, uptime7: null, avgMs24: null, spark: [] }, s)));
+          this.data = Object.freeze(Object.assign({}, this.data, { services: Object.freeze(list) }));
+        },
+        setSort: function (k) {
+          this.sort = k;
+          try { localStorage.setItem(SORT_KEY, k); } catch (e) { /* private mode */ }
+        },
+        openMenu: function (ev, kind, target) {
+          var r = ev.currentTarget.getBoundingClientRect(), w = 200;
+          this.menu = { kind: kind, target: target, x: Math.max(8, Math.min(window.innerWidth - w - 8, r.right - w)), y: Math.min(window.innerHeight - 240, r.bottom + 4) };
+        },
+        menuDo: function (action) {
+          var t = this.menu && this.menu.target;
+          this.menu = null;
+          if (!t) return;
+          ({
+            check: this.checkOne, detail: this.openDetail, toggle: this.toggle, edit: this.openService, delete: this.askDeleteService,
+            checkGroup: function (g) { this.checkAll(g.id); }, addHere: function (g) { this.openService(null, g.id); },
+            reset: function (s) { this.openReset('service', s.id); }, resetGroup: function (g) { this.openReset('group', g.id); },
+            editGroup: this.openGroup, deleteGroup: this.askDeleteGroup
+          })[action].call(this, t);
+        },
+
+        // ---- labels ----
+        typeOf: function (key) { return TYPES.find(function (t) { return t.key === key; }) || TYPES[0]; },
+        typeLabel: function (s) {
+          if (s.type === 'http') return /^https:/i.test(s.target) ? 'HTTPS' : 'HTTP';
+          if (s.type === 'dns') return 'DNS ' + (s.dnsType || 'A');
+          return s.type === 'tcp' ? 'TCP' : 'PING';
+        },
+        targetText: function (s) {
+          if (s.type === 'http') return (s.method && s.method !== 'GET' ? s.method + ' ' : '') + s.target;
+          if (s.type === 'dns') return s.target + (s.dnsServer ? ' @ ' + s.dnsServer : '');
+          return s.target;
+        },
+        statusText: function (k) { return (STATUS[k] || STATUS.pending).text; },
+        changeText: function (e) {
+          if (e.to === 'down') return 'went down';
+          if (e.to === 'slow') return 'became slow';
+          if (e.to === 'up') return e.from === 'down' ? 'recovered' : 'is back to normal';
+          return 'is ' + this.statusText(e.to).toLowerCase();
+        },
+        certIcon: function (k) { return CERT[k] || CERT.error; },
+        certText: function (c) {
+          if (c.daysLeft == null) return 'Unreadable';
+          if (c.daysLeft < 0) return 'Expired ' + Math.abs(c.daysLeft) + ' d ago';
+          return c.daysLeft + ' day' + (c.daysLeft === 1 ? '' : 's') + ' left' + (c.authorized === false ? ' · untrusted' : '');
+        },
+        shortDays: function (x) {
+          if (x.daysLeft == null) return 'error';
+          return x.daysLeft < 0 ? 'expired' : x.daysLeft + ' d';
+        },
+        certTitle: function (c) {
+          return c.validTo ? ('Certificate: ' + c.subject + '\nIssuer: ' + c.issuer + '\nValid to: ' + this.when(c.validTo) + (c.error ? '\n' + c.error : '')) : c.error;
+        },
+        certPending: function (s) {
+          return s.checkCert && (s.type === 'tcp' || /^https:/i.test(s.target)) && s.status !== 'paused';
+        },
+        domainText: function (d) {
+          if (d.daysLeft == null) return 'No expiry date';
+          if (d.daysLeft < 0) return 'Expired ' + Math.abs(d.daysLeft) + ' d ago';
+          return d.daysLeft + ' days left';
+        },
+        domainTitle: function (d) {
+          return 'Domain: ' + d.domain + (d.expiresAt ? '\nRegistration expires: ' + this.day(d.expiresAt) : '') + (d.registrar ? '\nRegistrar: ' + d.registrar : '') + (d.error ? '\n' + d.error : '');
+        },
+        pct: function (v) { return v == null ? '—' : (v >= 99.995 ? '100' : v.toFixed(v >= 99 ? 2 : 1)) + '%'; },
+        uptimeClass: function (v) { return v == null ? '' : v >= 99.5 ? 'smon-up-good' : v >= 95 ? 'smon-up-warn' : 'smon-up-bad'; },
+        fmtMs: function (ms) { return ms >= 10000 ? (ms / 1000).toFixed(1) + ' s' : Number(ms).toLocaleString('en-US') + ' ms'; },
+        every: function (sec) {
+          if (sec < 60) return sec + ' s';
+          if (sec < 3600) return Math.round(sec / 6) / 10 + ' min';
+          if (sec < 86400) return Math.round(sec / 360) / 10 + ' h';
+          return Math.round(sec / 8640) / 10 + ' d';
+        },
+        // 90 -> "1 minute 30 seconds"
+        duration: function (sec) {
+          sec = parseInt(sec, 10) || 0;
+          var parts = [], units = [[86400, 'day'], [3600, 'hour'], [60, 'minute'], [1, 'second']];
+          units.forEach(function (u) {
+            var n = Math.floor(sec / u[0]);
+            if (n) { parts.push(n + ' ' + u[1] + (n === 1 ? '' : 's')); sec -= n * u[0]; }
+          });
+          return parts.join(' ') || '0 seconds';
+        },
+        // A length of time in milliseconds, short: "45 s", "14 min", "3 h 5 min", "2 d 4 h".
+        span: function (ms) {
+          var s = Math.max(0, Math.round(ms / 1000));
+          if (s < 60) return s + ' s';
+          var m = Math.floor(s / 60);
+          if (m < 60) return m + ' min';
+          var h = Math.floor(m / 60);
+          if (h < 24) return h + ' h' + (m % 60 ? ' ' + (m % 60) + ' min' : '');
+          return Math.floor(h / 24) + ' d' + (h % 24 ? ' ' + (h % 24) + ' h' : '');
+        },
+        since: function (iso) { return iso ? this.span(this.tickNow - new Date(iso).getTime()) : ''; },
+        ago: function (iso) { return iso ? this.since(iso) + ' ago' : '—'; },
+        when: function (iso) {
+          if (!iso) return '';
+          var d = new Date(iso);
+          return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+        },
+        day: function (iso) {
+          var d = new Date(iso);
+          return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+        },
+        expiringCount: function (f) {
+          return this.expiring.filter(function (x) { return f === 'all' || (f === 'warning' ? x.state === 'warning' : x.state !== 'warning'); }).length;
+        },
+        // Why an entry is in "Expiring soon", in terms of its monitor's thresholds.
+        expiryWhy: function (x) {
+          if (x.state === 'expired') return 'Critical · expired';
+          if (x.state === 'error') return 'Critical · cannot be read';
+          if (x.state === 'critical') return 'Critical · fewer than ' + x.crit + ' days left';
+          return 'Warning · fewer than ' + x.warn + ' days left (critical below ' + x.crit + ')';
+        },
+        // Expiry dates as DD-MM-YYYY.
+        dmy: function (iso) { var d = new Date(iso); return pad(d.getDate()) + '-' + pad(d.getMonth() + 1) + '-' + d.getFullYear(); },
+        // "Today 13:02", "Yesterday 22:47" or "2026-10-11 18:40"
+        dayTime: function (iso) {
+          if (!iso) return '';
+          var d = new Date(iso), now = new Date(this.tickNow), t = pad(d.getHours()) + ':' + pad(d.getMinutes());
+          var start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+          if (d.getTime() >= start) return 'Today ' + t;
+          if (d.getTime() >= start - 86400000) return 'Yesterday ' + t;
+          return this.day(iso) + ' ' + t;
+        },
+        groupName: function (id) {
+          var g = this.data && this.data.groups.find(function (x) { return x.id === id; });
+          return g ? g.name : 'Ungrouped';
+        },
+        // A group bar's tooltip: how its monitors' checks went in the slot under the pointer.
+        groupBeatHover: function (e, g) {
+          var r = e.currentTarget.getBoundingClientRect(), gb = this.groupBeats[g.id];
+          if (!gb) return;
+          var slot = Math.min(SPARK - 1, Math.max(0, Math.floor((e.clientX - r.left) / r.width * SPARK)));
+          var x = gb.slots[slot], parts = [];
+          if (x.down) parts.push(x.down + ' down');
+          if (x.warn) parts.push(x.warn + ' slow / retrying');
+          if (x.up) parts.push(x.up + ' up');
+          this.beatTip = {
+            x: Math.min(window.innerWidth - 260, e.clientX + 12), y: r.bottom + 6,
+            text: (SPARK - slot === 1 ? 'Latest check' : (SPARK - slot) + ' checks ago') + ' · ' + (parts.join(', ') || 'no checks')
+          };
+        },
+        // The shared tooltip of the heartbeat bars: the check under the pointer (the bar is SPARK equal slots, padded on the left).
+        beatHover: function (e, s) {
+          var r = e.currentTarget.getBoundingClientRect(), list = s.spark || [];
+          var slot = Math.min(SPARK - 1, Math.max(0, Math.floor((e.clientX - r.left) / r.width * SPARK)));
+          var c = list[slot - (SPARK - list.length)];
+          this.beatTip = {
+            x: Math.min(window.innerWidth - 260, e.clientX + 12), y: r.bottom + 6,
+            text: c ? this.when(c.at) + ' · ' + this.statusText(c.s) + (c.ms != null ? ' · ' + this.fmtMs(c.ms) : '') : 'No check'
+          };
+        },
+        beatLabel: function (s) {
+          var list = s.spark || [], down = list.filter(function (c) { return c.s === 'down'; }).length;
+          return 'Last ' + list.length + ' checks, ' + down + ' failed';
+        },
+        // Groups start collapsed; one opened stays open (remembered in this browser). While searching or
+        // filtering, every group shows its matches.
+        isCollapsed: function (id) {
+          if (this.q || this.filter !== 'all') return false;
+          return this.collapsed[id] !== false;
+        },
+        toggleGroup: function (id) {
+          this.$set(this.collapsed, id, !this.isCollapsed(id));
+          try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(this.collapsed)); } catch (e) { /* private mode */ }
+        },
+
+        // ---- checks ----
+        checkOne: function (s) {
+          var vm = this;
+          vm.$set(vm.busy, s.id, true);
+          return post(BASE + '/services/' + s.id + '/check').then(function (d) {
+            vm.merge(d.service);
+            return vm.load().then(function () { if (vm.detail && vm.detail.service.id === s.id) vm.loadDetail(s.id, vm.detailHours); });
+          }).catch(function (err) { vm.error = err.message; })
+            .then(function () { vm.$delete(vm.busy, s.id); });
+        },
+        checkAll: function (groupId) {
+          var vm = this;
+          vm.checkingAll = true;
+          post(BASE + '/check-all', groupId == null ? {} : { groupId: groupId }).then(function (d) {
+            vm.flash(d.checked + ' monitor' + (d.checked === 1 ? '' : 's') + ' checked.');
+            return vm.load();
+          }).catch(function (err) { vm.error = err.message; })
+            .then(function () { vm.checkingAll = false; });
+        },
+        toggle: function (s) {
+          var vm = this;
+          vm.$set(vm.busy, s.id, true);
+          post(BASE + '/services/' + s.id + '/enabled', { enabled: !s.enabled }).then(function (d) {
+            vm.merge(d.service);
+            if (vm.detail && vm.detail.service.id === s.id) vm.detail = Object.assign({}, vm.detail, { service: vm.byId[s.id] });
+            vm.flash(d.service.name + (d.service.enabled ? ' resumed.' : ' paused.'));
+          }).catch(function (err) { vm.error = err.message; })
+            .then(function () { vm.$delete(vm.busy, s.id); });
+        },
+
+        // ---- monitor form ----
+        openService: function (s, groupId) {
+          this.formError = ''; this.tested = null;
+          this.form = s ? {
+            id: s.id, name: s.name, groupId: s.groupId || null, type: s.type, target: s.target, method: s.method,
+            expectedStatus: s.expectedStatus, keyword: s.keyword, maxRedirects: s.maxRedirects || 0, dnsType: s.dnsType || 'A', dnsServer: s.dnsServer || '',
+            intervalSec: s.intervalSec, retries: s.retries, retryIntervalSec: s.retryIntervalSec || s.intervalSec,
+            timeoutSec: Math.round(s.timeoutMs / 1000), slowMs: s.slowMs, checkCert: s.checkCert, checkDomain: s.checkDomain,
+            certWarnDays: s.certWarnDays, certCritDays: s.certCritDays, domainWarnDays: s.domainWarnDays, domainCritDays: s.domainCritDays,
+            ignoreTls: s.ignoreTls, enabled: s.enabled, notes: s.notes
+          } : blankForm(groupId);
+          var vm = this;
+          this.$nextTick(function () { if (vm.$refs.firstField) vm.$refs.firstField.focus(); });
+        },
+        setType: function (t) {
+          if (this.form.type === t) return;
+          this.form.type = t;
+          this.form.checkCert = t === 'http';
+          this.form.keyword = '';
+          this.tested = null;
+        },
+        // As in Uptime Kuma: the timeout follows the interval (80% of it) while it would be longer.
+        intervalChanged: function () {
+          var f = this.form, cap = Math.max(1, Math.min(300, Math.floor((f.intervalSec || 60) * 0.8)));
+          if (!f.timeoutSec || f.timeoutSec > cap) f.timeoutSec = cap;
+          if (!f.retries) f.retryIntervalSec = f.intervalSec;
+        },
+        thresholdText: function (warn, crit) {
+          if (!(crit < warn)) return 'Critical must be fewer days than Warn.';
+          return 'OK from ' + warn + ' days left · Warning below ' + warn + ' days · Critical below ' + crit + ' day' + (crit === 1 ? '' : 's') + ' · Expired after the date.';
+        },
+        closeForm: function () { this.form = null; this.formError = ''; this.tested = null; },
+        payload: function () {
+          var f = this.form;
+          return Object.assign({}, f, {
+            timeoutMs: (f.timeoutSec || 10) * 1000, checkCert: this.certCapable && f.checkCert,
+            // the same as the heartbeat is stored as 0, so it follows later interval changes
+            retryIntervalSec: f.retries && f.retryIntervalSec && f.retryIntervalSec !== f.intervalSec ? f.retryIntervalSec : 0
+          });
+        },
+        testService: function () {
+          var vm = this;
+          vm.testing = true; vm.formError = ''; vm.tested = null;
+          post(BASE + '/services/test', vm.payload()).then(function (d) { vm.tested = d; })
+            .catch(function (err) { vm.formError = err.message; })
+            .then(function () { vm.testing = false; });
+        },
+        saveService: function () {
+          var vm = this;
+          if (vm.saving) return;
+          vm.saving = true; vm.formError = '';
+          var f = vm.form;
+          post(BASE + '/services' + (f.id ? '/' + f.id : ''), vm.payload()).then(function (d) {
+            vm.merge(d.service);
+            vm.flash((f.id ? 'Saved ' : 'Created ') + d.service.name + '.');
+            vm.closeForm();
+            return vm.load().then(function () { if (vm.detail && vm.detail.service.id === d.service.id) vm.loadDetail(d.service.id, vm.detailHours); });
+          }).catch(function (err) { vm.formError = err.message; })
+            .then(function () { vm.saving = false; });
+        },
+        askDeleteService: function (s) {
+          var vm = this;
+          vm.formError = '';
+          vm.confirm = {
+            title: 'Delete monitor?',
+            text: '"' + s.name + '" and its check history will be deleted. This cannot be undone. To stop the checks for a while, pause it instead.',
+            run: function () {
+              vm.saving = true;
+              post(BASE + '/services/' + s.id + '/delete').then(function () {
+                vm.confirm = null;
+                if (vm.detail && vm.detail.service.id === s.id) vm.closeDetail();
+                vm.data = Object.assign({}, vm.data, { services: vm.data.services.filter(function (x) { return x.id !== s.id; }) });
+                vm.flash('Deleted ' + s.name + '.');
+                return vm.load();
+              }).catch(function (err) { vm.formError = err.message; })
+                .then(function () { vm.saving = false; });
+            }
+          };
+          vm.$nextTick(function () { if (vm.$refs.confirmBtn) vm.$refs.confirmBtn.focus(); });
+        },
+
+        // ---- browser notifications ----
+        toggleNotify: function () {
+          var vm = this, n = vm.notify, save = function (on) {
+            n.on = on;
+            try { localStorage.setItem('service_monitor_notify_' + n.page, on ? '1' : '0'); } catch (e) { /* private mode */ }
+            vm.flash(on ? 'Browser notifications on: you are told when a monitor goes down or comes back up.' : 'Browser notifications off.');
+          };
+          n.state = notifySupport();
+          if (n.on) return save(false);
+          if (n.state === 'unsupported') { vm.error = 'This browser does not support notifications.'; return; }
+          if (n.state === 'insecure') { vm.error = 'Browsers only allow notifications on HTTPS (or localhost). Open the app over HTTPS to use them.'; return; }
+          if (n.state === 'denied') { vm.error = 'Notifications are blocked for this site. Allow them in the browser\'s site settings, then try again.'; return; }
+          if (n.state === 'granted') return save(true);
+          Notification.requestPermission().then(function (p) {
+            n.state = p;
+            if (p === 'granted') save(true);
+            else vm.error = 'Notifications were not allowed.';
+          });
+        },
+        // Compares the monitors before and after a load: down, and back up from down, become notifications.
+        notifyChanges: function (before, after) {
+          if (!this.notifyActive) return;
+          var vm = this, old = {};
+          before.forEach(function (s) { old[s.id] = s; });
+          after.forEach(function (s) {
+            var p = old[s.id];
+            if (!p || p.status === s.status) return;
+            if (s.status === 'down') vm.notifyOne(s, 'Down: ' + s.name, (s.lastError || 'Not answering') + ' · ' + vm.dayTime(s.lastChangeAt || new Date().toISOString()), 'down');
+            else if (p.status === 'down' && (s.status === 'up' || s.status === 'slow')) {
+              vm.notifyOne(s, 'Back up: ' + s.name, (p.lastChangeAt ? 'Was down for ' + vm.span(Date.now() - new Date(p.lastChangeAt).getTime()) : 'Answering again') + (s.lastMs != null ? ' · ' + vm.fmtMs(s.lastMs) : ''), 'up');
+            }
+          });
+        },
+        notifyOne: function (s, title, body, kind) {
+          var vm = this;
+          try {
+            var n = new Notification(title, { body: body, tag: 'service-monitor-' + s.id, renotify: true, requireInteraction: kind === 'down' });
+            n.onclick = function () { window.focus(); vm.openDetail(vm.byId[s.id] || s); n.close(); };
+          } catch (e) { /* some browsers only allow notifications from a service worker */ }
+        },
+
+        // ---- share (public status page) ----
+        openShare: function () {
+          var vm = this;
+          vm.share = { loading: true };
+          getJson(BASE + '/share').then(function (d) { vm.share = Object.assign({ loading: false, saving: false, error: '', copied: false }, d); })
+            .catch(function (err) { vm.share = { loading: false, error: err.message }; });
+        },
+        saveShare: function (change) {
+          var vm = this, s = vm.share;
+          s.saving = true; s.error = '';
+          post(BASE + '/share', change).then(function (d) { vm.share = Object.assign({ loading: false, saving: false, error: '', copied: false }, d); })
+            .catch(function (err) { s.saving = false; s.error = err.message; });
+        },
+        copyShare: function () {
+          var vm = this, url = vm.share.url, done = function () { vm.share.copied = true; setTimeout(function () { if (vm.share) vm.share.copied = false; }, 2000); };
+          if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(url).then(done).catch(function () { vm.$refs.shareUrl.select(); document.execCommand('copy'); done(); });
+          else { vm.$refs.shareUrl.select(); document.execCommand('copy'); done(); }
+        },
+
+        // ---- reset statistics ----
+        openReset: function (scope, id) {
+          var first = this.sortedServices[0], g0 = this.data.groups[0];
+          this.formError = '';
+          this.resetPreview = null;
+          this.reset = {
+            scope: scope,
+            groupId: scope === 'group' ? id : g0 ? g0.id : 0,
+            serviceId: scope === 'service' ? id : first ? first.id : 0,
+            checks: true, events: true, olderThanDays: 0
+          };
+        },
+        runReset: function () {
+          var vm = this;
+          if (vm.saving || !vm.resetPreview) return;
+          vm.saving = true; vm.formError = '';
+          post(BASE + '/reset', vm.reset).then(function (d) {
+            vm.reset = null;
+            vm.flash('Cleared ' + vm.num(d.checks) + ' check' + (d.checks === 1 ? '' : 's') + ' and ' + vm.num(d.events) + ' incident' + (d.events === 1 ? '' : 's') + '.');
+            return vm.load().then(function () { if (vm.detail) vm.loadDetail(vm.detail.service.id, vm.detailHours); });
+          }).catch(function (err) { vm.formError = err.message; })
+            .then(function () { vm.saving = false; });
+        },
+        num: function (v) { return Number(v || 0).toLocaleString('en-US'); },
+
+        // ---- groups ----
+        openGroup: function (g) {
+          this.formError = '';
+          this.groupForm = g ? { id: g.id, name: g.name, description: g.description || '', color: g.color, sortOrder: g.sortOrder || 0 }
+            : { id: null, name: '', description: '', color: COLORS[(this.data ? this.data.groups.length : 0) % COLORS.length], sortOrder: this.data ? this.data.groups.length : 0 };
+          var vm = this;
+          this.$nextTick(function () { if (vm.$refs.groupName) vm.$refs.groupName.focus(); });
+        },
+        saveGroup: function () {
+          var vm = this, g = vm.groupForm;
+          if (vm.saving) return;
+          vm.saving = true; vm.formError = '';
+          post(BASE + '/groups' + (g.id ? '/' + g.id : ''), g).then(function (d) {
+            vm.groupForm = null;
+            vm.flash((g.id ? 'Saved group ' : 'Created group ') + d.group.name + '.');
+            return vm.load();
+          }).catch(function (err) { vm.formError = err.message; })
+            .then(function () { vm.saving = false; });
+        },
+        askDeleteGroup: function (g) {
+          var vm = this;
+          vm.formError = '';
+          vm.confirm = {
+            title: 'Delete group?',
+            text: 'The group "' + g.name + '" will be deleted.' + (g.all.length ? ' Its ' + g.all.length + ' monitor' + (g.all.length === 1 ? ' is' : 's are') + ' kept and move' + (g.all.length === 1 ? 's' : '') + ' to Ungrouped.' : ''),
+            run: function () {
+              vm.saving = true;
+              post(BASE + '/groups/' + g.id + '/delete').then(function () {
+                vm.confirm = null;
+                vm.flash('Deleted group ' + g.name + '.');
+                return vm.load();
+              }).catch(function (err) { vm.formError = err.message; })
+                .then(function () { vm.saving = false; });
+            }
+          };
+          vm.$nextTick(function () { if (vm.$refs.confirmBtn) vm.$refs.confirmBtn.focus(); });
+        },
+
+        // ---- detail ----
+        openDetail: function (s) {
+          if (!s) return;
+          this.menu = null;
+          this.detail = { service: s, checks: [], events: [] };
+          this.loadDetail(s.id, this.detailHours);
+        },
+        closeDetail: function () {
+          this.detail = null;
+          if (chart) { chart.destroy(); chart = null; }
+        },
+        loadDetail: function (id, hours) {
+          var vm = this;
+          vm.detailHours = hours;
+          getJson(BASE + '/services/' + id + '?hours=' + hours).then(function (d) {
+            if (!vm.detail || vm.detail.service.id !== id) return;
+            vm.detail = deepFreeze(d);
+            vm.$nextTick(vm.drawChart);
+          }).catch(function (err) { vm.error = err.message; });
+        },
+        drawChart: function () {
+          var el = this.$refs.chart;
+          if (chart) { chart.destroy(); chart = null; }
+          if (!el || !window.Chart || !this.detail || !this.detail.checks.length) return;
+          var vm = this, checks = this.detail.checks, long = this.detailHours > 24;
+          var css = getComputedStyle(el), color = function (n, f) { return css.getPropertyValue(n).trim() || f; };
+          var accent = color('--sm-accent', '#2563EB');
+          var labels = checks.map(function (c) {
+            var d = new Date(c.at);
+            return (long ? pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + ' ' : '') + pad(d.getHours()) + ':' + pad(d.getMinutes());
+          });
+          // The fill under the line: the accent at 8%, from the computed colour.
+          var fill = (function () { var c = document.createElement('canvas').getContext('2d'); c.fillStyle = accent; var h = c.fillStyle; return /^#[0-9a-f]{6}$/i.test(h) ? h + '14' : 'rgba(37,99,235,.08)'; })();
+          chart = new Chart(el, {
+            type: 'line',
+            data: {
+              labels: labels,
+              datasets: [
+                { label: 'Response', data: checks.map(function (c) { return c.status === 'down' ? null : c.ms; }), borderColor: accent, backgroundColor: fill, fill: true,
+                  borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, spanGaps: false, tension: 0.25 },
+                { label: 'Down', data: checks.map(function (c) { return c.status === 'down' ? 0 : null; }), borderColor: color('--down', '#F04438'), backgroundColor: color('--down', '#F04438'),
+                  showLine: false, pointRadius: 4, pointStyle: 'triangle' }
+              ]
+            },
+            options: {
+              responsive: true, maintainAspectRatio: false, animation: false,
+              interaction: { mode: 'index', intersect: false },
+              scales: {
+                x: { ticks: { maxTicksLimit: 8, autoSkip: true, maxRotation: 0, color: color('--sm-muted', '#667085'), font: { size: 11 } }, grid: { display: false }, border: { color: color('--sm-line', '#E4E7EC') } },
+                y: { beginAtZero: true, ticks: { color: color('--sm-muted', '#667085'), font: { size: 11 }, callback: function (v) { return v + ' ms'; } }, grid: { color: color('--sm-line-soft', '#F2F4F7') }, border: { display: false } }
+              },
+              plugins: {
+                legend: { display: false },
+                tooltip: {
+                  backgroundColor: '#101828', padding: 10, cornerRadius: 8, displayColors: false,
+                  callbacks: {
+                    title: function (items) { return vm.when(checks[items[0].dataIndex].at); },
+                    label: function (item) {
+                      var c = checks[item.dataIndex];
+                      if (item.datasetIndex === 1) return item.raw == null ? null : 'Down' + (c.error ? ': ' + c.error : '');
+                      return item.raw == null ? null : vm.fmtMs(item.raw) + (c.status === 'slow' ? ' (slow)' : c.status === 'retry' ? ' (retrying)' : '');
+                    }
+                  }
+                }
+              }
+            }
+          });
+        },
+        onKey: function (e) {
+          if (e.key !== 'Escape') return;
+          if (this.menu) this.menu = null;
+          else if (this.confirm) this.confirm = null;
+          else if (this.reset) this.reset = null;
+          else if (this.share) this.share = null;
+          else if (this.groupForm) this.groupForm = null;
+          else if (this.form) this.closeForm();
+          else if (this.detail) this.closeDetail();
+        }
+      },
+      mounted: function () {
+        var vm = this;
+        vm.load();
+        vm._timer = setInterval(function () {
+          // hidden tab: keep checking only while browser notifications are on (that is when they help)
+          if (document.hidden && !vm.notifyActive) return;
+          // "… ago" texts move every 15 s (each move redraws the list), and with each load
+          if (Date.now() - vm.tickNow >= REFRESH_MS) vm.tickNow = Date.now();
+          if (vm.form || vm.groupForm || vm.confirm || vm.reset || vm.share) return;
+          if (Date.now() - new Date(vm.loadedAt || 0).getTime() >= REFRESH_MS) vm.load();
+        }, 5000);
+        document.addEventListener('keydown', vm.onKey);
+        document.addEventListener('click', function () { vm.menu = null; });
+        window.addEventListener('scroll', function () { vm.menu = null; }, true);
+      }
+    });
+  })();
+</script>

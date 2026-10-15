@@ -125,8 +125,9 @@
           <!-- Always visible: name and color -->
           <div class="form-row">
             <div class="form-group col-md-7">
-              <label for="c_name">Name</label>
-              <input id="c_name" ref="name" type="text" name="name" class="form-control" v-model="f.name"
+              <label for="c_name">Name <span class="label-required" aria-hidden="true">*</span></label>
+              <input id="c_name" ref="name" type="text" name="name" class="form-control" :class="{ 'is-invalid': ui.invalid.name }" v-model="f.name"
+                     required aria-required="true" @input="ui.invalid.name = false"
                      placeholder="e.g. Hospital A - Production" maxlength="80">
             </div>
             <div class="form-group col-md-5">
@@ -140,6 +141,30 @@
               <input type="hidden" name="color" :value="f.color">
             </div>
           </div>
+
+          <!-- Centrix -->
+          <section class="conn-section" :class="{ 'is-open': open.centrix }">
+            <button type="button" class="conn-section-head" @click="toggle('centrix')" :aria-expanded="open.centrix ? 'true' : 'false'">
+              <i class="fas fa-chevron-right conn-section-chevron"></i>
+              <i class="fas fa-hospital conn-section-icon"></i>
+              <span class="conn-section-title">Centrix</span>
+              <span class="conn-section-summary">{{ summary.centrix }}</span>
+            </button>
+            <div class="conn-section-body" v-show="open.centrix">
+              <div class="form-row">
+                <div class="form-group col-sm-4 mb-0">
+                  <label for="c_site">Default site code <span class="label-required" aria-hidden="true">*</span></label>
+                  <input id="c_site" ref="site" type="text" name="default_site_code" class="form-control" :class="{ 'is-invalid': ui.invalid.site }"
+                         v-model="f.default_site_code" placeholder="e.g. 00057" required aria-required="true" @input="ui.invalid.site = false">
+                  <small class="form-text">Organisation code in this database.</small>
+                </div>
+                <div class="form-group col-sm-8 mb-0">
+                  <label for="c_cxurl">Centrix base URL</label>
+                  <input id="c_cxurl" type="text" name="centrix_base_url" class="form-control" v-model="f.centrix_base_url" placeholder="http://127.0.0.1:8080">
+                </div>
+              </div>
+            </div>
+          </section>
 
           <!-- MongoDB -->
           <section class="conn-section" :class="{ 'is-open': open.mongodb }">
@@ -161,8 +186,9 @@
               <template v-if="f.conn_type === 'single'">
                 <div class="form-row">
                   <div class="form-group" :class="f.use_srv ? 'col-12' : 'col-sm-9'">
-                    <label for="c_host">Server</label>
-                    <input id="c_host" ref="host" type="text" class="form-control" v-model="f.host"
+                    <label for="c_host">Server <span class="label-required" aria-hidden="true">*</span></label>
+                    <input id="c_host" ref="host" type="text" class="form-control" :class="{ 'is-invalid': ui.invalid.host }" v-model="f.host"
+                           required aria-required="true" @input="ui.invalid.host = false"
                            :placeholder="f.use_srv ? 'cluster0.example.mongodb.net' : 'localhost'" spellcheck="false">
                   </div>
                   <div v-if="!f.use_srv" class="form-group col-sm-3">
@@ -177,10 +203,11 @@
               </template>
 
               <template v-else>
-                <label>Members</label>
+                <label>Members <span class="label-required" aria-hidden="true">*</span></label>
                 <div v-for="(m, i) in f.members" :key="i" class="form-row member-row">
                   <div class="col">
-                    <input type="text" class="form-control" v-model="m.host" :placeholder="'member ' + (i + 1) + ' host'"
+                    <input type="text" class="form-control" :class="{ 'is-invalid': ui.invalid.host && i === 0 }" v-model="m.host" @input="ui.invalid.host = false"
+                           :required="i === 0" :aria-required="i === 0 ? 'true' : null" :placeholder="'member ' + (i + 1) + ' host'"
                            :ref="'member' + i" spellcheck="false" :aria-label="'Member ' + (i + 1) + ' host'">
                   </div>
                   <div class="col-3">
@@ -287,29 +314,6 @@
               </div>
               <input type="hidden" name="tls" :value="f.tls ? '1' : '0'">
               <input type="hidden" name="tls_insecure" :value="f.tls && f.tls_insecure ? '1' : '0'">
-            </div>
-          </section>
-
-          <!-- Centrix -->
-          <section class="conn-section" :class="{ 'is-open': open.centrix }">
-            <button type="button" class="conn-section-head" @click="toggle('centrix')" :aria-expanded="open.centrix ? 'true' : 'false'">
-              <i class="fas fa-chevron-right conn-section-chevron"></i>
-              <i class="fas fa-hospital conn-section-icon"></i>
-              <span class="conn-section-title">Centrix</span>
-              <span class="conn-section-summary">{{ summary.centrix }}</span>
-            </button>
-            <div class="conn-section-body" v-show="open.centrix">
-              <div class="form-row">
-                <div class="form-group col-sm-4 mb-0">
-                  <label for="c_site">Default site code</label>
-                  <input id="c_site" type="text" name="default_site_code" class="form-control" v-model="f.default_site_code" placeholder="00057">
-                  <small class="form-text">Organisation code in this database (blank = 00057).</small>
-                </div>
-                <div class="form-group col-sm-8 mb-0">
-                  <label for="c_cxurl">Centrix base URL</label>
-                  <input id="c_cxurl" type="text" name="centrix_base_url" class="form-control" v-model="f.centrix_base_url" placeholder="http://127.0.0.1:8080">
-                </div>
-              </div>
             </div>
           </section>
 
@@ -464,13 +468,13 @@
     auth_mode: 'password', auth_mechanism: '', mongodb_username: '', mongodb_password: '', mongodb_auth_source: '',
     has_mongodb_password: false,
     tls: false, tls_insecure: false,
-    default_site_code: '00057', centrix_base_url: '',
+    default_site_code: '', centrix_base_url: '',
     jasperserver_db_ip: '', jasperserver_db_port: '', jasperserver_db_user: '', jasperserver_db_pass: '', jasperserver_db_name: '',
     has_jasperserver_db_pass: false,
     connect_timeout_ms: '', app_name: ''
   };
-  // Sections start collapsed except MongoDB.
-  var DEFAULT_OPEN = { mongodb: true, auth: false, tls: false, centrix: false, jasper: false, more: false };
+  // Sections start collapsed except Centrix and MongoDB.
+  var DEFAULT_OPEN = { mongodb: true, auth: false, tls: false, centrix: true, jasper: false, more: false };
 
   // "h1:27017,h2" -> [{ host: 'h1', port: '27017' }, { host: 'h2', port: '' }]
   function splitMembers(text) {
@@ -488,7 +492,7 @@
       return {
         f: $.extend(true, {}, EMPTY_CONNECTION),
         open: $.extend({}, DEFAULT_OPEN),
-        ui: { showImport: false, uriInput: '', exportUri: '', copied: false, test: null, busy: false, testing: false, formError: '' },
+        ui: { showImport: false, uriInput: '', exportUri: '', copied: false, test: null, busy: false, testing: false, formError: '', invalid: { name: false, site: false, host: false } },
         pendingDelete: { ID: null, NAME: '' },
         connectingId: null,
         colors: [
@@ -546,7 +550,7 @@
       },
       toggle: function (name) { this.open[name] = !this.open[name]; },
       resetUi: function (showImport) {
-        this.ui = { showImport: showImport, uriInput: '', exportUri: '', copied: false, test: null, busy: false, testing: false, formError: '' };
+        this.ui = { showImport: showImport, uriInput: '', exportUri: '', copied: false, test: null, busy: false, testing: false, formError: '', invalid: { name: false, site: false, host: false } };
         this.open = $.extend({}, DEFAULT_OPEN);
       },
       openAdd: function () {
@@ -653,7 +657,7 @@
       },
       testConnection: function () {
         var vm = this;
-        if (!vm.validate()) return;
+        if (!vm.validate(['host'])) return;
         vm.ui.busy = vm.ui.testing = true;
         vm.ui.test = null;
         vm.post('/api/database/connections/test', vm.payload())
@@ -661,28 +665,32 @@
           .catch(function () { vm.ui.test = { ok: false, error: 'The test request failed.' }; })
           .then(function () { vm.ui.busy = vm.ui.testing = false; });
       },
-      // Required fields may sit in a collapsed section: open it and focus the field.
-      validate: function () {
-        this.ui.formError = '';
-        if (!this.hostValue) {
-          this.open.mongodb = true;
-          this.ui.formError = this.f.conn_type === 'single' ? 'Enter the server.' : 'Add at least one replica set member.';
-          var vm = this;
+      // Required fields (all, or the keys given): marks the empty ones, shows the first one's message,
+      // opens its section when collapsed and focuses it.
+      validate: function (keys) {
+        var vm = this, f = this.f;
+        var checks = [
+          { key: 'name', ok: !!f.name.trim(), message: 'Enter a name for this connection.',
+            el: function () { return vm.$refs.name; } },
+          { key: 'site', section: 'centrix', ok: !!String(f.default_site_code || '').trim(), message: 'Enter the default site code.',
+            el: function () { return vm.$refs.site; } },
+          { key: 'host', section: 'mongodb', ok: !!this.hostValue,
+            message: f.conn_type === 'single' ? 'Enter the server.' : 'Add at least one replica set member.',
+            el: function () { return f.conn_type === 'single' ? vm.$refs.host : (vm.$refs.member0 || [])[0]; } }
+        ].filter(function (c) { return !keys || keys.indexOf(c.key) >= 0; });
+        var failed = checks.filter(function (c) { return !c.ok; });
+        checks.forEach(function (c) { vm.ui.invalid[c.key] = !c.ok; });
+        failed.forEach(function (c) { if (c.section) vm.open[c.section] = true; });
+        this.ui.formError = failed.length ? failed[0].message : '';
+        if (failed.length) {
           this.$nextTick(function () {
-            var el = vm.f.conn_type === 'single' ? vm.$refs.host : (vm.$refs.member0 || [])[0];
+            var el = failed[0].el();
             if (el) el.focus();
           });
-          return false;
         }
-        return true;
+        return !failed.length;
       },
       onSubmit: function (e) {
-        if (!this.f.name.trim()) {
-          e.preventDefault();
-          this.ui.formError = 'Enter a name for this connection.';
-          this.$refs.name.focus();
-          return;
-        }
         if (!this.validate()) e.preventDefault();
       },
       confirmDelete: function (item) {

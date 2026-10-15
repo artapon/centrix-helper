@@ -1,0 +1,144 @@
+<div class="col-12">
+<div class="el">
+
+  <header class="el-pagehead">
+    <div>
+      <div class="el-eyebrow">E-Learning</div>
+      <h1>Course Categories</h1>
+      <p>The categories a course is filed under: a course can be in several (course managers pick them in the course editor), and learners filter the catalogue by them. Renaming a category renames it on its courses.</p>
+    </div>
+    <div class="el-pagehead-tools">
+      <label class="el-search"><i class="fas fa-search" aria-hidden="true"></i><span class="sr-only">Search categories</span><input v-model.trim="q" type="search" placeholder="Search categories"></label>
+      <button type="button" class="el-btn is-primary" @click="edit(null)"><i class="fas fa-plus" aria-hidden="true"></i> New category</button>
+    </div>
+  </header>
+
+  <div v-if="error" class="el-msg is-error" role="alert"><i class="fas fa-exclamation-triangle"></i><span>{{ error }}</span></div>
+
+  <div v-if="!items.length" class="el-empty">
+    <div class="el-empty-icon"><i class="fas fa-tags" aria-hidden="true"></i></div>
+    <h3>No categories yet</h3>
+    <p>Add categories such as "HIS basics", "Nursing" or "Onboarding", then pick one for each course in the course editor.</p>
+    <button type="button" class="el-btn is-primary" @click="edit(null)"><i class="fas fa-plus" aria-hidden="true"></i> New category</button>
+  </div>
+
+  <section v-else class="el-panel">
+    <div class="el-panel-body">
+      <div class="el-table-wrap">
+        <table class="el-table">
+          <thead><tr><th style="width: 80px;">Order</th><th>Name</th><th>Description</th><th>Courses</th><th>Updated</th><th></th></tr></thead>
+          <tbody>
+            <tr v-if="!shown.length"><td colspan="6" class="el-muted" style="text-align: center; padding: 20px;">No categories match.</td></tr>
+            <tr v-for="c in shown" :key="c.id">
+              <td class="el-nowrap">
+                <button type="button" class="el-icon-btn" title="Move up" :disabled="busy || q || index(c) === 0" @click="move(c, -1)"><i class="fas fa-arrow-up" aria-hidden="true"></i><span class="sr-only">Move up</span></button>
+                <button type="button" class="el-icon-btn" title="Move down" :disabled="busy || q || index(c) === items.length - 1" @click="move(c, 1)"><i class="fas fa-arrow-down" aria-hidden="true"></i><span class="sr-only">Move down</span></button>
+              </td>
+              <td><b>{{ c.name }}</b></td>
+              <td class="el-muted">{{ c.description }}</td>
+              <td>{{ c.courses }}</td>
+              <td class="el-nowrap el-muted"><small>{{ day(c.updatedAt) }}<template v-if="c.updatedBy"> · {{ c.updatedBy }}</template></small></td>
+              <td class="el-nowrap" style="text-align: right;">
+                <template v-if="confirm !== c.id">
+                  <button type="button" class="el-icon-btn" title="Edit" @click="edit(c)"><i class="fas fa-pen" aria-hidden="true"></i><span class="sr-only">Edit</span></button>
+                  <button type="button" class="el-icon-btn is-danger" title="Delete" @click="confirm = c.id"><i class="far fa-trash-alt" aria-hidden="true"></i><span class="sr-only">Delete</span></button>
+                </template>
+                <span v-else>
+                  <small v-if="c.courses" class="el-muted">{{ c.courses }} course{{ c.courses === 1 ? '' : 's' }} lose this category. </small>
+                  <button type="button" class="el-link" style="color: var(--el-bad);" :disabled="busy" @click="remove(c)">Delete</button> · <button type="button" class="el-link" @click="confirm = null">Keep</button>
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- New / edit -->
+  <div v-if="m" class="el-modal" role="dialog" aria-modal="true" aria-labelledby="el-cat-title" @mousedown.self="m = null">
+    <form class="el-modal-box is-sm" @submit.prevent="save">
+      <div class="el-modal-head">
+        <div><h3 id="el-cat-title">{{ m.id ? 'Edit category' : 'New category' }}</h3><small v-if="m.id && m.courses" class="el-muted">{{ m.courses }} course{{ m.courses === 1 ? '' : 's' }} in it</small></div>
+        <button type="button" class="el-icon-btn" title="Close" @click="m = null"><i class="fas fa-times" aria-hidden="true"></i><span class="sr-only">Close</span></button>
+      </div>
+      <div class="el-modal-body">
+        <label class="el-field">Name
+          <input ref="name" v-model="m.f.name" class="el-input" maxlength="80" required placeholder="e.g. HIS basics"></label>
+        <label class="el-field">Description <span class="el-opt">(optional)</span>
+          <textarea v-model="m.f.description" class="el-input" rows="3" maxlength="500" placeholder="What courses go here"></textarea></label>
+        <div v-if="m.id && m.courses && m.f.name.trim() && m.f.name.trim() !== m.name" class="el-msg is-info"><i class="fas fa-info-circle"></i><span>The {{ m.courses }} course{{ m.courses === 1 ? '' : 's' }} in "{{ m.name }}" will be in "{{ m.f.name.trim() }}".</span></div>
+        <div v-if="m.error" class="el-msg is-error" role="alert"><i class="fas fa-exclamation-triangle"></i><span>{{ m.error }}</span></div>
+      </div>
+      <div class="el-modal-foot">
+        <button type="button" class="el-btn" @click="m = null">Cancel</button>
+        <button type="submit" class="el-btn is-primary" :disabled="m.busy"><i :class="m.busy ? 'fas fa-spinner fa-spin' : 'fas fa-save'" aria-hidden="true"></i> {{ m.id ? 'Save' : 'Add category' }}</button>
+      </div>
+    </form>
+  </div>
+
+</div>
+</div>
+
+<script src="/e-learning/assets/elearning.js"></script>
+<script>
+  (function () {
+    'use strict';
+    Page.setup({
+      data: function () {
+        return { items: Page.data.list.map(function (c) { return Object.assign({}, c); }), q: '', m: null, confirm: null, busy: false, error: '' };
+      },
+      mounted: function () {
+        var self = this;
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') self.m = null; });
+      },
+      computed: {
+        shown: function () {
+          var q = this.q.toLowerCase();
+          return !q ? this.items : this.items.filter(function (c) { return (c.name + ' ' + c.description).toLowerCase().indexOf(q) >= 0; });
+        }
+      },
+      methods: {
+        day: function (iso) { return iso ? new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : ''; },
+        index: function (c) { return this.items.indexOf(c); },
+        edit: function (c) {
+          var self = this;
+          this.m = { id: c ? c.id : null, name: c ? c.name : '', courses: c ? c.courses : 0, busy: false, error: '', f: { name: c ? c.name : '', description: c ? c.description : '' } };
+          this.$nextTick(function () { if (self.$refs.name) self.$refs.name.focus(); });
+        },
+        save: function () {
+          var m = this.m, self = this;
+          m.busy = true;
+          m.error = '';
+          ELearn.post('/e-learning/categories' + (m.id ? '/' + m.id : ''), m.f)
+            .then(function (r) {
+              var i = self.items.findIndex(function (c) { return c.id === r.category.id; });
+              if (i >= 0) self.items.splice(i, 1, r.category);
+              else self.items.push(r.category);
+              self.m = null;
+            })
+            .catch(function (err) { m.error = err.message; m.busy = false; });
+        },
+        remove: function (c) {
+          var self = this;
+          this.busy = true;
+          this.error = '';
+          ELearn.post('/e-learning/categories/' + c.id + '/delete', {})
+            .then(function () { self.items = self.items.filter(function (x) { return x.id !== c.id; }); self.confirm = null; })
+            .catch(function (err) { self.error = err.message; })
+            .finally(function () { self.busy = false; });
+        },
+        move: function (c, by) {
+          var i = this.index(c), j = i + by, self = this, before = this.items.slice();
+          if (j < 0 || j >= this.items.length) return;
+          this.items.splice(i, 1);
+          this.items.splice(j, 0, c);
+          this.busy = true;
+          ELearn.post('/e-learning/categories/order', { ids: this.items.map(function (x) { return x.id; }) })
+            .catch(function (err) { self.items = before; self.error = err.message; })
+            .finally(function () { self.busy = false; });
+        }
+      }
+    });
+  })();
+</script>

@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const asyncHandler = require('../../core/http/asyncHandler');
+const asyncHandler = require('../../core/http/async.handler');
 const inventoryController = require('./controllers/inventory.controller');
 
 router.get('/inventory/tracking', asyncHandler(inventoryController.index));

@@ -1,0 +1,805 @@
+<div class="col-12">
+  <div class="qt-layout">
+
+    <!-- Templates -->
+    <aside class="card qt-side" data-table-filter="off">
+      <div class="card-header qt-side-head">
+        <i class="fas fa-clone qt-ic"></i> <b>Templates</b> <span class="qt-aside">{{ list.length }}</span>
+        <button type="button" class="btn btn-sm btn-primary qt-new" @click="startNew"><i class="fas fa-plus"></i> New</button>
+      </div>
+      <div class="qt-side-search">
+        <i class="fas fa-search"></i>
+        <input type="search" v-model="search" placeholder="Search name, category, query…" aria-label="Search templates">
+      </div>
+      <div class="qt-side-list">
+        <div v-if="listError" class="qt-empty is-error"><i class="fas fa-exclamation-triangle"></i><div>{{ listError }}</div></div>
+        <div v-else-if="loading && !list.length" class="qt-empty"><i class="fas fa-spinner fa-spin"></i><div>Loading…</div></div>
+        <div v-else-if="!list.length" class="qt-empty"><i class="far fa-clone"></i><div>No templates yet. Click New, or restore the built-in ones.</div></div>
+        <div v-else-if="!groups.length" class="qt-empty"><i class="fas fa-filter"></i><div>No template matches "{{ search }}"</div></div>
+        <!-- Categories are folders (click to fold; a search shows every match); their templates sit indented under them -->
+        <div v-for="g in groups" :key="g.name" class="qt-group" :class="{ 'is-open': groupOpen(g), 'has-active': groupHasActive(g) }">
+          <button type="button" class="qt-group-head" @click="toggleGroup(g.name)" :aria-expanded="groupOpen(g) ? 'true' : 'false'"
+                  :title="(groupOpen(g) ? 'Fold ' : 'Show ') + (g.name || 'Other')">
+            <i class="fas fa-chevron-right qt-group-caret" aria-hidden="true"></i>
+            <i class="fas qt-group-icon" :class="groupOpen(g) ? 'fa-folder-open' : 'fa-folder'"></i>
+            <span class="qt-group-name">{{ g.name || 'Other' }}</span>
+            <span class="qt-group-count">{{ g.items.length }}</span>
+          </button>
+          <div v-show="groupOpen(g)" class="qt-group-items">
+            <button v-for="t in g.items" :key="t.id" type="button" class="qt-item" :class="{ 'is-active': form && form.id === t.id }" @click="pick(t)">
+              <i class="far fa-file-code qt-item-icon"></i>
+              <span class="qt-item-text">
+                <span class="qt-item-name">{{ t.name }}</span>
+                <span class="qt-item-meta">
+                  {{ t.queries.length }} {{ t.queries.length === 1 ? 'query' : 'queries' }} · {{ t.params.length }} {{ t.params.length === 1 ? 'param' : 'params' }}
+                  <span v-if="t.builtin" class="qt-builtin" title="Built-in template (Restore built-in templates adds it back if deleted)">built-in</span>
+                </span>
+              </span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="qt-side-foot">
+        <button type="button" class="btn btn-sm btn-link" @click="restore" :disabled="restoring" title="Add back the built-in templates (the converted Patients, Billing, Orders, Pharmacy, Lab, Radiology, Diet and Inventory pages) that were deleted">
+          <i class="fas" :class="restoring ? 'fa-spinner fa-spin' : 'fa-undo'"></i> Restore built-in templates
+        </button>
+      </div>
+    </aside>
+
+    <!-- Editor -->
+    <section class="card qt-main">
+      <div v-if="notice" class="qt-notice" :class="{ 'is-bad': notice.bad }" role="status">
+        <i class="fas" :class="notice.bad ? 'fa-exclamation-circle' : 'fa-check-circle'"></i><span>{{ notice.text }}</span>
+        <button type="button" class="qt-notice-close" @click="notice = null" aria-label="Dismiss"><i class="fas fa-times"></i></button>
+      </div>
+      <div v-if="pending" class="qt-notice is-warn" role="alert">
+        <i class="fas fa-exclamation-triangle"></i><span>"{{ form.name || 'New template' }}" has unsaved changes.</span>
+        <button type="button" class="btn btn-sm btn-primary" @click="saveThen">Save</button>
+        <button type="button" class="btn btn-sm btn-outline-danger" @click="discard">Discard</button>
+        <button type="button" class="btn btn-sm btn-secondary" @click="pending = null">Cancel</button>
+      </div>
+
+      <div v-if="!form" class="qt-empty qt-empty-lg">
+        <i class="far fa-clone"></i>
+        <div class="qt-empty-title">Query templates</div>
+        <div>Queries with parameters for Query Data: pick a template on the left, or click New.<br>In Query Data, open <b>Templates</b>, fill in the parameters and run a query.</div>
+      </div>
+
+      <template v-else>
+        <div class="card-header qt-head">
+          <div class="qt-head-title">
+            <b>{{ form.id ? (saved && saved.name) : 'New template' }}</b>
+            <span v-if="dirty" class="qt-dirty" title="Not saved yet">● unsaved</span>
+            <small v-if="saved && saved.updated_at" class="text-muted">saved {{ sqlTime(saved.updated_at) }}<template v-if="saved.updated_by"> by {{ saved.updated_by }}</template></small>
+          </div>
+          <div class="qt-head-actions">
+            <a v-if="form.id && canQuery" class="btn btn-sm btn-outline-primary" :href="'/query-studio?template=' + form.id" :title="dirty ? 'Opens the saved version' : 'Fill in the parameters and run it in Query Data'">
+              <i class="fas fa-terminal"></i> Open in Query Data
+            </a>
+            <button v-if="form.id" type="button" class="btn btn-sm btn-outline-secondary" @click="duplicate"><i class="far fa-copy"></i> Duplicate</button>
+            <template v-if="form.id">
+              <template v-if="confirmDelete">
+                <span class="small text-danger">Delete this template?</span>
+                <button type="button" class="btn btn-sm btn-danger" @click="remove" :disabled="busy">Delete</button>
+                <button type="button" class="btn btn-sm btn-secondary" @click="confirmDelete = false">Keep</button>
+              </template>
+              <button v-else type="button" class="btn btn-sm btn-outline-danger" @click="confirmDelete = true"><i class="fas fa-trash-alt"></i> Delete</button>
+            </template>
+            <button type="button" class="btn btn-sm btn-success" @click="save" :disabled="busy || !form.name.trim()" title="Save (Ctrl+S)">
+              <i class="fas" :class="busy ? 'fa-spinner fa-spin' : 'fa-save'"></i> Save
+            </button>
+          </div>
+        </div>
+
+        <div v-if="error" class="qt-error" role="alert"><i class="fas fa-exclamation-circle"></i> <span>{{ error }}</span></div>
+
+        <div class="card-body qt-body">
+          <div class="qt-grid">
+            <div class="qt-f">
+              <label for="qtName">Name</label>
+              <input id="qtName" class="form-control form-control-sm" v-model="form.name" maxlength="120" placeholder="e.g. Patient Summary">
+            </div>
+            <div class="qt-f">
+              <label for="qtCat">Category</label>
+              <input id="qtCat" class="form-control form-control-sm" v-model="form.category" maxlength="60" list="qtCats" placeholder="e.g. Patients">
+              <datalist id="qtCats"><option v-for="c in categories" :value="c"></option></datalist>
+            </div>
+            <div class="qt-f qt-f-wide">
+              <label for="qtDesc">Description</label>
+              <textarea id="qtDesc" class="form-control form-control-sm" rows="2" v-model="form.description" maxlength="2000" placeholder="What the queries show, and which parameters to give"></textarea>
+            </div>
+          </div>
+
+          <!-- Parameters -->
+          <div class="qt-section-head">
+            <span><i class="fas fa-sliders-h qt-ic"></i> Parameters <span class="qt-aside">{{ form.params.length }}</span></span>
+            <button type="button" class="btn btn-sm btn-outline-primary" @click="addParam" :disabled="form.params.length >= 30"><i class="fas fa-plus"></i> Add parameter</button>
+          </div>
+          <div v-if="!form.params.length" class="qt-hint">No parameters: the queries run as they are. Add one, then use it in a query as <code v-pre>{{name}}</code>.</div>
+          <div v-else class="qt-params">
+            <table class="table table-sm qt-param-table" data-table-filter="off">
+              <thead><tr><th>Name</th><th>Label</th><th>Type</th><th>Required</th><th>Default</th><th>Help</th><th></th></tr></thead>
+              <tbody>
+                <tr v-for="(p, i) in form.params" :key="p._k">
+                  <td><input class="form-control form-control-sm qt-mono" v-model.trim="p.name" maxlength="40" placeholder="name" :aria-label="'Parameter ' + (i + 1) + ' name'"></td>
+                  <td><input class="form-control form-control-sm" v-model="p.label" maxlength="120" :placeholder="p.name || 'Label'" aria-label="Label"></td>
+                  <td>
+                    <select class="form-control form-control-sm" v-model="p.type" aria-label="Type">
+                      <option v-for="t in types" :value="t">{{ TYPE_LABELS[t] || t }}</option>
+                    </select>
+                    <input v-if="p.type === 'reference'" class="form-control form-control-sm qt-mono mt-1" v-model.trim="p.domain" maxlength="60" placeholder="Domain, e.g. ENTYPE" aria-label="Reference domain code">
+                    <input v-if="p.type === 'choice'" class="form-control form-control-sm mt-1" v-model="p.options" maxlength="2000" placeholder="Values, comma-separated" aria-label="Values to choose from, comma-separated">
+                  </td>
+                  <td>
+                    <select class="form-control form-control-sm" v-model="p.required" aria-label="Required">
+                      <option :value="false">Optional</option>
+                      <option :value="true">Required</option>
+                      <option value="any">One of a group</option>
+                    </select>
+                  </td>
+                  <td><input class="form-control form-control-sm" v-model="p.default" maxlength="500" :placeholder="TYPE_HINTS[p.type] || ''" aria-label="Default value"></td>
+                  <td><input class="form-control form-control-sm" v-model="p.help" maxlength="300" aria-label="Help text"></td>
+                  <td class="qt-row-actions">
+                    <button type="button" class="qt-icon-btn" @click="insertToken(p.name)" :disabled="!p.name" :title="'Insert {{' + p.name + '}} in the query'" aria-label="Insert in the query"><i class="fas fa-i-cursor"></i></button>
+                    <button type="button" class="qt-icon-btn" @click="moveParam(i, -1)" :disabled="i === 0" title="Move up" aria-label="Move up"><i class="fas fa-arrow-up"></i></button>
+                    <button type="button" class="qt-icon-btn" @click="form.params.splice(i, 1)" title="Remove" aria-label="Remove parameter"><i class="fas fa-times"></i></button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="qt-hint" v-if="form.params.some(function (p) { return p.required === 'any'; })">"One of a group": at least one of those parameters must be given.</div>
+          </div>
+
+          <!-- Queries -->
+          <div class="qt-section-head">
+            <span><i class="fas fa-terminal qt-ic"></i> Queries <span class="qt-aside">{{ form.queries.length }}</span></span>
+            <button type="button" class="btn btn-sm btn-outline-primary" @click="addQuery" :disabled="form.queries.length >= 40"><i class="fas fa-plus"></i> Add query</button>
+          </div>
+          <div class="qt-tabs" role="tablist">
+            <button v-for="(q, i) in form.queries" :key="q._k" type="button" role="tab" class="qt-tab" :class="{ 'is-active': i === qi, 'is-error': errQuery === i }"
+                    :aria-selected="i === qi ? 'true' : 'false'" @click="selectQuery(i)">
+              <span class="qt-tab-no">{{ i + 1 }}</span> {{ q.title || ('Query ' + (i + 1)) }}
+            </button>
+          </div>
+          <div class="qt-query" v-if="form.queries[qi]">
+            <div class="qt-query-bar">
+              <input class="form-control form-control-sm" v-model="form.queries[qi].title" maxlength="120" placeholder="Title, e.g. Bills" aria-label="Query title">
+              <span class="qd-chip" v-if="collectionOf(form.queries[qi].query)"><i class="fas fa-table"></i> {{ collectionOf(form.queries[qi].query) }}</span>
+              <button type="button" class="btn btn-sm btn-outline-secondary qt-fj-btn" @click="openFromJasper" title="Paste a Jaspersoft MongoDB query (JRXML queryString): it becomes a template query, its $P{…} become parameters">
+                <i class="fas fa-file-import"></i> From Jasper
+              </button>
+              <button type="button" class="qt-icon-btn" @click="moveQuery(-1)" :disabled="qi === 0" title="Move left" aria-label="Move query left"><i class="fas fa-arrow-left"></i></button>
+              <button type="button" class="qt-icon-btn" @click="moveQuery(1)" :disabled="qi === form.queries.length - 1" title="Move right" aria-label="Move query right"><i class="fas fa-arrow-right"></i></button>
+              <button type="button" class="qt-icon-btn" @click="removeQuery" :disabled="form.queries.length < 2" title="Remove this query" aria-label="Remove query"><i class="fas fa-trash-alt"></i></button>
+            </div>
+            <div class="qt-editor" ref="editor"></div>
+            <div class="qt-tokens">
+              <span class="qt-tokens-label">Insert</span>
+              <button v-for="n in tokenNames" :key="n" type="button" class="qt-token" @click="insertToken(n)" v-text="'{{' + n + '}}'"></button>
+              <button v-for="n in sectionNames" :key="'s' + n" type="button" class="qt-token is-section" @click="insertSection(n)" :title="'Kept only when ' + n + ' has a value'" v-text="'{{#' + n + '}}…'"></button>
+            </div>
+          </div>
+
+          <details class="qt-help">
+            <summary><i class="fas fa-question-circle"></i> Template syntax</summary>
+            <div class="qt-help-body" v-pre>
+              <p>A query is Query Data syntax (find, aggregate, count, distinct) with placeholders, filled in when it runs:</p>
+              <table class="table table-sm" data-table-filter="off">
+                <tbody>
+                  <tr><td><code>{{name}}</code></td><td>The parameter as a query value: <code>"text"</code>, <code>5</code>, <code>ISODate("…")</code>, <code>ObjectId("…")</code>. Don't quote it.</td></tr>
+                  <tr><td><code>{{#name}} … {{/name}}</code></td><td>Kept only when the parameter has a value, for optional filters: <code>{{#hn}}patientuid: {{hn}},{{/hn}}</code> (keep the comma inside).</td></tr>
+                  <tr><td><code>{{^name}} … {{/name}}</code></td><td>Kept only when it has no value.</td></tr>
+                  <tr><td><code>{{a|b}}</code>, <code>{{#a|b}}</code></td><td>The first of a, b that has a value; the section is kept when any has one.</td></tr>
+                  <tr><td><code>{{orguid}}</code></td><td>The signed-in site's organisation <code>ObjectId</code>. Also <code>{{today}}</code>, <code>{{today:end}}</code> and <code>{{now}}</code>.</td></tr>
+                </tbody>
+              </table>
+              <p>Types and their other forms (<code>{{name:form}}</code>):</p>
+              <table class="table table-sm" data-table-filter="off">
+                <tbody>
+                  <tr><td>HN</td><td>Looked up when the template runs: <code>{{hn}}</code> is the patient's <code>ObjectId</code>; <code>{{hn:text}}</code> the HN as typed.</td></tr>
+                  <tr><td>Item code</td><td>Looked up when the template runs: <code>{{item}}</code> is the active item master's <code>ObjectId</code>; <code>{{item:text}}</code> the code as typed.</td></tr>
+                  <tr><td>VN</td><td><code>{{vn}}</code> the visit's <code>ObjectId</code>, <code>{{vn:patient}}</code> its patient's, <code>{{vn:text}}</code> the VN as typed.</td></tr>
+                  <tr><td>Date</td><td><code>{{d}}</code> the day's start, <code>{{d:end}}</code> its end (Bangkok time): <code>{ $gte: {{d}}, $lte: {{d:end}} }</code>.</td></tr>
+                  <tr><td>Text</td><td><code>{{t}}</code> <code>"text"</code>; <code>{{t:contains}}</code> and <code>{{t:starts}}</code> a case-insensitive regex.</td></tr>
+                  <tr><td>Choice</td><td>Picked from a fixed list of values (comma-separated in the parameter row); <code>{{c}}</code> is <code>"value"</code>.</td></tr>
+                  <tr><td>ObjectId · Reference</td><td><code>ObjectId("…")</code>. A reference parameter is picked from the reference values of its domain (e.g. ENTYPE, VISITSTATUS).</td></tr>
+                  <tr><td>Number · Yes / no</td><td><code>5</code> · <code>true</code> / <code>false</code>; <code>:text</code> gives any value as typed, in quotes.</td></tr>
+                </tbody>
+              </table>
+              <p class="mb-0">Saving checks every query twice: with every parameter given, and with only the required ones. Queries run in Query Data as usual: read-only, censored and written to the Query Data audit log.</p>
+            </div>
+          </details>
+        </div>
+      </template>
+    </section>
+  </div>
+
+  <!-- From Jasper: a Jaspersoft MongoDB query as a template query, its $P{…} as parameters -->
+  <div v-if="fj" class="qt-modal-backdrop" @click.self="fj = null">
+    <div class="qt-modal" role="dialog" aria-modal="true" aria-labelledby="qtFjTitle">
+      <div class="qt-modal-head">
+        <div id="qtFjTitle"><i class="fas fa-file-import qt-ic"></i> <b>From Jasper</b> <span class="text-muted small">Jaspersoft MongoDB query → template query</span></div>
+        <button type="button" class="qt-icon-btn" @click="fj = null" aria-label="Close"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="qt-modal-body">
+        <label for="qtFjText" class="qt-modal-label">Jasper query <span class="text-muted">(the JRXML &lt;queryString language="MongoDbQuery"&gt;)</span></label>
+        <textarea id="qtFjText" ref="fjText" class="form-control qt-mono qt-fj-text" v-model="fj.text" spellcheck="false" @keydown.ctrl.enter.prevent="convertJasper" @input="fj.result = null"
+                  placeholder='{ runCommand: { aggregate: "patientvisits", pipeline: [ { "$match": { "orguid": { "$oid": $P{organisationuid} }, "patientuid": { "$oid": $P{patientuid} } } } ] } }'></textarea>
+        <div class="qt-hint" v-pre>$P{organisationuid} becomes {{orguid}}; $P{patientuid} an HN and $P{patientvisituid} a VN parameter (looked up when it runs); { "$oid": $P{x} } an ObjectId, { "$date": $P{x} } a date, any other $P{x} a text parameter.</div>
+        <div v-if="fj.error" class="qt-error qt-fj-msg" role="alert"><i class="fas fa-exclamation-circle"></i> <span>{{ fj.error }}</span></div>
+        <template v-if="fj.result">
+          <label class="qt-modal-label">Template query <span class="qd-chip"><i class="fas fa-table"></i> {{ fj.result.collection }} · {{ fj.result.method }}</span></label>
+          <pre class="qt-fj-preview">{{ fj.result.query }}</pre>
+          <label class="qt-modal-label">Parameters</label>
+          <div v-if="!fj.result.params.length" class="qt-hint">None.</div>
+          <ul v-else class="qt-fj-params">
+            <li v-for="p in fj.result.params" :key="p.name">
+              <code v-text="'{{' + p.name + '}}'"></code> {{ TYPE_LABELS[p.type] || p.type }}
+              <span v-if="paramTaken(p.name)" class="text-muted">· already in the template, kept as it is</span>
+              <span v-else class="text-muted">· added{{ p.required ? ', required' : '' }}</span>
+            </li>
+          </ul>
+          <div v-for="(n, i) in fj.result.notes" :key="i" class="qt-hint"><i class="fas fa-info-circle"></i> {{ n }}</div>
+        </template>
+      </div>
+      <div class="qt-modal-foot">
+        <div class="qt-fj-target">
+          <label><input type="radio" value="replace" v-model="fj.target"> Replace query {{ qi + 1 }} ({{ form.queries[qi] && form.queries[qi].title }})</label>
+          <label><input type="radio" value="new" v-model="fj.target" :disabled="form.queries.length >= 40"> Add as a new query</label>
+        </div>
+        <div class="qt-head-actions">
+          <button type="button" class="btn btn-sm btn-secondary" @click="fj = null">Cancel</button>
+          <button v-if="!fj.result" type="button" class="btn btn-sm btn-primary" @click="convertJasper" :disabled="fj.busy || !fj.text.trim()" title="Convert (Ctrl+Enter)">
+            <i class="fas" :class="fj.busy ? 'fa-spinner fa-spin' : 'fa-exchange-alt'"></i> Convert
+          </button>
+          <button v-else type="button" class="btn btn-sm btn-success" @click="applyJasper"><i class="fas fa-check"></i> Use it</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  @import url('/lib/codemirror/lib/codemirror.css');
+</style>
+<style>
+  .qt-ic { color: #2563eb; }
+  .qt-aside { font-size: 0.75rem; color: #94a3b8; font-weight: 400; }
+  .qt-layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 991.98px) { .qt-layout { grid-template-columns: minmax(0, 1fr); } }
+  .qt-side { position: sticky; top: 12px; max-height: calc(100vh - 110px); display: flex; flex-direction: column; overflow: hidden; }
+  .qt-side-head { display: flex; align-items: center; gap: 6px; }
+  .qt-new { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; }
+  .qt-side-search { position: relative; padding: 8px 10px; border-bottom: 1px solid #f1f5f9; }
+  .qt-side-search i { position: absolute; left: 20px; top: 50%; transform: translateY(-50%); font-size: 0.72rem; color: #94a3b8; }
+  .qt-side-search input { width: 100%; height: 32px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0 10px 0 28px; font-size: 0.82rem; }
+  .qt-side-search input:focus { outline: none; border-color: #93c5fd; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }
+  .qt-side-list { overflow-y: auto; flex: 1; min-height: 0; padding: 4px 0; }
+  .qt-side-foot { border-top: 1px solid #f1f5f9; padding: 4px 6px; }
+  .qt-side-foot .btn { font-size: 0.78rem; }
+  /* Category: a shaded folder row; its templates indented under it on a guide line */
+  .qt-group + .qt-group { border-top: 1px solid #eef2f7; }
+  .qt-group-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 8px; width: 100%; border: 0; text-align: left; padding: 8px 12px; background: #f8fafc; color: #0f172a; }
+  .qt-group-head:hover, .qt-group-head:focus-visible { background: #eef2f7; outline: none; }
+  .qt-group.is-open .qt-group-head { background: #f1f5f9; }
+  .qt-group-caret { width: 10px; font-size: 0.68rem; color: #94a3b8; transition: transform 0.15s; }
+  .qt-group.is-open .qt-group-caret { transform: rotate(90deg); }
+  .qt-group-icon { color: #f59e0b; font-size: 0.9rem; width: 16px; text-align: center; }
+  .qt-group-name { flex: 1; min-width: 0; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .qt-group-count { min-width: 22px; padding: 0 7px; border-radius: 999px; background: #e2e8f0; color: #475569; font-size: 0.7rem; font-weight: 700; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums; }
+  .qt-group.has-active .qt-group-count { background: #2563eb; color: #fff; }
+  .qt-group-items { position: relative; padding: 2px 0 6px; }
+  .qt-group-items::before { content: ''; position: absolute; left: 20px; top: 0; bottom: 8px; width: 1px; background: #e2e8f0; }
+  .qt-item { position: relative; display: flex; align-items: flex-start; gap: 8px; width: calc(100% - 12px); margin-left: 6px; text-align: left; background: none; border: 0; border-radius: 8px; padding: 6px 10px 6px 26px; }
+  .qt-item::before { content: ''; position: absolute; left: 14px; top: 15px; width: 8px; height: 1px; background: #e2e8f0; }
+  .qt-item:hover, .qt-item:focus-visible { background: #f8fafc; outline: none; }
+  .qt-item.is-active { background: #eff6ff; box-shadow: inset 3px 0 0 #2563eb; }
+  .qt-item-icon { margin-top: 3px; color: #94a3b8; font-size: 0.82rem; }
+  .qt-item.is-active .qt-item-icon { color: #2563eb; }
+  .qt-item-text { display: flex; flex-direction: column; min-width: 0; }
+  .qt-item-name { font-size: 0.84rem; font-weight: 600; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .qt-item.is-active .qt-item-name { color: #1d4ed8; }
+  .qt-item-meta { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; color: #94a3b8; }
+  .qt-builtin { padding: 0 6px; border-radius: 4px; background: #fef3c7; color: #92400e; font-size: 0.64rem; font-weight: 600; line-height: 15px; }
+  .qt-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 20px 14px; color: #64748b; font-size: 0.8rem; }
+  .qt-empty > i { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: #f1f5f9; color: #94a3b8; }
+  .qt-empty.is-error > i { background: #fee2e2; color: #dc2626; }
+  .qt-empty-lg { padding: 60px 20px; font-size: 0.86rem; }
+  .qt-empty-lg > i { width: 48px; height: 48px; font-size: 1.1rem; }
+  .qt-empty-title { font-weight: 600; color: #0f172a; font-size: 0.95rem; }
+
+  .qt-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .qt-head-title { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-width: 0; }
+  .qt-dirty { font-size: 0.75rem; color: #b45309; }
+  .qt-head-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .qt-head-actions .btn { display: inline-flex; align-items: center; gap: 5px; }
+  .qt-error { display: flex; gap: 8px; align-items: flex-start; padding: 8px 16px; background: #fef2f2; color: #991b1b; font-size: 0.84rem; border-bottom: 1px solid #fecaca; white-space: pre-wrap; }
+  .qt-error i { margin-top: 3px; }
+  .qt-notice { display: flex; align-items: center; gap: 8px; margin: 10px 16px 0; padding: 8px 12px; border-radius: 8px; font-size: 0.84rem; background: #f0fdf4; color: #14532d; border: 1px solid #bbf7d0; }
+  .qt-notice.is-bad { background: #fef2f2; color: #7f1d1d; border-color: #fecaca; }
+  .qt-notice.is-warn { background: #fffbeb; color: #78350f; border-color: #fde68a; margin-bottom: 10px; }
+  .qt-notice span { flex: 1; }
+  .qt-notice-close { background: none; border: 0; color: inherit; opacity: 0.6; }
+
+  .qt-body { display: flex; flex-direction: column; gap: 10px; }
+  .qt-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+  .qt-f-wide { grid-column: 1 / -1; }
+  @media (max-width: 575.98px) { .qt-grid { grid-template-columns: minmax(0, 1fr); } }
+  .qt-f label { display: block; margin: 0 0 3px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; }
+  .qt-section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; padding-top: 10px; border-top: 1px solid #f1f5f9; font-weight: 600; }
+  .qt-section-head .btn { display: inline-flex; align-items: center; gap: 5px; }
+  .qt-hint { font-size: 0.78rem; color: #64748b; }
+  .qt-params { overflow-x: auto; }
+  .qt-param-table { margin: 0; min-width: 860px; }
+  .qt-param-table th { border-top: 0; border-bottom: 1px solid #e2e8f0; padding: 4px 6px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; background: none; white-space: nowrap; }
+  .qt-param-table td { padding: 4px 6px; vertical-align: top; border-top: 1px solid #f1f5f9; }
+  .qt-param-table td:nth-child(1) { width: 140px; }
+  .qt-param-table td:nth-child(3) { width: 150px; }
+  .qt-param-table td:nth-child(4) { width: 140px; }
+  .qt-mono { font-family: 'Cascadia Code', Consolas, 'Courier New', monospace; font-size: 0.8rem; }
+  .qt-row-actions { white-space: nowrap; width: 1%; }
+  .qt-icon-btn { background: none; border: 0; width: 28px; height: 28px; border-radius: 6px; color: #64748b; display: inline-flex; align-items: center; justify-content: center; }
+  .qt-icon-btn:hover:not(:disabled), .qt-icon-btn:focus-visible { background: #eff6ff; color: #1d4ed8; outline: none; }
+  .qt-icon-btn:disabled { opacity: 0.35; }
+
+  .qt-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
+  .qt-tab { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #e2e8f0; background: #fff; border-radius: 8px; padding: 3px 10px; font-size: 0.8rem; color: #334155; }
+  .qt-tab:hover { border-color: #93c5fd; }
+  .qt-tab.is-active { background: #2563eb; border-color: #2563eb; color: #fff; }
+  .qt-tab.is-error { border-color: #dc2626; }
+  .qt-tab.is-active.is-error { background: #dc2626; }
+  .qt-tab-no { font-size: 0.68rem; opacity: 0.7; font-variant-numeric: tabular-nums; }
+  .qt-query { border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; }
+  .qt-query-bar { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; }
+  .qt-query-bar .form-control { max-width: 360px; }
+  .qd-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; background: #f1f5f9; color: #334155; border-radius: 999px; padding: 3px 10px; font-weight: 500; margin-right: auto; }
+  .qd-chip i { color: #64748b; font-size: 0.7rem; }
+  .qt-editor .CodeMirror { height: 380px; font-family: 'Cascadia Code', Consolas, 'Courier New', monospace; font-size: 0.84rem; }
+  .qt-editor .CodeMirror-gutters { background: #f8fafc; border-right: 1px solid #e2e8f0; }
+  .qt-editor .cm-variable, .qt-editor .cm-property { color: #0f172a; }
+  .qt-editor .cm-string { color: #b45309; }
+  .qt-editor .cm-number { color: #7c3aed; }
+  .qt-editor .cm-qt-token { background: #dbeafe; color: #1e40af; border-radius: 3px; }
+  .qt-editor .cm-qt-section { background: #fef3c7; color: #92400e; border-radius: 3px; }
+  .qt-editor .qt-err-line { background: #fef2f2; }
+  .qt-tokens { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px 8px; border-top: 1px solid #e2e8f0; background: #f8fafc; }
+  .qt-tokens-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; margin-right: 4px; }
+  .qt-token { border: 0; border-radius: 4px; background: #dbeafe; color: #1e40af; font-family: 'Cascadia Code', Consolas, monospace; font-size: 0.74rem; padding: 1px 6px; }
+  .qt-token.is-section { background: #fef3c7; color: #92400e; }
+  .qt-token:hover { filter: brightness(0.95); }
+  .qt-fj-btn { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .qt-modal-backdrop { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 1060; background: rgba(15, 23, 42, 0.55); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .qt-modal { background: #fff; border-radius: 12px; box-shadow: 0 20px 50px rgba(15, 23, 42, 0.35); width: 100%; max-width: 860px; max-height: calc(100vh - 32px); display: flex; flex-direction: column; overflow: hidden; }
+  .qt-modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; }
+  .qt-modal-body { padding: 12px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+  .qt-modal-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 10px 16px; border-top: 1px solid #e2e8f0; }
+  .qt-modal-label { margin: 6px 0 0; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; display: flex; align-items: center; gap: 8px; }
+  .qt-modal-label .qd-chip { margin-right: 0; text-transform: none; letter-spacing: 0; }
+  .qt-fj-text { min-height: 180px; font-size: 0.78rem; }
+  .qt-fj-msg { border-radius: 8px; border: 1px solid #fecaca; }
+  .qt-fj-preview { margin: 0; max-height: 260px; overflow: auto; padding: 10px 12px; background: #f1f5f9; border-radius: 8px; font-size: 0.78rem; font-family: 'Cascadia Code', Consolas, 'Courier New', monospace; white-space: pre; }
+  .qt-fj-params { margin: 0; padding-left: 18px; font-size: 0.82rem; }
+  .qt-fj-target { display: flex; flex-direction: column; gap: 2px; font-size: 0.82rem; }
+  .qt-fj-target label { margin: 0; display: flex; align-items: center; gap: 6px; }
+  .qt-help { margin-top: 6px; border: 1px solid #e2e8f0; border-radius: 10px; }
+  .qt-help summary { padding: 8px 12px; font-size: 0.84rem; font-weight: 600; color: #334155; cursor: pointer; }
+  .qt-help-body { padding: 0 12px 12px; font-size: 0.8rem; color: #475569; }
+  .qt-help-body td { padding: 4px 8px; vertical-align: top; }
+  .qt-help-body td:first-child { white-space: nowrap; font-weight: 600; color: #0f172a; }
+</style>
+
+<script src="/lib/codemirror/lib/codemirror.js"></script>
+<script src="/lib/codemirror/mode/javascript/javascript.js"></script>
+<script src="/lib/codemirror/addon/mode/overlay.js"></script>
+<script src="/lib/codemirror/addon/edit/matchbrackets.js"></script>
+<script>
+  (function () {
+    var cm = null;   // CodeMirror lives outside Vue's reactivity
+    var errMark = null;
+    var key = 1;
+    var nextKey = function () { return key++; };
+    var TYPE_LABELS = { text: 'Text', number: 'Number', date: 'Date', boolean: 'Yes / no', choice: 'Choice (fixed list)', objectid: 'ObjectId', reference: 'Reference value', hn: 'HN (patient)', vn: 'VN (visit)', item: 'Item code (item master)' };
+    var TYPE_HINTS = { number: '0', date: 'YYYY-MM-DD', boolean: 'true / false', objectid: '24 hex characters', reference: 'ObjectId of the value', hn: 'HN', vn: 'VN', item: 'Item code' };
+    var FOLDED_KEY = 'querytemplates.folded';
+    function loadFolded() {
+      try { return JSON.parse(localStorage.getItem(FOLDED_KEY)) || {}; } catch (e) { return {}; }
+    }
+    var NEW_QUERY ='db.patientvisits.find({\n  orguid: {{orguid}},\n  statusflag: "A",\n})\n  .sort({ _id: -1 })';
+
+    function request(method, url, body) {
+      return fetch(url, {
+        method: method,
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: body ? JSON.stringify(body) : undefined
+      }).then(function (res) {
+        return res.json().catch(function () { return { error: 'HTTP ' + res.status }; }).then(function (data) {
+          if (!res.ok) { var err = new Error(data.error || ('HTTP ' + res.status)); err.data = data; throw err; }
+          return data;
+        });
+      });
+    }
+
+    // The editor's working copy of a template (keys for Vue's lists; dropped when saved).
+    function toForm(t) {
+      return {
+        id: t ? t.id : null,
+        name: t ? t.name : '',
+        category: t ? t.category : '',
+        description: t ? t.description : '',
+        params: (t ? t.params : []).map(function (p) {
+          return { _k: nextKey(), name: p.name, label: p.label || '', type: p.type, domain: p.domain || '', options: (p.options || []).join(', '), required: p.required === true ? true : p.required === 'any' ? 'any' : false, default: p.default || '', help: p.help || '' };
+        }),
+        queries: (t ? t.queries : [{ title: 'Query 1', query: NEW_QUERY }]).map(function (q) { return { _k: nextKey(), title: q.title, query: q.query }; })
+      };
+    }
+    function plain(f) {
+      if (!f) return null;
+      return {
+        id: f.id, name: f.name.trim(), category: f.category.trim(), description: f.description.trim(),
+        params: f.params.map(function (p) {
+          var o = { name: p.name, label: p.label, type: p.type, required: p.required, default: p.default, help: p.help };
+          if (p.type === 'reference') o.domain = p.domain;
+          if (p.type === 'choice') o.options = p.options;
+          return o;
+        }),
+        queries: f.queries.map(function (q) { return { title: q.title, query: q.query }; })
+      };
+    }
+    var snap = function (f) { return JSON.stringify(plain(f)); };
+
+    // {{…}} placeholders and sections stand out in the editor.
+    var tokenOverlay = {
+      token: function (stream) {
+        if (stream.match(/\{\{\s*[#^\/][^}]*\}\}/)) return 'qt-section';
+        if (stream.match(/\{\{[^}]*\}\}/)) return 'qt-token';
+        while (stream.next() != null && !stream.match(/\{\{/, false)) { /* skip */ }
+        return null;
+      }
+    };
+
+    Page.setup({
+      data: function () {
+        return {
+          TYPE_LABELS: TYPE_LABELS, TYPE_HINTS: TYPE_HINTS,
+          list: [], loading: false, listError: '', search: '',
+          folded: loadFolded(),   // categories folded in the list (kept in this browser)
+          form: null, saved: null, savedSnap: '', qi: 0,
+          busy: false, error: '', errQuery: null, notice: null, pending: null,
+          confirmDelete: false, restoring: false,
+          fj: null   // From Jasper popup: { text, target, busy, error, result }
+        };
+      },
+      computed: {
+        dirty: function () { return !!this.form && snap(this.form) !== this.savedSnap; },
+        categories: function () {
+          var seen = {};
+          this.list.forEach(function (t) { if (t.category) seen[t.category] = 1; });
+          return Object.keys(seen).sort();
+        },
+        groups: function () {
+          var q = this.search.trim().toLowerCase(), by = {}, order = [];
+          this.list.forEach(function (t) {
+            if (q) {
+              var hay = [t.name, t.category, t.description].concat(t.queries.map(function (x) { return x.title + ' ' + x.query; })).join(' ').toLowerCase();
+              if (hay.indexOf(q) < 0) return;
+            }
+            var c = t.category || '';
+            if (!by[c]) { by[c] = []; order.push(c); }
+            by[c].push(t);
+          });
+          return order.sort(function (a, b) { return a === '' ? 1 : b === '' ? -1 : a.localeCompare(b); })
+            .map(function (c) { return { name: c, items: by[c] }; });
+        },
+        tokenNames: function () {
+          var names = (this.form ? this.form.params : []).map(function (p) { return p.name; }).filter(Boolean);
+          return names.concat(this.builtins || []);
+        },
+        sectionNames: function () { return (this.form ? this.form.params : []).map(function (p) { return p.name; }).filter(Boolean); }
+      },
+      methods: {
+        sqlTime: function (s) {
+          if (!s) return '';
+          var d = new Date(String(s).replace(' ', 'T') + 'Z');
+          return isNaN(d) ? s : d.toLocaleString('en-GB', { timeZone: 'Asia/Bangkok', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+        },
+        collectionOf: function (query) {
+          var m = /db\.(?:getCollection\(\s*["']([^"']+)["']\s*\)|([\w$]+))\./.exec(query || '');
+          return m ? m[1] || m[2] : '';
+        },
+        // ---- category folders ----
+        groupHasActive: function (g) {
+          var id = this.form && this.form.id;
+          return !!id && g.items.some(function (t) { return t.id === id; });
+        },
+        // Open unless folded; a search shows every category with a match.
+        groupOpen: function (g) {
+          return !this.folded[g.name] || !!this.search.trim();
+        },
+        setFolded: function (name, folded) {
+          if (!!this.folded[name] === folded) return;
+          this.$set(this.folded, name, folded);
+          try { localStorage.setItem(FOLDED_KEY, JSON.stringify(this.folded)); } catch (e) { /* storage blocked */ }
+        },
+        toggleGroup: function (name) {
+          if (this.search.trim()) return;   // searching shows every match
+          this.setFolded(name, !this.folded[name]);
+        },
+        say: function (text, bad) {
+          var vm = this;
+          vm.notice = { text: text, bad: !!bad };
+          if (!bad) setTimeout(function () { if (vm.notice && vm.notice.text === text) vm.notice = null; }, 3000);
+        },
+        load: function () {
+          var vm = this;
+          vm.loading = true;
+          vm.listError = '';
+          return request('GET', '/query-studio/templates/list')
+            .then(function (r) { vm.list = Object.freeze(r.templates); })
+            .catch(function (err) { vm.listError = err.message; })
+            .then(function () { vm.loading = false; });
+        },
+        // Switching away from unsaved changes asks first (pending holds what to do next).
+        guard: function (next) {
+          if (this.dirty) { this.pending = next; return; }
+          next();
+        },
+        pick: function (t) {
+          var vm = this;
+          if (vm.form && vm.form.id === t.id && !vm.pending) return;
+          vm.guard(function () { vm.open(t); });
+        },
+        startNew: function () {
+          var vm = this;
+          vm.guard(function () { vm.open(null); });
+        },
+        open: function (t) {
+          if (t) this.setFolded(t.category || '', false);   // show the opened template in the list
+          this.pending = null;
+          this.form = toForm(t);
+          this.saved = t || null;
+          this.savedSnap = snap(this.form);
+          this.error = '';
+          this.errQuery = null;
+          this.confirmDelete = false;
+          this.qi = 0;
+          this.setUrl(t ? t.id : null);
+          var vm = this;
+          this.$nextTick(function () {
+            vm.mountEditor();
+            if (!t) { var el = document.getElementById('qtName'); if (el) el.focus(); }
+          });
+        },
+        setUrl: function (id) {
+          var url = '/query-studio/templates' + (id ? '?id=' + id : '');
+          if (location.pathname + location.search !== url) history.replaceState(null, '', url);
+        },
+        discard: function () {
+          var next = this.pending;
+          this.savedSnap = snap(this.form);   // nothing to keep
+          this.pending = null;
+          if (next) next();
+        },
+        saveThen: function () {
+          var vm = this, next = vm.pending;
+          vm.pending = null;
+          vm.save().then(function (ok) { if (ok && next) next(); });
+        },
+        duplicate: function () {
+          var vm = this;
+          vm.guard(function () {
+            var copy = plain(vm.form);
+            copy.id = null;
+            copy.name = copy.name + ' (copy)';
+            vm.open(null);
+            vm.form = toForm(copy);
+            vm.form.id = null;
+            vm.$nextTick(function () { vm.mountEditor(); });
+          });
+        },
+        save: function () {
+          var vm = this;
+          if (!vm.form || vm.busy) return Promise.resolve(false);
+          vm.busy = true;
+          vm.error = '';
+          vm.errQuery = null;
+          vm.clearErr();
+          return request('POST', '/query-studio/templates/save', plain(vm.form))
+            .then(function (r) {
+              var t = r.template, qi = vm.qi;
+              vm.form = toForm(t);
+              vm.saved = t;
+              vm.savedSnap = snap(vm.form);
+              vm.qi = Math.min(qi, vm.form.queries.length - 1);
+              vm.setUrl(t.id);
+              vm.say('Saved "' + t.name + '"');
+              vm.$nextTick(function () { vm.mountEditor(); });
+              vm.load();
+              return true;
+            })
+            .catch(function (err) {
+              var e = err.data || {};
+              vm.error = err.message;
+              if (typeof e.query === 'number') {
+                vm.errQuery = e.query;
+                vm.selectQuery(e.query);
+                if (e.line) vm.markErr(e.line);
+              }
+              return false;
+            })
+            .then(function (ok) { vm.busy = false; return ok; });
+        },
+        remove: function () {
+          var vm = this, t = vm.form;
+          vm.busy = true;
+          return request('POST', '/query-studio/templates/' + t.id + '/delete')
+            .then(function () {
+              vm.say('Deleted "' + (vm.saved ? vm.saved.name : t.name) + '"');
+              vm.form = null;
+              vm.saved = null;
+              vm.savedSnap = '';
+              vm.setUrl(null);
+              return vm.load();
+            })
+            .catch(function (err) { vm.error = err.message; })
+            .then(function () { vm.busy = false; vm.confirmDelete = false; });
+        },
+        restore: function () {
+          var vm = this;
+          vm.restoring = true;
+          return request('POST', '/query-studio/templates/restore')
+            .then(function (r) {
+              vm.say(r.added.length ? 'Added ' + r.added.join(', ') : 'All ' + r.total + ' built-in templates are already there.');
+              return vm.load();
+            })
+            .catch(function (err) { vm.say(err.message, true); })
+            .then(function () { vm.restoring = false; });
+        },
+
+        // ---- parameters ----
+        addParam: function () {
+          var used = {};
+          this.form.params.forEach(function (p) { used[p.name] = 1; });
+          var n = 1;
+          while (used['param' + n]) n++;
+          this.form.params.push({ _k: nextKey(), name: 'param' + n, label: '', type: 'text', domain: '', options: '', required: false, default: '', help: '' });
+        },
+        moveParam: function (i, d) {
+          var p = this.form.params.splice(i, 1)[0];
+          this.form.params.splice(i + d, 0, p);
+        },
+
+        // ---- queries ----
+        addQuery: function () {
+          this.form.queries.push({ _k: nextKey(), title: 'Query ' + (this.form.queries.length + 1), query: NEW_QUERY });
+          this.selectQuery(this.form.queries.length - 1);
+        },
+        // ---- From Jasper ----
+        openFromJasper: function () {
+          var q = this.form.queries[this.qi];
+          var blank = !q || !q.query.trim() || q.query === NEW_QUERY;
+          this.fj = { text: '', target: blank || this.form.queries.length >= 40 ? 'replace' : 'new', busy: false, error: '', result: null };
+          var vm = this;
+          this.$nextTick(function () { if (vm.$refs.fjText) vm.$refs.fjText.focus(); });
+        },
+        convertJasper: function () {
+          var vm = this, d = vm.fj;
+          if (!d || d.busy || !d.text.trim()) return;
+          d.busy = true;
+          d.error = '';
+          return request('POST', '/query-studio/templates/from-jasper', { text: d.text })
+            .then(function (r) { d.result = r; })
+            .catch(function (err) { d.error = err.message; })
+            .then(function () { d.busy = false; });
+        },
+        paramTaken: function (name) {
+          return this.form.params.some(function (p) { return p.name.toLowerCase() === String(name).toLowerCase(); });
+        },
+        // Puts the converted query in the template and adds the parameters it doesn't have yet.
+        applyJasper: function () {
+          var vm = this, r = vm.fj && vm.fj.result;
+          if (!r) return;
+          r.params.forEach(function (p) {
+            if (vm.paramTaken(p.name) || vm.form.params.length >= 30) return;
+            vm.form.params.push({ _k: nextKey(), name: p.name, label: p.label || '', type: p.type, domain: '', options: '', required: p.required, default: p.default || '', help: p.help || '' });
+          });
+          var title = r.collection + ' ' + r.method;
+          if (vm.fj.target === 'new') {
+            vm.form.queries.push({ _k: nextKey(), title: title, query: r.query });
+            vm.selectQuery(vm.form.queries.length - 1);
+          } else {
+            var q = vm.form.queries[vm.qi];
+            q.query = r.query;
+            if (!q.title.trim() || /^Query \d+$/.test(q.title)) q.title = title;
+            vm.selectQuery(vm.qi);
+          }
+          vm.fj = null;
+          vm.say('Converted from Jasper with ' + r.params.length + ' parameter' + (r.params.length === 1 ? '' : 's') + '. Check the query, then Save.');
+        },
+        removeQuery: function () {
+          if (this.form.queries.length < 2) return;
+          this.form.queries.splice(this.qi, 1);
+          this.selectQuery(Math.min(this.qi, this.form.queries.length - 1));
+        },
+        moveQuery: function (d) {
+          var i = this.qi, q = this.form.queries.splice(i, 1)[0];
+          this.form.queries.splice(i + d, 0, q);
+          this.qi = i + d;
+        },
+        selectQuery: function (i) {
+          this.qi = i;
+          this.clearErr();
+          if (cm && this.form.queries[i] && cm.getValue() !== this.form.queries[i].query) {
+            cm.setValue(this.form.queries[i].query);
+            cm.clearHistory();
+          }
+        },
+        mountEditor: function () {
+          var vm = this, host = vm.$refs.editor;
+          if (!host || typeof CodeMirror === 'undefined') return;
+          if (cm && cm.getWrapperElement().parentNode === host) { vm.selectQuery(vm.qi); return; }
+          host.innerHTML = '';
+          cm = CodeMirror(host, {
+            value: vm.form.queries[vm.qi] ? vm.form.queries[vm.qi].query : '',
+            mode: { name: 'javascript', json: false },
+            lineNumbers: true, matchBrackets: true, tabSize: 2, indentUnit: 2,
+            extraKeys: {
+              'Ctrl-S': function () { vm.save(); }, 'Cmd-S': function () { vm.save(); },
+              'Tab': function (ed) { ed.somethingSelected() ? ed.indentSelection('add') : ed.replaceSelection('  '); }
+            }
+          });
+          cm.addOverlay(tokenOverlay);
+          cm.on('change', function (ed) {
+            var q = vm.form && vm.form.queries[vm.qi];
+            if (q) q.query = ed.getValue();
+            vm.clearErr();
+          });
+        },
+        insertToken: function (name) {
+          if (!cm || !name) return;
+          cm.replaceSelection('{{' + name + '}}');
+          cm.focus();
+        },
+        // Wraps the selection (or nothing) in a section kept only when the parameter has a value.
+        insertSection: function (name) {
+          if (!cm) return;
+          var sel = cm.getSelection();
+          cm.replaceSelection('{{#' + name + '}}' + (sel || name + ': {{' + name + '}},') + '{{/' + name + '}}');
+          cm.focus();
+        },
+        markErr: function (line) {
+          if (!cm) return;
+          var vm = this;
+          vm.$nextTick(function () {
+            vm.clearErr();
+            errMark = cm.addLineClass(line - 1, 'background', 'qt-err-line');
+            cm.scrollIntoView({ line: line - 1, ch: 0 }, 80);
+          });
+        },
+        clearErr: function () {
+          if (errMark && cm) cm.removeLineClass(errMark, 'background', 'qt-err-line');
+          errMark = null;
+        }
+      },
+      mounted: function () {
+        var vm = this;
+        var want = parseInt(new URLSearchParams(location.search).get('id'), 10);
+        vm.load().then(function () {
+          var t = want && vm.list.filter(function (x) { return x.id === want; })[0];
+          if (t) vm.open(t);
+        });
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape' && vm.fj) { vm.fj = null; return; }
+          if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key || '').toLowerCase() === 's' && vm.form) {
+            e.preventDefault();
+            vm.save();
+          }
+        });
+        window.addEventListener('beforeunload', function (e) {
+          if (!vm.dirty) return;
+          e.preventDefault();
+          e.returnValue = '';
+        });
+      }
+    });
+  })();
+</script>

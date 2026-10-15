@@ -1,4 +1,5 @@
 const organisationsModel = require("../../../core/models/organisations.model");
+const paging = require('../../../core/http/paging');        // Previous / Next paging (?page=)
 const ipfillOrderModel = require("../models/ipfillorder.model");
 const patientModel = require("../../patients/models/patient.model");
 const patientvisitModel = require("../../patients/models/patientvisits.model");
@@ -15,7 +16,8 @@ exports.ipfillOrders = async function (req, res) {
     patientModel.getPatientUID(hn),
     patientvisitModel.getPatientVisitUID(vn)
   ]);
-  let ipfillorders = await ipfillOrderModel.getIPFillOrders(org[0]._id, patientuid, visituid);
+  const p = paging.read(req);
+  let { rows: ipfillorders, paging: pg } = paging.page(req, p, await ipfillOrderModel.getIPFillOrders(org[0]._id, patientuid, visituid, p));
 
   ipfillorders = await Promise.all(ipfillorders.map(async function(item) {
     let orderitem = await patientOrderModel.getPatientOrdersitem(item.linkpatientorderuid, item.linkpatientorderitemuid, org[0]._id);
@@ -26,6 +28,7 @@ exports.ipfillOrders = async function (req, res) {
 
   return res.renderPage(view('ipfillorders'), {
     title:  'IP Fill Order Data : ' + org[0].name,
-    ipfillorders: ipfillorders
+    ipfillorders: ipfillorders,
+    paging: pg, query: { hn: hn, vn: vn }
   });
 };

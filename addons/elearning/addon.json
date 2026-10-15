@@ -1,0 +1,69 @@
+{
+  "id": "elearning",
+  "name": "E-Learning",
+  "version": "1.2.0",
+  "author": "Centrix HIS Helper Tools",
+  "category": "Training",
+  "icon": "fas fa-graduation-cap",
+  "summary": "Courses for staff training: a course catalogue, a curriculum of sections and lessons, text lessons, videos from YouTube, Google Drive or a shared network folder, quizzes and graded assignments, with each learner's progress; courses can be shared by link and password.",
+  "description": "Build training courses for the hospital's staff (HIS how-tos, onboarding, procedures) and let everyone learn from one place. A course has a thumbnail, category, level, instructor and an overview, and a curriculum of sections, each with its lessons. A lesson is text (formatted with Markdown: headings, lists, links, images, code), a video (a YouTube link, a Google Drive file, or a video file on a shared network folder that the server streams to the browser), a quiz graded on the spot, or an assignment that learners hand in and course managers grade. Learners browse the catalogue by category and level, follow the curriculum lesson by lesson, mark lessons complete and pick up where they left off. Everything is stored in SQLite, so no Centrix database connection is needed.",
+  "features": [
+    "Course catalogue: search, category and level filters, sort, grid or list, each learner's progress on the cards",
+    "Course page: overview, curriculum by section with lesson types and durations, instructor, Start or Continue learning",
+    "Lesson player: the course's curriculum alongside, previous / next, mark complete, progress bar",
+    "Text lessons in Markdown with a toolbar and live preview",
+    "Video lessons from YouTube (with start time), Google Drive (shared files) and shared network folders (streamed with seeking)",
+    "Shared folder browser in the lesson editor; the video's duration is read for you",
+    "Quizzes: single and multiple choice, true or false and short answer questions with points, pass mark, attempts allowed, shuffling, correct answers and explanations after submitting",
+    "Assignments: instructions, a written answer and / or a file, points and a pass mark, resubmission after a failing grade",
+    "Grading page: submissions to grade with score and feedback, and each quiz's results by learner",
+    "Passing a quiz or an assignment completes the lesson",
+    "Share Courses: open a course, or every published course at once, by link and password to people without an account, with an expiry date, guests' progress and quiz results, and a new link or password at any time",
+    "Course editor: details, thumbnail (resized in the browser), draft or published, sections and lessons in any order",
+    "Role permissions: view courses, and Manage courses (also grading); Settings (shared folders) for administrators"
+  ],
+  "requires": [
+    "SQLite for the courses and progress (no MongoDB connection needed); assignment files are kept in data/elearning/submissions",
+    "For shared folder videos: read access from the server (its service account) to the folders listed in E-Learning Settings",
+    "For YouTube and Google Drive videos: internet access from the learners' browsers; Drive files shared with the learners or with anyone with the link"
+  ],
+  "packages": [],
+  "defaultActive": true,
+  "paths": [
+    "/e-learning"
+  ],
+  "menu": {
+    "header": "E-Learning",
+    "icon": "fas fa-graduation-cap",
+    "items": [
+      {
+        "text": "Courses",
+        "icon": "fas fa-book-open",
+        "link": "/e-learning",
+        "actions": [
+          {
+            "key": "manage",
+            "text": "Manage courses",
+            "description": "Create, edit, publish and delete courses and their lessons; grade assignments and see quiz results"
+          }
+        ]
+      },
+      {
+        "text": "Categories",
+        "icon": "fas fa-tags",
+        "link": "/e-learning/categories"
+      },
+      {
+        "text": "Share Courses",
+        "icon": "fas fa-share-alt",
+        "link": "/e-learning/share"
+      },
+      {
+        "text": "Settings",
+        "icon": "fas fa-sliders-h",
+        "link": "/e-learning/settings",
+        "adminOnly": true
+      }
+    ]
+  }
+}

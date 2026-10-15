@@ -1,22 +1,26 @@
 <div class="col-sm-12">
   <div class="card">
     <div class="card-header" style="display:flex;align-items:center;gap:8px;">
-      <i class="fas fa-filter" style="color:#2563eb;"></i>
-      <span>Filter Deposits</span>
+      <i class="fas fa-search" style="color:#2563eb;"></i>
+      <span>Search & Filter Deposits</span>
     </div>
     <div class="card-body">
       <form method="get" action="/billing/deposits">
-        <div class="form-row align-items-end">
+        <div class="form-row">
           <div class="form-group col-sm-3 mb-3">
-            <label>HN</label>
-            <input type="text" class="form-control" name="hn" >
+            <label><i class="fas fa-id-card mr-1" style="color:#94a3b8;"></i>HN</label>
+            <input type="text" class="form-control" name="hn" :value="query.hn" placeholder="HN">
           </div>
           <div class="form-group col-sm-3 mb-3">
-            <label>VN / AN</label>
-            <input type="text" class="form-control" name="vn" >
+            <label><i class="fas fa-hospital-user mr-1" style="color:#94a3b8;"></i>VN / AN</label>
+            <input type="text" class="form-control" name="vn" :value="query.vn" placeholder="VN or AN">
           </div>
-          <div class="form-group col-sm-3 mb-3">
-            <input type="submit" class="btn btn-success" value="กรองข้อมูล" >
+        </div>
+        <div class="form-row">
+          <div class="form-group col-sm-3 mb-0">
+            <button type="submit" class="btn btn-primary w-100">
+              <i class="fas fa-filter mr-1"></i> Filter Data
+            </button>
           </div>
         </div>
       </form>
@@ -29,6 +33,8 @@
     <div class="card-header" style="display:flex;align-items:center;gap:8px;">
       <i class="fas fa-hand-holding-usd" style="color:#2563eb;"></i>
       <span>Deposits</span>
+      <!-- Previous / Next: right after the table filter app.js adds -->
+      <page-pager :paging="paging"></page-pager>
     </div>
     <div class="card-body p-0">
       <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
@@ -79,6 +85,8 @@
           </tbody>
         </table>
       </div>
+      <!-- The same pages under the table -->
+      <div class="pg-foot"><page-pager :paging="paging"></page-pager></div>
     </div>
   </div>
 </div>

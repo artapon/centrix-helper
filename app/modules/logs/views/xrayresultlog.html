@@ -1,25 +1,29 @@
 <div class="col-sm-12">
   <div class="card">
     <div class="card-header" style="display:flex;align-items:center;gap:8px;">
-      <i class="fas fa-filter" style="color:#2563eb;"></i>
-      <span>Filter</span>
+      <i class="fas fa-search" style="color:#2563eb;"></i>
+      <span>Search & Filter Xray Mirth Logs</span>
     </div>
     <div class="card-body">
-      <form method="get" :action="`/radiology/mirth-log/${channelType}`" class="form-group">
+      <form method="get" :action="`/radiology/mirth-log/${channelType}`">
         <div class="form-row">
-          <div class="form-group col-sm-5">
-            <label>HN หรือ Accessionnumber : &nbsp;</label>
-            <input type="text" class="form-control" name="PATIENTMRN" >
+          <div class="form-group col-sm-3 mb-3">
+            <label><i class="fas fa-id-card mr-1" style="color:#94a3b8;"></i>HN / Accession No.</label>
+            <input type="text" class="form-control" name="PATIENTMRN" placeholder="HN or accession number">
           </div>
-          <div class="form-group col-sm-5">
-            <label>Status : &nbsp;</label>
+          <div class="form-group col-sm-3 mb-3">
+            <label><i class="fas fa-info-circle mr-1" style="color:#94a3b8;"></i>Status</label>
             <select name="status" class="form-control">
               <option value="ERROR" selected>ERROR</option>
               <option value="SENT">SUCCESS</option>
             </select>
           </div>
-          <div class="form-group col-sm-3" style="display:flex;align-items:flex-end;">
-            <input type="submit" value="กรองข้อมูล" class="btn btn-success">
+        </div>
+        <div class="form-row">
+          <div class="form-group col-sm-3 mb-0">
+            <button type="submit" class="btn btn-primary w-100">
+              <i class="fas fa-filter mr-1"></i> Filter Data
+            </button>
           </div>
         </div>
       </form>

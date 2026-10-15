@@ -51,7 +51,7 @@ exports.getOrgData = async function (sitecode = '') {
   if (!organisations.length) {
     // Every data page needs its organisation; say what is wrong instead of failing on org[0]._id.
     const err = new Error(sitecode
-      ? `No active organisation with site code "${sitecode}" (or ${FALLBACK_SITE_CODE}) in this database. Check "Default site code" for this connection in Manage Connections.`
+      ? `No active organisation with site code "${sitecode}" (or ${FALLBACK_SITE_CODE}) in this database. Check "Default site code" for this connection in DB Connections.`
       : 'No active organisation found in this database.');
     err.status = 409;
     err.expose = true;

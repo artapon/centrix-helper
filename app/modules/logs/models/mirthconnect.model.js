@@ -1,5 +1,4 @@
 const axios = require('axios');
-const { Console } = require('winston/lib/winston/transports');
 const { parseString } = require('xml2js');
 const https = require('https');
 let moment = require("moment-timezone");

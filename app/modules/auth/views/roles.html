@@ -37,6 +37,7 @@
                     <span class="access-meter-label">{{ pageCount(r.permissions) }} / {{ totalItems }}</span>
                   </div>
                   <small v-if="missingActions(r.permissions)" class="d-block text-muted"><i class="fas fa-lock"></i> {{ missingActions(r.permissions) }} page action{{ missingActions(r.permissions) === 1 ? '' : 's' }} not granted</small>
+                  <small v-if="widgetItems.length" class="d-block text-muted"><i class="fas fa-puzzle-piece"></i> {{ widgetCount(r.permissions) }} of {{ widgetItems.length }} widget{{ widgetItems.length === 1 ? '' : 's' }}</small>
                 </template>
               </td>
               <td>{{ r.user_count }}</td>
@@ -60,7 +61,9 @@
   <p class="text-muted small">
     Permissions control which menu items a role sees and which pages it can open. Some pages also list actions (for example
     <strong>Deploy to Production</strong> on Publish Report): untick one to hide that button for the role; the server refuses it too. User and role management are
-    always limited to administrators. Connecting to a site from <strong>Manage Connections</strong> also needs <strong>DB Info</strong>.
+    always limited to administrators. Connecting to a site from <strong>DB Connections</strong> also needs <strong>DB Info</strong>.
+    <strong>Widgets</strong> are parts of an add-on that other pages show, for example Query Studio's <strong>Basic Data</strong> on
+    Jasper Designer: a role sees a widget on the pages it already has, and only while that add-on is active.
   </p>
 
   <!-- Add / edit role -->
@@ -93,7 +96,7 @@
           </div>
 
           <div class="perm-grid">
-            <fieldset v-for="section in menu" :key="section.header" class="perm-group">
+            <fieldset v-for="section in pageSections" :key="section.header" class="perm-group">
               <legend>
                 <div class="custom-control custom-checkbox">
                   <input type="checkbox" class="custom-control-input" :id="'sec-' + section.header"
@@ -122,6 +125,31 @@
               </div>
             </fieldset>
           </div>
+
+          <!-- Add-on widgets: granted on their own, shown on the pages the role has -->
+          <template v-if="widgetItems.length">
+            <div class="perm-toolbar mt-4">
+              <label class="mb-0">Widgets</label>
+              <span class="text-muted small">{{ widgetCount(form.selected) }} of {{ widgetItems.length }} selected</span>
+              <span class="perm-toolbar-actions">
+                <button type="button" class="btn btn-link btn-sm" @click="setWidgets(true)">Select all</button>
+                <button type="button" class="btn btn-link btn-sm" @click="setWidgets(false)">Clear</button>
+              </span>
+            </div>
+            <div class="perm-widgets">
+              <div v-for="w in widgetItems" :key="w.permission" class="perm-widget" :class="{ 'is-on': has(w.permission) }">
+                <div class="custom-control custom-checkbox">
+                  <input type="checkbox" class="custom-control-input" name="permissions" :id="'perm-' + w.permission"
+                         :value="w.permission" v-model="form.selected">
+                  <label class="custom-control-label" :for="'perm-' + w.permission">
+                    <i :class="w.icon"></i> {{ w.text }}
+                    <span v-if="w.source" class="perm-source">{{ w.source }}</span>
+                  </label>
+                </div>
+                <small v-if="w.description" class="perm-widget-desc">{{ w.description }}</small>
+              </div>
+            </div>
+          </template>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
@@ -169,6 +197,13 @@
   .perm-action { margin: 2px 0; min-height: 1.2rem; }
   .perm-action .custom-control-label { font-size: .8rem; color: var(--text-2); }
   .perm-item .custom-control-label i { width: 16px; text-align: center; color: var(--muted); margin-right: 2px; }
+  .perm-widgets { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+  .perm-widget { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+  .perm-widget.is-on { border-color: #c9d6ea; background: var(--surface-2); }
+  .perm-widget .custom-control-label { font-weight: 600; font-size: .86rem; }
+  .perm-widget .custom-control-label i { width: 16px; text-align: center; color: var(--muted); margin-right: 2px; }
+  .perm-source { margin-left: 6px; font-size: .7rem; font-weight: 600; color: var(--text-2); background: var(--surface-3); border-radius: 999px; padding: 1px 8px; }
+  .perm-widget-desc { display: block; margin: 4px 0 0 24px; color: var(--muted); font-size: .76rem; line-height: 1.4; }
 </style>
 
 <script>
@@ -180,14 +215,20 @@
       };
     },
     computed: {
+      // Menu sections; the Widgets section (add-on widgets, core/addons.js) is listed on its own
+      pageSections: function () { return this.menu.filter(function (section) { return !section.widgets; }); },
+      widgetItems: function () {
+        return this.menu.filter(function (section) { return section.widgets; })
+          .reduce(function (all, section) { return all.concat(section.items); }, []);
+      },
       allPermissions: function () {
-        return this.menu.reduce(function (all, section) {
+        return this.pageSections.reduce(function (all, section) {
           return all.concat(section.items.map(function (item) { return item.permission; }));
         }, []);
       },
       // Each page with its actions
       itemList: function () {
-        return this.menu.reduce(function (all, section) { return all.concat(section.items); }, []);
+        return this.pageSections.reduce(function (all, section) { return all.concat(section.items); }, []);
       },
       totalItems: function () { return this.allPermissions.length; }
     },
@@ -195,8 +236,19 @@
       percent: function (role) {
         return this.totalItems ? Math.round(this.pageCount(role.permissions) / this.totalItems * 100) : 0;
       },
-      // Pages only (a page's actions are "<page>#<action>")
-      pageCount: function (list) { return list.filter(function (p) { return p.indexOf('#') < 0; }).length; },
+      // Pages only (not a page's actions, "<page>#<action>", nor widgets)
+      pageCount: function (list) {
+        var pages = this.allPermissions;
+        return list.filter(function (p) { return pages.indexOf(p) >= 0; }).length;
+      },
+      widgetCount: function (list) {
+        return this.widgetItems.filter(function (w) { return list.indexOf(w.permission) >= 0; }).length;
+      },
+      setWidgets: function (on) {
+        var links = this.widgetItems.map(function (w) { return w.permission; });
+        var rest = this.form.selected.filter(function (p) { return links.indexOf(p) < 0; });
+        this.form.selected = on ? rest.concat(links) : rest;
+      },
       // Actions of the granted pages that are not granted
       missingActions: function (list) {
         return this.itemList.reduce(function (n, item) {
@@ -222,8 +274,11 @@
         section.items.forEach(function (item) { selected = vm.withItem(selected, item, on); });
         vm.form.selected = selected;
       },
+      // Menu access only; the widgets keep their ticks
       setAll: function (on) {
-        var vm = this, selected = [];
+        var vm = this;
+        var widgets = vm.widgetItems.map(function (w) { return w.permission; });
+        var selected = vm.form.selected.filter(function (p) { return widgets.indexOf(p) >= 0; });
         if (on) vm.itemList.forEach(function (item) { selected = vm.withItem(selected, item, true); });
         vm.form.selected = selected;
       },

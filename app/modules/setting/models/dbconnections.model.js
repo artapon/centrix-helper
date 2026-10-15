@@ -1,6 +1,6 @@
 const { run, get, all } = require('../../../core/config/sqlite');
 const helpers = require('../../../core/helpers/encryption');
-const mongoUri = require('./mongoUri');
+const mongoUri = require('./mongouri.helper');
 
 function encryptIfPresent(value) {
   return value ? helpers.medintEncrypt(value) : '';

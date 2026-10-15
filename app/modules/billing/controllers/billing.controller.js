@@ -1,4 +1,5 @@
 const organisationsModel = require("../../../core/models/organisations.model");
+const paging = require('../../../core/http/paging');        // Previous / Next paging (?page=)
 const patientbillModel = require("../models/patientbills.model");
 const patientModel = require("../../patients/models/patient.model");
 const patientvisitModel = require("../../patients/models/patientvisits.model");
@@ -35,11 +36,13 @@ exports.patientBills = async function (req, res) {
   }
   let orgcode = req.session.sitecode;
   let org = await organisationsModel.getOrgData(orgcode);
-  let bills = await patientbillModel.getPatientBills(org[0]._id, selectedDateFormat, patientuid, visituid, sequencenumber);
+  const p = paging.read(req);
+  const { rows: bills, paging: pg } = paging.page(req, p, await patientbillModel.getPatientBills(org[0]._id, selectedDateFormat, patientuid, visituid, sequencenumber, p));
 
   return res.renderPage(view('patientbills'), {
     title:  'Patient Bills : ' + org[0].name,
-    bills: bills
+    bills: bills,
+    paging: pg, query: { date: req.query.date || '', sequencenumber: sequencenumber, hn: hn, vn: vn }
   });
 }
 

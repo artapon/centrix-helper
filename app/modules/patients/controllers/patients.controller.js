@@ -106,16 +106,26 @@ exports.patientSummary = async function (req, res) {
 }
 
 
+// 50 merges a page (?page=0, 1, …); one more is read to know whether there is a next page.
+const MERGES_PER_PAGE = 50;
 exports.patientMerges = async function (req, res) {
   let orgcode = req.session.sitecode;
   let org = await organisationsModel.getOrgData(orgcode);
-  let hn = req.query.hn || '';
+  let hn = String(req.query.hn || '').trim();
+  let page = Math.max(0, parseInt(req.query.page, 10) || 0);
   let patientuid = await patientModel.getPatientUID(hn);
-  let patientmerges = await patientModel.getPatientMergeData(org[0]._id, patientuid);
+  let rows = await patientModel.getPatientMergeData(org[0]._id, patientuid, { skip: page * MERGES_PER_PAGE, limit: MERGES_PER_PAGE + 1 }) || [];
+  let hasMore = rows.length > MERGES_PER_PAGE;
 
   return res.renderPage(view('merges'), {
     title:  'Patient Merges : ' + org[0].name,
-    patientmerges : patientmerges
+    patientmerges : rows.slice(0, MERGES_PER_PAGE),
+    hn: hn,
+    page: page,
+    perPage: MERGES_PER_PAGE,
+    hasMore: hasMore,
+    nextpage: page + 1,
+    lastpage: page > 0 ? page - 1 : 0
   });
 }
 

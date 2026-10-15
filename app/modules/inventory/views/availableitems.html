@@ -2,19 +2,21 @@
   <div class="card">
     <div class="card-header" style="display:flex;align-items:center;gap:8px;">
       <i class="fas fa-search" style="color:#2563eb;"></i>
-      <span>Search Available Items</span>
+      <span>Search & Filter Available Items</span>
     </div>
     <div class="card-body">
-      <form method="get" action="/inventory/available-items" class="form-group">
+      <form method="get" action="/inventory/available-items">
         <div class="form-row">
-          <div class="form-group col-sm-3">
-            <label>ITEM Code : &nbsp;</label>
-            <input type="text" class="form-control" name="itemno" >
+          <div class="form-group col-sm-3 mb-3">
+            <label><i class="fas fa-barcode mr-1" style="color:#94a3b8;"></i>Item Code</label>
+            <input type="text" class="form-control" name="itemno" :value="itemno" placeholder="Item code">
           </div>
         </div>
         <div class="form-row">
-          <div class="form-group col-sm-6">
-          <input type="submit" value="กรองข้อมูล" class="btn btn-success">
+          <div class="form-group col-sm-3 mb-0">
+            <button type="submit" class="btn btn-primary w-100">
+              <i class="fas fa-filter mr-1"></i> Filter Data
+            </button>
           </div>
         </div>
       </form>
@@ -26,7 +28,10 @@
     <div class="card-header" style="display:flex;align-items:center;gap:8px;">
       <i class="fas fa-boxes" style="color:#2563eb;"></i>
       <span>Available Items</span>
+      <!-- Previous / Next: right after the table filter app.js adds -->
+      <page-pager :paging="paging"></page-pager>
     </div>
+    <div v-if="error" class="alert alert-danger m-3 mb-0" role="alert"><i class="fas fa-exclamation-triangle mr-1"></i> {{ error }}</div>
     <div class="card-body p-0">
       <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
         <table class="table mb-0">
@@ -55,11 +60,19 @@
               <td class="text-center">{{ item.store_code }}</td>
               <td class="text-center">{{ item.store }}</td>
               <td class="text-center">{{ item.batchid }}</td>
-              <td class="text-center">{{ item.expirydate }}</td>
+              <td class="text-center" :class="{ 'ai-bad-date': String(item.expirydate || '').indexOf('invalid') >= 0 }" :title="String(item.expirydate || '').indexOf('invalid') >= 0 ? 'This expiry date is outside 0000-9999: correct it in the stock ledger' : null">{{ item.expirydate }}</td>
             </tr>
           </tbody>
         </table>
+        <p v-if="!error && !(items && items.length)" class="text-muted text-center small py-3 mb-0">No available items found{{ itemno ? ' for ' + itemno : '' }}.</p>
       </div>
+      <!-- The same pages under the table -->
+      <div class="pg-foot"><page-pager :paging="paging"></page-pager></div>
     </div>
   </div>
 </div>
+
+<style>
+  /* Expiry date outside what MongoDB can show (e.g. year 10007): a soft red cell */
+  .ai-bad-date { background: #fde8e8 !important; color: #b91c1c; font-weight: 600; }
+</style>

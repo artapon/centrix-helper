@@ -1,0 +1,194 @@
+<div class="col-12">
+<div class="el">
+
+  <header class="el-pagehead">
+    <div>
+      <div class="el-eyebrow">E-Learning</div>
+      <h1>All Courses</h1>
+      <p>Training for everyone at the hospital. Pick a course, follow its lessons and pick up where you left off.</p>
+    </div>
+    <div class="el-pagehead-tools">
+      <label class="el-search"><i class="fas fa-search" aria-hidden="true"></i><span class="sr-only">Search courses</span>
+        <input v-model.trim="q" type="search" placeholder="Search courses"></label>
+      <div class="el-seg" role="group" aria-label="Layout">
+        <button type="button" :class="{ 'is-on': layout === 'grid' }" :aria-pressed="layout === 'grid'" title="Grid" @click="setLayout('grid')"><i class="fas fa-th-large" aria-hidden="true"></i><span class="sr-only">Grid</span></button>
+        <button type="button" :class="{ 'is-on': layout === 'list' }" :aria-pressed="layout === 'list'" title="List" @click="setLayout('list')"><i class="fas fa-list" aria-hidden="true"></i><span class="sr-only">List</span></button>
+      </div>
+      <a v-if="can.manage" href="/e-learning/courses/new" class="el-btn is-primary"><i class="fas fa-plus" aria-hidden="true"></i> New course</a>
+    </div>
+  </header>
+
+  <div v-if="!courses.length" class="el-empty">
+    <div class="el-empty-icon"><i class="fas fa-graduation-cap" aria-hidden="true"></i></div>
+    <h3>No courses yet</h3>
+    <p v-if="can.manage">Create the first course: give it a title, add sections and lessons (text or videos from YouTube, Google Drive or a shared folder), then publish it.</p>
+    <p v-else>Courses appear here once they are published.</p>
+    <a v-if="can.manage" href="/e-learning/courses/new" class="el-btn is-primary"><i class="fas fa-plus" aria-hidden="true"></i> New course</a>
+  </div>
+
+  <div v-else class="el-catalog">
+    <main>
+      <div class="el-resultbar">
+        <span>Showing <b>{{ filtered.length }}</b> of {{ courses.length }} course{{ courses.length === 1 ? '' : 's' }}</span>
+        <label class="sr-only" for="el-sort">Sort by</label>
+        <select id="el-sort" v-model="sort" class="el-select">
+          <option value="newest">Newest</option>
+          <option value="title">Title A–Z</option>
+          <option value="popular">Most learners</option>
+          <option value="recent">Recently studied</option>
+          <option value="short">Shortest first</option>
+        </select>
+      </div>
+
+      <div v-if="!filtered.length" class="el-empty">
+        <div class="el-empty-icon"><i class="fas fa-search" aria-hidden="true"></i></div>
+        <h3>No courses match</h3>
+        <p>Try other words or fewer filters.</p>
+        <button type="button" class="el-btn" @click="reset">Clear search and filters</button>
+      </div>
+
+      <div v-else :class="layout === 'grid' ? 'el-grid' : 'el-list'">
+        <a v-for="c in filtered" :key="c.id" class="el-card" :href="base + '/courses/' + c.id">
+          <div class="el-card-media" :style="c.thumbUrl ? null : cover(c)">
+            <img v-if="c.thumbUrl" :src="c.thumbUrl" alt="" loading="lazy">
+            <span v-else class="el-cover-ph" aria-hidden="true"><i class="fas fa-graduation-cap"></i><span>{{ c.title }}</span></span>
+            <div class="el-card-tags">
+              <span v-for="name in c.categories.slice(0, 3)" :key="name" class="el-badge is-cat">{{ name }}</span>
+              <span v-if="c.categories.length > 3" class="el-badge is-cat" :title="c.categories.slice(3).join(', ')">+{{ c.categories.length - 3 }}</span>
+              <span v-if="c.status === 'draft'" class="el-badge is-draft"><i class="fas fa-pen" aria-hidden="true"></i> Draft</span>
+            </div>
+          </div>
+          <div class="el-card-main">
+            <div class="el-card-body">
+              <div v-if="c.instructor" class="el-card-by">by <b>{{ c.instructor }}</b></div>
+              <h3 class="el-card-title">{{ c.title }}</h3>
+              <p v-if="layout === 'list' && c.summary" class="el-card-sum">{{ c.summary }}</p>
+              <ul class="el-meta">
+                <li v-if="c.minutes"><i class="far fa-clock" aria-hidden="true"></i>{{ duration(c.minutes) }}</li>
+                <li><i class="far fa-file-alt" aria-hidden="true"></i>{{ c.lessons }} lesson{{ c.lessons === 1 ? '' : 's' }}</li>
+                <li><i class="fas fa-signal" aria-hidden="true"></i>{{ LEVELS[c.level] }}</li>
+                <li v-if="c.learners"><i class="fas fa-user-graduate" aria-hidden="true"></i>{{ c.learners }}</li>
+              </ul>
+            </div>
+            <div class="el-card-foot">
+              <template v-if="c.started && c.lessons">
+                <span class="el-prog">
+                  <span class="el-bar" :class="{ 'is-done': c.done >= c.lessons }"><span :style="{ width: pct(c.done, c.lessons) + '%' }"></span></span>
+                  {{ pct(c.done, c.lessons) }}%
+                </span>
+                <span class="el-card-go">{{ c.done >= c.lessons ? 'Review' : 'Continue' }}</span>
+              </template>
+              <template v-else>
+                <span class="el-card-free">{{ c.sections }} section{{ c.sections === 1 ? '' : 's' }}<template v-if="c.videos"> · {{ c.videos }} video{{ c.videos === 1 ? '' : 's' }}</template><template v-if="c.quizzes"> · {{ c.quizzes }} quiz{{ c.quizzes === 1 ? '' : 'zes' }}</template></span>
+                <span class="el-card-go">View course</span>
+              </template>
+            </div>
+          </div>
+        </a>
+      </div>
+    </main>
+
+    <aside class="el-filters" aria-label="Filters">
+      <section v-if="categoryList.length">
+        <h4>Course category</h4>
+        <label v-for="c in categoryList" :key="c.name" class="el-check" :class="{ 'is-on': f.categories.indexOf(c.name) >= 0 }">
+          <input type="checkbox" :value="c.name" v-model="f.categories"><span>{{ c.name }}</span><em>{{ c.n }}</em>
+        </label>
+      </section>
+      <section v-if="instructorList.length > 1">
+        <h4>Instructors</h4>
+        <label v-for="c in instructorList" :key="c.name" class="el-check" :class="{ 'is-on': f.instructors.indexOf(c.name) >= 0 }">
+          <input type="checkbox" :value="c.name" v-model="f.instructors"><span>{{ c.name }}</span><em>{{ c.n }}</em>
+        </label>
+      </section>
+      <section>
+        <h4>Level</h4>
+        <label v-for="l in levels" :key="l" class="el-check" :class="{ 'is-on': f.levels.indexOf(l) >= 0 }">
+          <input type="checkbox" :value="l" v-model="f.levels"><span>{{ LEVELS[l] }}</span><em>{{ count('level', l) }}</em>
+        </label>
+      </section>
+      <section>
+        <h4>My progress</h4>
+        <label v-for="p in PROGRESS" :key="p.key" class="el-check" :class="{ 'is-on': f.progress.indexOf(p.key) >= 0 }">
+          <input type="checkbox" :value="p.key" v-model="f.progress"><span>{{ p.label }}</span><em>{{ progressCount(p.key) }}</em>
+        </label>
+      </section>
+      <section v-if="can.manage">
+        <h4>Status</h4>
+        <label class="el-check" :class="{ 'is-on': f.status.indexOf('published') >= 0 }"><input type="checkbox" value="published" v-model="f.status"><span>Published</span><em>{{ count('status', 'published') }}</em></label>
+        <label class="el-check" :class="{ 'is-on': f.status.indexOf('draft') >= 0 }"><input type="checkbox" value="draft" v-model="f.status"><span>Draft</span><em>{{ count('status', 'draft') }}</em></label>
+      </section>
+      <div v-if="filtering" class="el-filters-foot"><button type="button" class="el-link" @click="reset"><i class="fas fa-times" aria-hidden="true"></i> Clear filters</button></div>
+    </aside>
+  </div>
+
+</div>
+</div>
+
+<script src="/e-learning/assets/elearning.js"></script>
+<script>
+  (function () {
+    'use strict';
+    var PROGRESS = [
+      { key: 'new', label: 'Not started' },
+      { key: 'doing', label: 'In progress' },
+      { key: 'done', label: 'Completed' }
+    ];
+    var LAYOUT_KEY = 'elearning.layout';
+    var blank = function () { return { categories: [], instructors: [], levels: [], progress: [], status: [] }; };
+    // Opened a lesson: in progress; every lesson marked complete: completed
+    var stateOf = function (c) { return !c.started ? 'new' : c.lessons && c.done >= c.lessons ? 'done' : 'doing'; };
+    var tally = function (list, key) {
+      var m = {};
+      list.forEach(function (c) { [].concat(c[key] || []).forEach(function (v) { m[v] = (m[v] || 0) + 1; }); });
+      return Object.keys(m).sort(function (a, b) { return a.localeCompare(b); }).map(function (k) { return { name: k, n: m[k] }; });
+    };
+
+    Page.setup({
+      data: function () {
+        var layout = 'grid';
+        try { layout = localStorage.getItem(LAYOUT_KEY) === 'list' ? 'list' : 'grid'; } catch (e) { /* private mode */ }
+        return { q: '', sort: 'newest', layout: layout, f: blank(), PROGRESS: PROGRESS, LEVELS: ELearn.LEVELS };
+      },
+      computed: {
+        categoryList: function () { return tally(this.courses, 'categories'); },
+        instructorList: function () { return tally(this.courses, 'instructor'); },
+        filtering: function () {
+          var f = this.f;
+          return !!(this.q || f.categories.length || f.instructors.length || f.levels.length || f.progress.length || f.status.length);
+        },
+        filtered: function () {
+          var f = this.f, words = this.q.toLowerCase().split(/\s+/).filter(Boolean);
+          var list = this.courses.filter(function (c) {
+            if (f.categories.length && !c.categories.some(function (n) { return f.categories.indexOf(n) >= 0; })) return false;
+            if (f.instructors.length && f.instructors.indexOf(c.instructor) < 0) return false;
+            if (f.levels.length && f.levels.indexOf(c.level) < 0) return false;
+            if (f.status.length && f.status.indexOf(c.status) < 0) return false;
+            if (f.progress.length && f.progress.indexOf(stateOf(c)) < 0) return false;
+            if (!words.length) return true;
+            var hay = [c.title, c.summary, c.categories.join(' '), c.instructor].join(' ').toLowerCase();
+            return words.every(function (w) { return hay.indexOf(w) >= 0; });
+          });
+          var by = {
+            newest: function (a, b) { return String(b.publishedAt || b.createdAt).localeCompare(String(a.publishedAt || a.createdAt)); },
+            title: function (a, b) { return a.title.localeCompare(b.title); },
+            popular: function (a, b) { return b.learners - a.learners || a.title.localeCompare(b.title); },
+            recent: function (a, b) { return String(b.lastAt || '').localeCompare(String(a.lastAt || '')); },
+            short: function (a, b) { return (a.minutes || 1e9) - (b.minutes || 1e9); }
+          }[this.sort];
+          return list.slice().sort(by);
+        }
+      },
+      methods: {
+        duration: ELearn.duration, pct: ELearn.pct, cover: ELearn.cover,
+        count: function (key, value) { return this.courses.filter(function (c) { return c[key] === value; }).length; },
+        progressCount: function (key) { return this.courses.filter(function (c) { return stateOf(c) === key; }).length; },
+        setLayout: function (v) {
+          this.layout = v;
+          try { localStorage.setItem(LAYOUT_KEY, v); } catch (e) { /* private mode */ }
+        },
+        reset: function () { this.q = ''; this.f = blank(); }
+      }
+    });
+  })();
+</script>

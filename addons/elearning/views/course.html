@@ -1,0 +1,182 @@
+<div class="col-12">
+<div class="el">
+
+  <section class="el-hero">
+    <div class="el-hero-in">
+      <nav class="el-crumbs" aria-label="Breadcrumb">
+        <a v-if="home" :href="home">Courses</a>
+        <span v-else><i class="fas fa-share-alt" aria-hidden="true"></i> Shared course</span>
+        <template v-if="course.category"><i class="fas fa-chevron-right" aria-hidden="true"></i><span>{{ course.category }}</span></template>
+      </nav>
+      <div class="el-hero-tags">
+        <span v-for="name in course.categories" :key="name" class="el-badge is-cat">{{ name }}</span>
+        <span v-if="course.status === 'draft'" class="el-badge is-draft"><i class="fas fa-pen" aria-hidden="true"></i> Draft: only course managers see it</span>
+        <span v-if="course.instructor">by <b>{{ course.instructor }}</b></span>
+      </div>
+      <h1>{{ course.title }}</h1>
+      <p v-if="course.summary" class="el-hero-sum">{{ course.summary }}</p>
+      <ul class="el-meta">
+        <li v-if="course.minutes"><i class="far fa-clock" aria-hidden="true"></i>{{ duration(course.minutes) }}</li>
+        <li><i class="fas fa-user-graduate" aria-hidden="true"></i>{{ course.learners }} learner{{ course.learners === 1 ? '' : 's' }}</li>
+        <li><i class="fas fa-signal" aria-hidden="true"></i>{{ LEVELS[course.level] }}</li>
+        <li><i class="far fa-file-alt" aria-hidden="true"></i>{{ course.lessons }} lesson{{ course.lessons === 1 ? '' : 's' }}</li>
+        <li v-if="course.videos"><i class="fas fa-play-circle" aria-hidden="true"></i>{{ course.videos }} video{{ course.videos === 1 ? '' : 's' }}</li>
+        <li v-if="course.quizzes"><i class="fas fa-question-circle" aria-hidden="true"></i>{{ course.quizzes }} quiz{{ course.quizzes === 1 ? '' : 'zes' }}</li>
+        <li v-if="course.assignments"><i class="fas fa-clipboard-check" aria-hidden="true"></i>{{ course.assignments }} assignment{{ course.assignments === 1 ? '' : 's' }}</li>
+      </ul>
+    </div>
+  </section>
+
+  <div class="el-course">
+    <main>
+      <nav class="el-tabs" role="tablist">
+        <button v-for="t in TABS" :key="t.key" type="button" role="tab" class="el-tab" :class="{ 'is-on': tab === t.key }" :aria-selected="tab === t.key" @click="tab = t.key">{{ t.label }}</button>
+      </nav>
+
+      <div v-show="tab === 'overview'" class="el-tabpanel" role="tabpanel">
+        <div v-if="course.description.trim()" class="el-md" v-html="md(course.description)"></div>
+        <p v-else-if="course.summary" class="el-md">{{ course.summary }}</p>
+        <p v-else class="el-muted">This course has no overview yet. See the Curriculum for its lessons.</p>
+      </div>
+
+      <div v-show="tab === 'curriculum'" class="el-tabpanel" role="tabpanel">
+        <div class="el-curr-head">
+          <span>{{ course.curriculum.length }} section{{ course.curriculum.length === 1 ? '' : 's' }} · {{ course.lessons }} lesson{{ course.lessons === 1 ? '' : 's' }}<template v-if="course.minutes"> · {{ duration(course.minutes) }} in total</template></span>
+          <button v-if="course.curriculum.length > 1" type="button" class="el-link" @click="toggleAll">{{ allOpen ? 'Collapse all' : 'Expand all' }}</button>
+        </div>
+        <p v-if="!course.curriculum.length" class="el-muted">No lessons yet.</p>
+        <div v-for="s in course.curriculum" :key="s.id" class="el-sec">
+          <button type="button" class="el-sec-head" :class="{ 'is-closed': !open[s.id] }" :aria-expanded="!!open[s.id]" @click="toggle(s.id)">
+            <i class="fas fa-chevron-down" aria-hidden="true"></i>
+            <span class="el-sec-title">{{ s.title }}<small v-if="s.summary">{{ s.summary }}</small></span>
+            <span class="el-sec-meta">{{ sectionDone(s) }}/{{ s.lessons.length }}<template v-if="sectionMinutes(s)"> · {{ duration(sectionMinutes(s)) }}</template></span>
+          </button>
+          <ul v-show="open[s.id]" class="el-lessons">
+            <li v-for="l in s.lessons" :key="l.id">
+              <a class="el-lesson" :href="lessonUrl(l)">
+                <span class="el-lesson-type" :class="'is-' + l.type"><i :class="typeIcon(l)" aria-hidden="true"></i></span>
+                <span class="el-lesson-title">{{ l.title }}<small>{{ typeText(l) }}</small></span>
+                <span v-if="l.durationMin" class="el-lesson-dur">{{ duration(l.durationMin) }}</span>
+                <span class="el-lesson-done" :class="{ 'is-on': l.done }" :title="l.done ? 'Completed' : 'Not completed'">
+                  <i :class="l.done ? 'fas fa-check-circle' : 'far fa-circle'" aria-hidden="true"></i><span class="sr-only">{{ l.done ? 'Completed' : 'Not completed' }}</span>
+                </span>
+              </a>
+            </li>
+            <li v-if="!s.lessons.length" class="el-lesson el-muted">No lessons in this section yet.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div v-show="tab === 'instructor'" class="el-tabpanel" role="tabpanel">
+        <div v-if="course.instructor" class="el-instructor">
+          <span class="el-avatar" :style="cover({ category: course.instructor })">{{ initials(course.instructor) }}</span>
+          <div>
+            <div class="el-eyebrow">Instructor</div>
+            <h3>{{ course.instructor }}</h3>
+            <div v-if="course.instructorBio" class="el-md" v-html="md(course.instructorBio)"></div>
+          </div>
+        </div>
+        <p v-else class="el-muted">No instructor is named for this course.</p>
+      </div>
+    </main>
+
+    <aside class="el-side">
+      <div class="el-sidecard">
+        <div class="el-card-media" :style="course.thumbUrl ? null : cover(course)">
+          <img v-if="course.thumbUrl" :src="course.thumbUrl" alt="">
+          <span v-else class="el-cover-ph" aria-hidden="true"><i class="fas fa-graduation-cap"></i></span>
+        </div>
+        <div class="el-sidecard-body">
+          <div v-if="course.started && course.lessons" class="el-sidecard-prog">
+            <div class="el-prog-top"><span>Your progress</span><b>{{ progress }}%</b></div>
+            <span class="el-bar" :class="{ 'is-done': finished }"><span :style="{ width: progress + '%' }"></span></span>
+            <span>{{ course.done }} of {{ course.lessons }} lesson{{ course.lessons === 1 ? '' : 's' }} complete</span>
+          </div>
+          <a v-if="startLesson" class="el-btn is-primary is-lg is-block" :href="lessonUrl(startLesson)">
+            <i :class="finished ? 'fas fa-redo' : 'fas fa-play'" aria-hidden="true"></i>
+            {{ finished ? 'Review course' : course.started ? 'Continue learning' : 'Start learning' }}
+          </a>
+          <a v-if="can.manage" class="el-btn is-block" :href="'/e-learning/courses/' + course.id + '/edit'"><i class="fas fa-pen" aria-hidden="true"></i> Edit course</a>
+          <a v-if="!guest && canShare" class="el-btn is-block" :href="'/e-learning/share#course-' + course.id"><i class="fas fa-share-alt" aria-hidden="true"></i> Share by link</a>
+          <a v-if="can.manage && (course.quizzes || course.assignments)" class="el-btn is-block" :href="'/e-learning/courses/' + course.id + '/grading'">
+            <i class="fas fa-clipboard-check" aria-hidden="true"></i> Grading
+            <span v-if="course.pending" class="el-badge is-draft" style="height: 20px;">{{ course.pending }} to grade</span>
+          </a>
+          <ul class="el-sidelist">
+            <li><i class="far fa-file-alt" aria-hidden="true"></i>Lessons<b>{{ course.lessons }}</b></li>
+            <li v-if="course.videos"><i class="fas fa-play-circle" aria-hidden="true"></i>Videos<b>{{ course.videos }}</b></li>
+            <li v-if="course.quizzes"><i class="fas fa-question-circle" aria-hidden="true"></i>Quizzes<b>{{ course.quizzes }}</b></li>
+            <li v-if="course.assignments"><i class="fas fa-clipboard-check" aria-hidden="true"></i>Assignments<b>{{ course.assignments }}</b></li>
+            <li v-if="course.minutes"><i class="far fa-clock" aria-hidden="true"></i>Duration<b>{{ duration(course.minutes) }}</b></li>
+            <li><i class="fas fa-signal" aria-hidden="true"></i>Level<b>{{ LEVELS[course.level] }}</b></li>
+            <li><i class="far fa-calendar" aria-hidden="true"></i>Updated<b>{{ when(course.updatedAt) }}</b></li>
+          </ul>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+</div>
+</div>
+
+<script src="/e-learning/assets/elearning.js"></script>
+<script>
+  (function () {
+    'use strict';
+    var TABS = [
+      { key: 'overview', label: 'Overview' },
+      { key: 'curriculum', label: 'Curriculum' },
+      { key: 'instructor', label: 'Instructor' }
+    ];
+
+    Page.setup({
+      data: function () {
+        // (the page's own data is not on `this` yet here: read it from Page.data)
+        var open = {};
+        // the first section, and the one the learner is on, start open
+        (Page.data.course.curriculum || []).forEach(function (s, i) { open[s.id] = i === 0; });
+        var hash = String(location.hash || '').slice(1);
+        return { TABS: TABS, LEVELS: ELearn.LEVELS, open: open, tab: TABS.some(function (t) { return t.key === hash; }) ? hash : 'overview' };
+      },
+      created: function () {
+        var last = this.course.lastLessonId, self = this;
+        this.course.curriculum.forEach(function (s) {
+          if (s.lessons.some(function (l) { return l.id === last; })) self.$set(self.open, s.id, true);
+        });
+        if (!this.course.description.trim() && !this.course.summary && location.hash !== '#overview') this.tab = 'curriculum';
+      },
+      watch: { tab: function (t) { history.replaceState(null, '', '#' + t); } },
+      computed: {
+        lessonsInOrder: function () { return [].concat.apply([], this.course.curriculum.map(function (s) { return s.lessons; })); },
+        progress: function () { return ELearn.pct(this.course.done, this.course.lessons); },
+        finished: function () { return this.course.lessons > 0 && this.course.done >= this.course.lessons; },
+        // Continue: the lesson they were last on (or the first not done); start: the first lesson
+        startLesson: function () {
+          var list = this.lessonsInOrder, last = this.course.lastLessonId;
+          if (!list.length) return null;
+          var cur = list.filter(function (l) { return l.id === last; })[0];
+          if (cur && !cur.done) return cur;
+          var next = list.filter(function (l) { return !l.done; })[0];
+          return this.finished ? list[0] : next || cur || list[0];
+        },
+        allOpen: function () { var o = this.open; return this.course.curriculum.every(function (s) { return o[s.id]; }); }
+      },
+      methods: {
+        md: ELearn.md, duration: ELearn.duration, cover: ELearn.cover, initials: ELearn.initials, when: ELearn.when,
+        lessonUrl: function (l) { return this.base + '/lessons/' + l.id; },
+        toggle: function (id) { this.$set(this.open, id, !this.open[id]); },
+        toggleAll: function () {
+          var v = !this.allOpen, self = this;
+          this.course.curriculum.forEach(function (s) { self.$set(self.open, s.id, v); });
+        },
+        sectionDone: function (s) { return s.lessons.filter(function (l) { return l.done; }).length; },
+        sectionMinutes: function (s) { return s.lessons.reduce(function (n, l) { return n + (l.durationMin || 0); }, 0); },
+        typeIcon: function (l) {
+          if (l.type === 'video') return l.videoSource === 'youtube' ? 'fab fa-youtube' : 'fas fa-play';
+          return { quiz: 'fas fa-question-circle', assignment: 'fas fa-clipboard-check' }[l.type] || 'far fa-file-alt';
+        },
+        typeText: function (l) { return l.type === 'video' ? 'Video · ' + (ELearn.SOURCES[l.videoSource] || '') : { quiz: 'Quiz', assignment: 'Assignment' }[l.type] || 'Reading'; }
+      }
+    });
+  })();
+</script>

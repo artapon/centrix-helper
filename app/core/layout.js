@@ -22,8 +22,10 @@ const displayName = (text) => (/^[A-Z ]{4,}$/.test(text)
 const initials = (text) => String(text).split(/[^\p{L}\p{N}]+/u).filter(Boolean)
   .map((w) => w.replace(/^[\u0E40-\u0E44]/, '').charAt(0)).join('').slice(0, 2).toUpperCase();
 
-// Only the menu items the signed-in user's role can open (see core/permissions.js).
+// Only the menu items the signed-in user's role can open (see core/permissions.js); the hidden
+// Widgets section (permissions of add-on widgets) is not drawn.
 const visibleMenu = (menu, user) => menu
+  .filter((section) => !section.hidden)
   .map((section) => ({ ...section, items: section.items.filter((item) => item.active && permissions.canAccessItem(user, item)) }))
   .filter((section) => section.items.length);
 
@@ -62,12 +64,13 @@ function renderSidebar(menu, active) {
  *   shell.siteName     connected site name, '' when not connected
  *   shell.siteColor    connection's "Mark with color" (#rrggbb) or ''
  *   shell.connected    whether a Mongo connection is active for this session
- *   shell.connectLink  where the connection chip goes: Manage Connections, or /database/info without that permission
+ *   shell.connectLink  where the connection chip goes: DB Connections, or /database/info without that permission
  *   shell.canConnect   the user may connect (DB Info): the top bar shows Connect DB / Reconnect DB when not connected
  *   shell.lastSite     the site the app was connected to before it dropped ('' since start-up): "Reconnect DB"
  *   shell.here         this page's path, to come back to after connecting
  *   shell.user         signed-in user { username, name, initials, roleName, isAdmin }, escaped; null when signed out
- *   shell.title        page title as markup (controllers put HN/VN links in some titles)
+ *   shell.title        page title as markup (controllers put HN/VN links in some titles); not drawn since
+ *                      the page header was removed, the breadcrumb shows docTitle
  *   shell.docTitle     plain-text title for <title>
  *   shell.assetVersion cache-busting ?v= value for /css and /js
  */
@@ -83,7 +86,7 @@ exports.build = function (req, title) {
     siteName: connected ? escapeHtml(req.session.site_name || '') : '',
     siteColor: connected && /^#[0-9a-f]{6}$/i.test(req.session.site_color || '') ? req.session.site_color : '',
     connected,
-    // The connection chip opens Manage Connections (connect from there), or DB Info for roles without it.
+    // The connection chip opens DB Connections (connect from there), or DB Info for roles without it.
     connectLink: account && permissions.canAccessPath(account, '/database/connections') ? '/database/connections' : '/database/info',
     canConnect: !connected && !!account && permissions.canAccessPath(account, '/database/connect/last'),
     lastSite: !connected ? escapeHtml((global.sessionData && global.sessionData.site_name) || '') : '',

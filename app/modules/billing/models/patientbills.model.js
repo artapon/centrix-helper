@@ -1,7 +1,8 @@
 const mongoose = require("mongoose");
+const paging = require('../../../core/http/paging');        // optional Previous / Next paging of the list pages
 let moment = require("moment-timezone");
-let helpers = require("../../../core/helpers/dateHelper");
-exports.getPatientBills = async function (orguid, billdate, patientuid, visituid, sequencenumber = '') {
+let helpers = require("../../../core/helpers/date.helper");
+exports.getPatientBills = async function (orguid, billdate, patientuid, visituid, sequencenumber = '', page = null) {
   let initfilter = {};
   initfilter.orguid = mongoose.Types.ObjectId(orguid);
   initfilter.statusflag = 'A';
@@ -23,7 +24,7 @@ exports.getPatientBills = async function (orguid, billdate, patientuid, visituid
                $match : initfilter
         },
         { $sort : { _id : -1}},
-        { $limit : 50 },
+        ...paging.stages(page, 50),
         { $lookup: { from: "patients", localField: "patientuid", foreignField: "_id", as: "patients" } },
         { $unwind: { path: "$patients", preserveNullAndEmptyArrays: true } },
         { $lookup: { from: "patientvisits", localField: "patientvisituid", foreignField: "_id", as: "patientvisits" } },

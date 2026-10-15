@@ -1,36 +1,34 @@
 <div class="col-sm-12">
   <div class="card">
     <div class="card-header" style="display:flex;align-items:center;gap:8px;">
-      <i class="fas fa-filter" style="color:#2563eb;"></i>
-      <span>Filter</span>
+      <i class="fas fa-search" style="color:#2563eb;"></i>
+      <span>Search & Filter SAP Interface Logs</span>
     </div>
     <div class="card-body">
-      <form class="form-group" method="get" action="/interfaces/sap">
+      <form method="get" action="/interfaces/sap">
         <div class="form-row">
-          <div class="form-group col-sm-3">
-            <label>From Date : &nbsp;</label>
-            <input type="text" class="datetimepicker2 form-control" name="date">
+          <div class="form-group col-sm-3 mb-3">
+            <label><i class="fas fa-calendar-alt mr-1" style="color:#94a3b8;"></i>From Date</label>
+            <input type="text" class="datetimepicker2 form-control" name="date" placeholder="YYYY-MM-DD">
           </div>
-          <div class="form-group col-sm-3">
-            <label>To Date : &nbsp;</label>
-            <input type="text" class="datetimepicker2 form-control" name="date2">
+          <div class="form-group col-sm-3 mb-3">
+            <label><i class="fas fa-calendar-alt mr-1" style="color:#94a3b8;"></i>To Date</label>
+            <input type="text" class="datetimepicker2 form-control" name="date2" placeholder="YYYY-MM-DD">
           </div>
-          <div class="form-group col-sm-3">
-            <label>Identifierkey</label>
-            <input type="text" class="form-control" name="identifierkey">
+          <div class="form-group col-sm-3 mb-3">
+            <label><i class="fas fa-key mr-1" style="color:#94a3b8;"></i>Identifier Key</label>
+            <input type="text" class="form-control" name="identifierkey" placeholder="Identifier key">
           </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group col-sm-3">
-            <label>Response Status</label>
+          <div class="form-group col-sm-3 mb-3">
+            <label><i class="fas fa-info-circle mr-1" style="color:#94a3b8;"></i>Response Status</label>
             <select name="responsestatus" class="form-control">
               <option value="" selected>ทั้งหมด</option>
               <option value="E">Error</option>
               <option value="S">Success</option>
             </select>
           </div>
-          <div class="form-group col-sm-3">
-            <label>Isdone</label>
+          <div class="form-group col-sm-3 mb-3">
+            <label><i class="fas fa-check-circle mr-1" style="color:#94a3b8;"></i>Is Done</label>
             <select name="isdone" class="form-control">
               <option value="" selected>ทั้งหมด</option>
               <option value="true">True</option>
@@ -39,8 +37,10 @@
           </div>
         </div>
         <div class="form-row">
-          <div class="form-group col-sm-3">
-            <input type="submit" class="btn btn-success" value="กรองข้อมูล">
+          <div class="form-group col-sm-3 mb-0">
+            <button type="submit" class="btn btn-primary w-100">
+              <i class="fas fa-filter mr-1"></i> Filter Data
+            </button>
           </div>
         </div>
       </form>

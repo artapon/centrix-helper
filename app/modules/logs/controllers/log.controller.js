@@ -1,7 +1,5 @@
 const fs = require('fs');
-const fastcsv = require('fast-csv');
 const organisationsModel = require("../../../core/models/organisations.model");
-const validateModel = require("../../validate/models/validate.model");
 const logModel = require("../models/log.model");
 const mirthConnectModel = require("../models/mirthconnect.model");
 const jasperServerModel = require("../models/jasperserver.model");
@@ -154,29 +152,6 @@ exports.sapinterfaceExport = async function (req, res) {
   console.log(fromDate, toDate, identifierkey, responsestatus, isdone)
   let sapLogs = await logModel.getSapLogs(org[0]._id, isdone, identifierkey, responsestatus, fromDate, toDate, isExport);
   res.xls(fromDate + '-' +toDate +'_SAP_INTERFACE_LOGS.xlsx', sapLogs);
-}
-
-exports.migration = async function (req, res) {
-  let orgcode = req.session.sitecode;
-  let org = await organisationsModel.getOrgData(orgcode);
-  let interfaceUser = await validateModel.getInterfaceUser(org[0]._id);
-  let patients = await logModel.getPatientMigrationLogCount(interfaceUser[0]._id);
-  let additionaldetails = await logModel.getPatientAddMigrationLogCount(interfaceUser[0]._id);
-  let patientallergy = await logModel.getPatientAllergyLogCount(interfaceUser[0]._id);
-  let patientimage = await logModel.getPatientImagesMigrationLogCount(interfaceUser[0]._id);
-  let mrdfolders = await logModel.getMRDLogCount(interfaceUser[0]._id);
-  let openingstock = await logModel.getGRLogCount(interfaceUser[0]._id);
-  let SequenceNumber = await logModel.getPatientMigrationSequenceNumber(org[0]._id);
-  return res.renderPage(view('migration'), {
-    title:  'นับจำนวน Migration ที่นำเข้าระบบ',
-    patients : patients,
-    additionaldetails : additionaldetails,
-    patientimage : patientimage,
-    mrdfolders : mrdfolders,
-    patientallergy : patientallergy,
-    openingstock : openingstock,
-    SequenceNumber : SequenceNumber
-  });
 }
 
 exports.xrayresultlog = async function(req, res) {

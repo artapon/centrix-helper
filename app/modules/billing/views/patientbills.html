@@ -2,32 +2,33 @@
   <!-- Filter Card -->
   <div class="card">
     <div class="card-header" style="display:flex;align-items:center;gap:8px;">
-      <i class="fas fa-filter" style="color:#2563eb;"></i>
-      <span>Filter Patient Bills</span>
+      <i class="fas fa-search" style="color:#2563eb;"></i>
+      <span>Search & Filter Patient Bills</span>
     </div>
     <div class="card-body">
       <form method="get" action="/billing/bills">
-        <div class="form-row align-items-end">
+        <div class="form-row">
           <div class="form-group col-sm-3 mb-3">
             <label><i class="fas fa-calendar-alt mr-1" style="color:#94a3b8;"></i>Date</label>
-            <input type="text" class="datetimepicker2 form-control" name="date" placeholder="YYYY-MM-DD">
+            <input type="text" class="datetimepicker2 form-control" name="date" :value="query.date" placeholder="YYYY-MM-DD">
           </div>
           <div class="form-group col-sm-3 mb-3">
             <label><i class="fas fa-hashtag mr-1" style="color:#94a3b8;"></i>Sequence No.</label>
-            <input type="text" class="form-control" name="sequencenumber" placeholder="e.g. B2024001">
+            <input type="text" class="form-control" name="sequencenumber" :value="query.sequencenumber" placeholder="e.g. B2024001">
           </div>
-          <div class="form-group col-sm-2 mb-3">
+          <div class="form-group col-sm-3 mb-3">
             <label><i class="fas fa-id-card mr-1" style="color:#94a3b8;"></i>HN</label>
-            <input type="text" class="form-control" name="hn" placeholder="HN">
+            <input type="text" class="form-control" name="hn" :value="query.hn" placeholder="HN">
           </div>
-          <div class="form-group col-sm-2 mb-3">
+          <div class="form-group col-sm-3 mb-3">
             <label><i class="fas fa-hospital-user mr-1" style="color:#94a3b8;"></i>VN / AN</label>
-            <input type="text" class="form-control" name="vn" placeholder="VN or AN">
+            <input type="text" class="form-control" name="vn" :value="query.vn" placeholder="VN or AN">
           </div>
-          <div class="form-group col-sm-2 mb-3" style="padding-top:4px;">
-            <label style="visibility:hidden;">Search</label>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-sm-3 mb-0">
             <button type="submit" class="btn btn-primary w-100">
-              <i class="fas fa-search mr-1"></i> Search
+              <i class="fas fa-filter mr-1"></i> Filter Data
             </button>
           </div>
         </div>
@@ -49,6 +50,8 @@
         border:1px solid #bfdbfe;border-radius:20px;
         padding:3px 12px;font-size:0.78rem;font-weight:700;
       ">{{ bills.length }} records</span>
+      <!-- Previous / Next: right after the table filter app.js adds -->
+      <page-pager :paging="paging"></page-pager>
     </div>
     <div class="card-body p-0">
       <div class="table-responsive" style="border-radius:0 0 14px 14px;border:none;">
@@ -129,6 +132,8 @@
           </tbody>
         </table>
       </div>
+      <!-- The same pages under the table -->
+      <div class="pg-foot"><page-pager :paging="paging"></page-pager></div>
     </div>
   </div>
 </div>

@@ -2,17 +2,21 @@
   <div class="card">
     <div class="card-header" style="display:flex;align-items:center;gap:8px;">
       <i class="fas fa-search" style="color:#2563eb;"></i>
-      <span>Filter</span>
+      <span>Search & Filter Goods Receipts</span>
     </div>
     <div class="card-body">
       <form method="get" action="/inventory/goods-receipts">
-        <div class="form-row align-items-end">
-          <div class="form-group col-sm-3">
-            <label>GRN Number</label>
-            <input type="text" class="form-control" name="grn">
+        <div class="form-row">
+          <div class="form-group col-sm-3 mb-3">
+            <label><i class="fas fa-hashtag mr-1" style="color:#94a3b8;"></i>GRN Number</label>
+            <input type="text" class="form-control" name="grn" :value="query.grn" placeholder="GRN number">
           </div>
-          <div class="form-group col-sm-3">
-            <input type="submit" class="btn btn-success" value="กรองข้อมูล">
+        </div>
+        <div class="form-row">
+          <div class="form-group col-sm-3 mb-0">
+            <button type="submit" class="btn btn-primary w-100">
+              <i class="fas fa-filter mr-1"></i> Filter Data
+            </button>
           </div>
         </div>
       </form>
@@ -23,6 +27,8 @@
     <div class="card-header" style="display:flex;align-items:center;gap:8px;">
       <i class="fas fa-truck-loading" style="color:#2563eb;"></i>
       <span>Goods Receipt</span>
+      <!-- Previous / Next: right after the table filter app.js adds -->
+      <page-pager :paging="paging"></page-pager>
     </div>
     <div class="card-body p-0">
       <div class="table-responsive" style="border:none;border-radius:0 0 14px 14px;">
@@ -67,6 +73,8 @@
           </tbody>
         </table>
       </div>
+      <!-- The same pages under the table -->
+      <div class="pg-foot"><page-pager :paging="paging"></page-pager></div>
     </div>
   </div>
 </div>

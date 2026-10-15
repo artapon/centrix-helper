@@ -1,0 +1,68 @@
+{
+  "id": "querystudio",
+  "name": "Query Studio",
+  "version": "1.1.0",
+  "author": "Centrix HIS Helper Tools",
+  "category": "Data tools",
+  "icon": "fas fa-terminal",
+  "summary": "Run MongoDB shell queries against the connected site, with an audit trail of every query.",
+  "description": "A query editor for the connected Centrix database: find, aggregate, count, distinct and explain in mongo shell syntax, with tree, table and JSON results, lookups of referenced records, saved queries, export, and censoring of patient personal data. Every query is recorded in the Query Studio audit log.",
+  "features": [
+    "Query editor with run selection, explain and cancel",
+    "Tree, table and JSON results with page and whole-collection search",
+    "Lookups of referenced records and the Basic Data popup",
+    "Saved queries and CSV / Excel export",
+    "Query templates: queries with parameters (HN, VN, dates, reference values), including Patient Summary, Patient Visits Data and Patient Merges",
+    "Censoring of patient and organisation personal data",
+    "Audit log of every query, export and setting change",
+    "Widgets for other pages: Basic Data and Saved Jasper queries, each granted to roles on its own"
+  ],
+  "requires": [
+    "MongoDB connection for queries",
+    "SQLite for the audit log, saved queries and query templates"
+  ],
+  "defaultActive": true,
+  "paths": [
+    "/query-studio",
+    "/query-studio/audit",
+    "/query-studio/templates"
+  ],
+  "widgets": [
+    {
+      "key": "basic-data",
+      "text": "Basic Data",
+      "icon": "fas fa-id-card",
+      "component": "qs-basic-data",
+      "description": "Popup with the organisation, date, visit, patient and encounter-type ids to paste into queries and report parameters (Jasper Designer, Publish Report, Jasper Viewer)"
+    },
+    {
+      "key": "jasper-queries",
+      "text": "Saved Jasper queries",
+      "icon": "fas fa-bookmark",
+      "component": "qs-jasper-queries",
+      "description": "Load a Jasper query saved in Query Data (To Jasper → Save) into Jasper Designer's Dataset and Query"
+    }
+  ],
+  "menu": {
+    "header": "Query Studio",
+    "icon": "fas fa-code",
+    "after": "Data Management",
+    "items": [
+      {
+        "text": "Query Data",
+        "icon": "fas fa-terminal",
+        "link": "/query-studio"
+      },
+      {
+        "text": "Query Template",
+        "icon": "fas fa-clone",
+        "link": "/query-studio/templates"
+      },
+      {
+        "text": "Query Data Audit",
+        "icon": "fas fa-clipboard-check",
+        "link": "/query-studio/audit"
+      }
+    ]
+  }
+}

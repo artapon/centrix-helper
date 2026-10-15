@@ -95,3 +95,37 @@ exports.remove = async function (key) {
   await run('DELETE FROM role_permissions WHERE role_key = ?', [key]);
   return run('DELETE FROM roles WHERE key = ? AND is_system = 0', [key]);
 };
+
+/**
+ * Add-on widgets (core/addons.js) seen for the first time are granted to every role that has any
+ * permission: pages that showed the widget before it had a permission of its own keep showing it.
+ * An administrator then narrows it per role; the widgets already introduced are kept in app_meta,
+ * so taking one away later sticks.
+ */
+const KNOWN_WIDGETS_KEY = 'permissions.widgets.known';
+exports.grantNewWidgets = async function (links) {
+  const row = await get('SELECT value FROM app_meta WHERE key = ?', [KNOWN_WIDGETS_KEY]);
+  let known = [];
+  try { known = row ? JSON.parse(row.value) || [] : []; } catch (e) { known = []; }
+  const fresh = [...new Set(links)].filter((link) => !known.includes(link));
+  if (!fresh.length) return 0;
+
+  let granted = 0;
+  await run('BEGIN');
+  try {
+    for (const link of fresh) {
+      const r = await run(`INSERT INTO role_permissions (role_key, permission)
+        SELECT DISTINCT p.role_key, ? FROM role_permissions p
+        WHERE NOT EXISTS (SELECT 1 FROM role_permissions q WHERE q.role_key = p.role_key AND q.permission = ?)`,
+      [link, link]);
+      granted += (r && r.changes) || 0;
+    }
+    await run('INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)', [KNOWN_WIDGETS_KEY, JSON.stringify(known.concat(fresh))]);
+    await run('COMMIT');
+  } catch (err) {
+    await run('ROLLBACK');
+    throw err;
+  }
+  console.log(`Widgets ${fresh.join(', ')} granted to the roles that have any permission (${granted} grant${granted === 1 ? '' : 's'}).`);
+  return granted;
+};

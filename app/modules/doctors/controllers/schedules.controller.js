@@ -2,7 +2,6 @@
 const organisationsModel = require("../../../core/models/organisations.model");
 const careprovidersModel = require("../models/careproviderschedules.model");
 let moment = require("moment-timezone");
-let _ = require('lodash');
 const view = require('../../../core/view')('doctors');
 exports.careproviderSchedule = async function (req, res) {
   let orgcode = req.session.sitecode;

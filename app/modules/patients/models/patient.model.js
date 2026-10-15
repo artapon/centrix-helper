@@ -234,7 +234,10 @@ exports.getPatientData = async function (hn) {
   return patient;
 }
 
-exports.getPatientMergeData = async function (orguid, patientuid) {
+// opts (optional): { skip, limit } for the Patient Merges pages; without them the 50 latest, as before.
+exports.getPatientMergeData = async function (orguid, patientuid, opts) {
+    const skip = Math.max(0, parseInt(opts && opts.skip, 10) || 0);
+    const limit = Math.min(500, Math.max(1, parseInt(opts && opts.limit, 10) || 50));
     let initfilter = {};
     initfilter.statusflag = 'A'
     initfilter.orguid =  mongoose.Types.ObjectId(orguid);
@@ -262,8 +265,9 @@ exports.getPatientMergeData = async function (orguid, patientuid) {
             {
                 $match : initfilter
             },
-            { $sort : { "mergedate" : -1}},
-            { $limit : 50 },
+            { $sort : { "mergedate" : -1, "_id" : -1 }},
+            ...(skip ? [{ $skip : skip }] : []),
+            { $limit : limit },
             { $lookup: { from: "patients", localField: "primarypatientuid", foreignField: "_id", as: "pripatient" } },
             { $unwind: { path: "$pripatient", preserveNullAndEmptyArrays: true } },
             { $lookup: { from: "patients", localField: "secondarypatientuid", foreignField: "_id", as: "secpatient" } },

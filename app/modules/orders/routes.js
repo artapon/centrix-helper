@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const asyncHandler = require('../../core/http/asyncHandler');
+const asyncHandler = require('../../core/http/async.handler');
 const patientorderController = require('./controllers/patientorders.controller');
 const dietController = require('./controllers/diet.controller');
 const ipfillOrderController = require('./controllers/ipfillorder.controller');

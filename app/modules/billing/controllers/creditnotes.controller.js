@@ -1,4 +1,5 @@
 const organisationsModel = require("../../../core/models/organisations.model");
+const paging = require('../../../core/http/paging');        // Previous / Next paging (?page=)
 const creditnotesModel = require("../models/creditnotes.model");
 const patientModel = require("../../patients/models/patient.model");
 const patientvisitModel = require("../../patients/models/patientvisits.model");
@@ -13,9 +14,11 @@ exports.patientCreditnotes = async function (req, res) {
     patientvisitModel.getPatientVisitUID(vn)
   ]);
   let org = await organisationsModel.getOrgData(orgcode);
-  let creditnotes = await creditnotesModel.getPatientCreditnotes(org[0]._id, visituid, patientuid);
+  const p = paging.read(req);
+  const { rows: creditnotes, paging: pg } = paging.page(req, p, await creditnotesModel.getPatientCreditnotes(org[0]._id, visituid, patientuid, p));
   return res.renderPage(view('creditnotes'), {
     title:  'Patient Creditnotes : ' + org[0].name,
-    creditnotes: creditnotes
+    creditnotes: creditnotes,
+    paging: pg, query: { hn: hn, vn: vn }
   });
 }

@@ -1,0 +1,348 @@
+<div class="col-12">
+<div class="el">
+
+  <header class="el-pagehead">
+    <div>
+      <div class="el-eyebrow">E-Learning</div>
+      <h1>Share Courses</h1>
+      <p>Open a course to people without an account (new staff, students, partners) by link. They enter the course password and their name, then learn as guests; their progress and quiz results show here.</p>
+    </div>
+    <div class="el-pagehead-tools">
+      <label class="el-search"><i class="fas fa-search" aria-hidden="true"></i><span class="sr-only">Search courses</span><input v-model.trim="q" type="search" placeholder="Search courses"></label>
+      <div class="el-seg" role="group" aria-label="Show">
+        <button v-for="f in FILTERS" :key="f.key" type="button" :class="{ 'is-on': filter === f.key }" @click="filter = f.key">{{ f.label }}</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="el-qstats is-wide">
+    <div><small>Shared courses</small><b>{{ activeCount }}</b></div>
+    <div><small>Guests</small><b>{{ guestCount }}</b></div>
+    <div><small>Courses</small><b>{{ list.length }}</b></div>
+  </div>
+
+  <div v-if="error" class="el-msg is-error" role="alert"><i class="fas fa-exclamation-triangle"></i><span>{{ error }}</span></div>
+
+  <!-- Every course behind one link -->
+  <article id="course-0" class="el-share is-all" :class="{ 'is-hl': highlight === 0 }">
+    <div class="el-share-thumb" :style="cover(all)"><i class="fas fa-book-open" aria-hidden="true"></i></div>
+    <div class="el-share-main">
+      <div class="el-share-title">
+        <a href="/e-learning">All courses</a>
+        <span v-if="state(all) === 'on'" class="el-badge is-done"><i class="fas fa-link" aria-hidden="true"></i> Shared</span>
+        <span v-else-if="state(all) === 'expired'" class="el-badge is-bad"><i class="far fa-clock" aria-hidden="true"></i> Expired {{ day(all.share.expiresAt) }}</span>
+        <span v-else-if="state(all) === 'off'" class="el-badge"><i class="fas fa-pause" aria-hidden="true"></i> Paused</span>
+      </div>
+      <small class="el-muted">One link and password for the whole catalogue: every published course ({{ all.courses }} now, and the ones published later) · {{ all.lessons }} lesson{{ all.lessons === 1 ? '' : 's' }}
+        <template v-if="all.share"> · {{ all.share.guests }} guest{{ all.share.guests === 1 ? '' : 's' }}<template v-if="all.share.lastGuestAt">, last visit {{ ago(all.share.lastGuestAt) }}</template>
+          <template v-if="all.share.expiresAt && state(all) !== 'expired'"> · until {{ day(all.share.expiresAt) }}</template></template>
+      </small>
+      <div v-if="all.share" class="el-share-link">
+        <input class="el-input is-mono" :value="full(all.share.link)" readonly @focus="$event.target.select()" aria-label="Link of all courses">
+        <button type="button" class="el-btn is-sm" @click="copy(full(all.share.link), 0)"><i :class="copied === 0 ? 'fas fa-check' : 'far fa-copy'" aria-hidden="true"></i> {{ copied === 0 ? 'Copied' : 'Copy' }}</button>
+        <a class="el-btn is-sm is-ghost" :href="all.share.link" target="_blank" rel="noopener" title="Open as a guest"><i class="fas fa-external-link-alt" aria-hidden="true"></i></a>
+      </div>
+    </div>
+    <div class="el-share-tools">
+      <template v-if="all.share">
+        <label class="el-switch" :title="all.share.enabled ? 'Pause sharing' : 'Turn sharing on'">
+          <input type="checkbox" :checked="all.share.enabled" @change="toggle(all, $event.target.checked)"><span></span><span class="sr-only">Shared</span>
+        </label>
+        <button type="button" class="el-btn is-sm" @click="openGuests(all)"><i class="fas fa-users" aria-hidden="true"></i> Guests</button>
+        <button type="button" class="el-btn is-sm" @click="edit(all)"><i class="fas fa-cog" aria-hidden="true"></i> Settings</button>
+      </template>
+      <button v-else type="button" class="el-btn is-sm is-primary" @click="edit(all)"><i class="fas fa-share-alt" aria-hidden="true"></i> Share all</button>
+    </div>
+  </article>
+
+  <div v-if="!list.length" class="el-empty">
+    <div class="el-empty-icon"><i class="fas fa-share-alt" aria-hidden="true"></i></div>
+    <h3>No courses yet</h3>
+    <p>Create a course first, then share it from here.</p>
+    <a href="/e-learning" class="el-btn">Open Courses</a>
+  </div>
+
+  <div v-else class="el-shares">
+    <div v-if="!shown.length" class="el-muted" style="text-align: center; padding: 24px;">No courses match.</div>
+    <article v-for="c in shown" :key="c.id" :id="'course-' + c.id" class="el-share" :class="{ 'is-hl': highlight === c.id }">
+      <div class="el-share-thumb" :style="c.thumbUrl ? null : cover(c)">
+        <img v-if="c.thumbUrl" :src="c.thumbUrl" alt="" loading="lazy">
+        <i v-else class="fas fa-graduation-cap" aria-hidden="true"></i>
+      </div>
+      <div class="el-share-main">
+        <div class="el-share-title">
+          <a :href="'/e-learning/courses/' + c.id">{{ c.title }}</a>
+          <span v-if="c.status === 'draft'" class="el-badge is-draft">Draft</span>
+          <span v-if="state(c) === 'on'" class="el-badge is-done"><i class="fas fa-link" aria-hidden="true"></i> Shared</span>
+          <span v-else-if="state(c) === 'expired'" class="el-badge is-bad"><i class="far fa-clock" aria-hidden="true"></i> Expired {{ day(c.share.expiresAt) }}</span>
+          <span v-else-if="state(c) === 'off'" class="el-badge"><i class="fas fa-pause" aria-hidden="true"></i> Paused</span>
+        </div>
+        <small class="el-muted">{{ c.category ? c.category + ' · ' : '' }}{{ c.lessons }} lesson{{ c.lessons === 1 ? '' : 's' }}
+          <template v-if="c.share"> · {{ c.share.guests }} guest{{ c.share.guests === 1 ? '' : 's' }}<template v-if="c.share.lastGuestAt">, last visit {{ ago(c.share.lastGuestAt) }}</template>
+            <template v-if="c.share.expiresAt && state(c) !== 'expired'"> · until {{ day(c.share.expiresAt) }}</template></template>
+        </small>
+        <div v-if="c.share" class="el-share-link">
+          <input class="el-input is-mono" :value="full(c.share.link)" readonly @focus="$event.target.select()" :aria-label="'Link of ' + c.title">
+          <button type="button" class="el-btn is-sm" @click="copy(full(c.share.link), c.id)"><i :class="copied === c.id ? 'fas fa-check' : 'far fa-copy'" aria-hidden="true"></i> {{ copied === c.id ? 'Copied' : 'Copy' }}</button>
+          <a class="el-btn is-sm is-ghost" :href="c.share.link" target="_blank" rel="noopener" title="Open as a guest"><i class="fas fa-external-link-alt" aria-hidden="true"></i></a>
+        </div>
+      </div>
+      <div class="el-share-tools">
+        <template v-if="c.share">
+          <label class="el-switch" :title="c.share.enabled ? 'Pause sharing' : 'Turn sharing on'">
+            <input type="checkbox" :checked="c.share.enabled" @change="toggle(c, $event.target.checked)"><span></span><span class="sr-only">Shared</span>
+          </label>
+          <button type="button" class="el-btn is-sm" @click="openGuests(c)"><i class="fas fa-users" aria-hidden="true"></i> Guests</button>
+          <button type="button" class="el-btn is-sm" @click="edit(c)"><i class="fas fa-cog" aria-hidden="true"></i> Settings</button>
+        </template>
+        <button v-else type="button" class="el-btn is-sm is-primary" @click="edit(c)"><i class="fas fa-share-alt" aria-hidden="true"></i> Share</button>
+      </div>
+    </article>
+  </div>
+
+  <!-- Share settings -->
+  <div v-if="m" class="el-modal" role="dialog" aria-modal="true" aria-labelledby="el-share-title" @mousedown.self="m = null">
+    <div class="el-modal-box is-sm" style="max-width: 600px;">
+      <div class="el-modal-head">
+        <div><h3 id="el-share-title">{{ m.course.share ? 'Share settings' : m.course.all ? 'Share all courses' : 'Share this course' }}</h3><small class="el-muted">{{ m.course.title }}</small></div>
+        <button type="button" class="el-icon-btn" title="Close" @click="m = null"><i class="fas fa-times" aria-hidden="true"></i><span class="sr-only">Close</span></button>
+      </div>
+
+      <div v-if="m.sent" class="el-modal-body">
+        <div class="el-msg is-ok"><i class="fas fa-check-circle"></i><span>{{ m.sent.fresh ? (m.course.all ? 'All courses are shared.' : 'The course is shared.') : 'Saved.' }} Send the link and password to the people who should open it<template v-if="!m.sent.password"> (the password is unchanged)</template>.</span></div>
+        <textarea class="el-input is-mono" rows="5" readonly :value="message" @focus="$event.target.select()" aria-label="Message to send"></textarea>
+        <small class="el-field-note">Send the password separately from the link if the course should stay private (e.g. the link by e-mail, the password by phone or LINE).</small>
+      </div>
+
+      <div v-else class="el-modal-body">
+        <div v-if="m.course.status === 'draft'" class="el-msg is-info"><i class="fas fa-info-circle"></i><span>This course is a draft: guests with the link can open it although it is not in the catalogue.</span></div>
+        <label v-if="m.course.share" class="el-check"><input type="checkbox" v-model="m.f.enabled"><span><b>Sharing on</b>: the link opens {{ m.course.all ? 'every published course' : 'the course' }}</span></label>
+        <div class="el-field">{{ m.course.share ? 'New password' : 'Password' }} <small>{{ m.course.share ? 'Leave empty to keep the current one. A new password asks every guest for it again.' : 'At least ' + minPassword + ' characters. Guests enter it once per browser.' }}</small>
+          <div class="el-inline">
+            <input v-model="m.f.password" :type="m.show ? 'text' : 'password'" class="el-input is-mono" autocomplete="new-password" maxlength="200" :placeholder="m.course.share ? '(unchanged)' : ''">
+            <button type="button" class="el-btn" :title="m.show ? 'Hide' : 'Show'" @click="m.show = !m.show"><i :class="m.show ? 'far fa-eye-slash' : 'far fa-eye'" aria-hidden="true"></i></button>
+            <button type="button" class="el-btn" title="Make a password" @click="generate"><i class="fas fa-dice" aria-hidden="true"></i> Make one</button>
+          </div>
+        </div>
+        <div class="el-row">
+          <label class="el-field">Link works until <span class="el-opt">(optional)</span>
+            <input v-model="m.f.expiresAt" type="date" class="el-input" :min="today"></label>
+          <div class="el-field">Guests can
+            <label class="el-check"><input type="checkbox" checked disabled><span>Read, watch and take quizzes</span></label>
+            <label class="el-check"><input type="checkbox" v-model="m.f.allowAssignments"><span>Hand in assignments</span></label>
+          </div>
+        </div>
+        <label class="el-field">Note <span class="el-opt">(for you: who it is for)</span>
+          <input v-model="m.f.note" class="el-input" maxlength="300" placeholder="e.g. Nursing students, term 2/2026"></label>
+
+        <template v-if="m.course.share">
+          <div class="el-danger">
+            <div><b>New link</b><small>The current link stops working; guests need the new one (their progress is kept).</small></div>
+            <button type="button" class="el-btn is-sm" :disabled="m.busy" @click="regenerate"><i class="fas fa-sync-alt" aria-hidden="true"></i> New link</button>
+          </div>
+          <div v-if="m.course.all" class="el-msg is-info"><i class="fas fa-info-circle"></i><span>Guests of this link see the published courses only; drafts stay hidden. Courses shared on their own keep their own links.</span></div>
+          <div class="el-danger">
+            <div><b>Stop sharing</b><small>Removes the link and password. Guests' results stay until you remove them under Guests.</small></div>
+            <button type="button" class="el-btn is-sm is-danger" :disabled="m.busy" @click="stop"><i class="fas fa-ban" aria-hidden="true"></i> Stop sharing</button>
+          </div>
+        </template>
+        <div v-if="m.error" class="el-msg is-error" role="alert"><i class="fas fa-exclamation-triangle"></i><span>{{ m.error }}</span></div>
+      </div>
+
+      <div class="el-modal-foot">
+        <template v-if="m.sent">
+          <button type="button" class="el-btn" @click="copy(message, 'msg')"><i :class="copied === 'msg' ? 'fas fa-check' : 'far fa-copy'" aria-hidden="true"></i> {{ copied === 'msg' ? 'Copied' : 'Copy message' }}</button>
+          <button type="button" class="el-btn is-primary" @click="m = null">Done</button>
+        </template>
+        <template v-else>
+          <button type="button" class="el-btn" @click="m = null">Cancel</button>
+          <button type="button" class="el-btn is-primary" :disabled="m.busy" @click="save"><i :class="m.busy ? 'fas fa-spinner fa-spin' : 'fas fa-share-alt'" aria-hidden="true"></i> {{ m.course.share ? 'Save' : m.course.all ? 'Share all courses' : 'Share course' }}</button>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <!-- Guests -->
+  <div v-if="g" class="el-modal" role="dialog" aria-modal="true" aria-labelledby="el-guests-title" @mousedown.self="g = null">
+    <div class="el-modal-box">
+      <div class="el-modal-head">
+        <div><h3 id="el-guests-title">Guests</h3><small class="el-muted">{{ g.course.title }} · kept {{ guestDays }} days after their last visit</small></div>
+        <button type="button" class="el-icon-btn" title="Close" @click="g = null"><i class="fas fa-times" aria-hidden="true"></i><span class="sr-only">Close</span></button>
+      </div>
+      <div class="el-modal-body">
+        <div v-if="g.loading" class="el-muted"><i class="fas fa-spinner fa-spin"></i> Loading…</div>
+        <div v-else-if="g.error" class="el-msg is-error"><i class="fas fa-exclamation-triangle"></i><span>{{ g.error }}</span></div>
+        <div v-else-if="!g.list.length" class="el-muted" style="text-align: center; padding: 20px;">No one has opened {{ g.course.all ? 'the courses' : 'the course' }} with the link yet.</div>
+        <div v-else class="el-table-wrap">
+          <table class="el-table">
+            <thead><tr><th>Name</th><th>Progress</th><th>Quiz attempts</th><th>Submissions</th><th>First visit</th><th>Last visit</th><th></th></tr></thead>
+            <tbody>
+              <tr v-for="x in g.list" :key="x.id">
+                <td><b>{{ x.name }}</b></td>
+                <td style="min-width: 140px;"><span class="el-prog" style="display: flex; align-items: center; gap: 8px;"><span class="el-bar" style="flex: 1;" :class="{ 'is-done': x.total && x.done >= x.total }"><span :style="{ width: pct(x.done, x.total) + '%' }"></span></span><small>{{ x.done }}/{{ x.total }}</small></span></td>
+                <td>{{ x.attempts }}</td>
+                <td>{{ x.submissions }}</td>
+                <td class="el-nowrap">{{ day(x.startedAt) }}</td>
+                <td class="el-nowrap">{{ ago(x.lastAt) }}</td>
+                <td style="text-align: right;">
+                  <button v-if="g.confirm !== x.id" type="button" class="el-icon-btn is-danger" title="Remove guest" @click="g.confirm = x.id"><i class="far fa-trash-alt" aria-hidden="true"></i><span class="sr-only">Remove</span></button>
+                  <span v-else class="el-nowrap"><button type="button" class="el-link" style="color: var(--el-bad);" @click="removeGuest(x)">Remove with results</button> · <button type="button" class="el-link" @click="g.confirm = null">Keep</button></span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <small class="el-field-note">Quiz results and assignments of guests are also on the course's Grading page, marked "(guest)".</small>
+      </div>
+      <div class="el-modal-foot"><button type="button" class="el-btn is-primary" @click="g = null">Close</button></div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<script src="/e-learning/assets/elearning.js"></script>
+<script>
+  (function () {
+    'use strict';
+    var FILTERS = [{ key: '', label: 'All' }, { key: 'shared', label: 'Shared' }, { key: 'not', label: 'Not shared' }];
+    var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+    var ymd = function (d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); };
+
+    Page.setup({
+      data: function () {
+        return {
+          list: Page.data.courses.map(function (c) { return Object.assign({}, c); }),
+          // every course: shared as course id 0
+          all: Object.assign({ id: 0, title: 'All courses', status: 'published', all: true }, Page.data.catalogue),
+          q: '', filter: '', FILTERS: FILTERS, m: null, g: null, copied: null, today: ymd(new Date()), error: '',
+          highlight: /^#course-\d+$/.test(location.hash) ? parseInt(location.hash.slice(8), 10) : null
+        };
+      },
+      mounted: function () {
+        var self = this;
+        if (this.highlight !== null) this.$nextTick(function () { var el = document.getElementById('course-' + self.highlight); if (el) el.scrollIntoView({ block: 'center' }); });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { self.m = null; self.g = null; } });
+      },
+      computed: {
+        activeCount: function () { var s = this; return this.list.filter(function (c) { return s.state(c) === 'on'; }).length; },
+        guestCount: function () { return this.list.concat([this.all]).reduce(function (n, c) { return n + (c.share ? c.share.guests : 0); }, 0); },
+        shown: function () {
+          var q = this.q.toLowerCase(), f = this.filter;
+          return this.list.filter(function (c) {
+            if (f === 'shared' && !c.share) return false;
+            if (f === 'not' && c.share) return false;
+            return !q || (c.title + ' ' + (c.category || '')).toLowerCase().indexOf(q) >= 0;
+          });
+        },
+        message: function () {
+          if (!this.m || !this.m.sent) return '';
+          var c = this.m.course, s = this.m.sent;
+          return (c.all ? 'Courses: all courses (' + c.courses + ')' : 'Course: ' + c.title) + '\nLink: ' + this.full(c.share.link) + (s.password ? '\nPassword: ' + s.password : '') +
+            (c.share.expiresAt ? '\nOpen until: ' + this.day(c.share.expiresAt) : '');
+        }
+      },
+      methods: {
+        cover: ELearn.cover, pct: ELearn.pct,
+        full: function (link) { return location.origin + link; },
+        day: function (iso) { return iso ? new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : ''; },
+        ago: function (iso) {
+          var s = (Date.now() - new Date(iso).getTime()) / 1000;
+          if (s < 90) return 'just now';
+          if (s < 3600) return Math.round(s / 60) + ' min ago';
+          if (s < 86400) return Math.round(s / 3600) + ' h ago';
+          return s < 86400 * 30 ? Math.round(s / 86400) + ' days ago' : this.day(iso);
+        },
+        state: function (c) {
+          if (!c.share) return 'none';
+          if (!c.share.enabled) return 'off';
+          return c.share.expiresAt && new Date(c.share.expiresAt) < new Date() ? 'expired' : 'on';
+        },
+        copy: function (text, key) {
+          var self = this;
+          var done = function () { self.copied = key; setTimeout(function () { if (self.copied === key) self.copied = null; }, 2000); };
+          if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done);
+          else {
+            var ta = document.createElement('textarea');
+            ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+            document.body.appendChild(ta); ta.select();
+            try { document.execCommand('copy'); done(); } catch (e) { /* the text stays selectable */ }
+            document.body.removeChild(ta);
+          }
+        },
+        replace: function (courseId, share) {
+          if (courseId === 0) return (this.all = Object.assign({}, this.all, { share: share }));
+          var i = this.list.findIndex(function (c) { return c.id === courseId; });
+          if (i >= 0) this.list.splice(i, 1, Object.assign({}, this.list[i], { share: share }));
+          return this.list[i];
+        },
+        edit: function (c) {
+          var s = c.share;
+          this.m = {
+            course: c, show: !s, busy: false, error: '', sent: null, confirmStop: false,
+            f: { enabled: s ? s.enabled : true, password: '', expiresAt: s && s.expiresAt ? ymd(new Date(s.expiresAt)) : '', allowAssignments: s ? s.allowAssignments : true, note: s ? s.note : '' }
+          };
+          if (!s) this.generate();
+        },
+        generate: function () {
+          var chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789', out = '', bytes = new Uint32Array(10);
+          (window.crypto || window.msCrypto).getRandomValues(bytes);
+          for (var i = 0; i < 10; i++) out += chars[bytes[i] % chars.length];
+          this.m.f.password = out;
+          this.m.show = true;
+        },
+        save: function () {
+          var m = this.m, self = this, fresh = !m.course.share;
+          m.busy = true;
+          m.error = '';
+          ELearn.post('/e-learning/share/' + m.course.id, m.f)
+            .then(function (r) {
+              m.course = self.replace(m.course.id, r.share);
+              m.sent = { fresh: fresh, password: m.f.password };
+            })
+            .catch(function (err) { m.error = err.message; })
+            .finally(function () { m.busy = false; });
+        },
+        toggle: function (c, on) {
+          var self = this, s = c.share;
+          ELearn.post('/e-learning/share/' + c.id, { enabled: on, expiresAt: s.expiresAt ? ymd(new Date(s.expiresAt)) : '', allowAssignments: s.allowAssignments, note: s.note })
+            .then(function (r) { self.replace(c.id, r.share); })
+            .catch(function (err) { self.error = err.message; });
+        },
+        regenerate: function () {
+          var m = this.m, self = this;
+          m.busy = true;
+          ELearn.post('/e-learning/share/' + m.course.id + '/regenerate', {})
+            .then(function (r) { m.course = self.replace(m.course.id, r.share); m.sent = { fresh: false, password: '' }; })
+            .catch(function (err) { m.error = err.message; })
+            .finally(function () { m.busy = false; });
+        },
+        stop: function () {
+          var m = this.m, self = this;
+          if (!m.confirmStop) { m.confirmStop = true; m.error = 'Click Stop sharing again to confirm: the link stops working at once.'; return; }
+          m.busy = true;
+          ELearn.post('/e-learning/share/' + m.course.id + '/delete', {})
+            .then(function () { self.replace(m.course.id, null); self.m = null; })
+            .catch(function (err) { m.error = err.message; m.busy = false; });
+        },
+        openGuests: function (c) {
+          var g = this.g = { course: c, list: [], loading: true, error: '', confirm: null };
+          ELearn.getJson('/e-learning/share/' + c.id + '/guests')
+            .then(function (r) { g.list = r.guests; })
+            .catch(function (err) { g.error = err.message; })
+            .finally(function () { g.loading = false; });
+        },
+        removeGuest: function (x) {
+          var g = this.g, self = this;
+          ELearn.post('/e-learning/share/' + g.course.id + '/guests/' + x.id + '/delete', {})
+            .then(function () {
+              g.list = g.list.filter(function (y) { return y.id !== x.id; });
+              var c = g.course.id === 0 ? self.all : self.list.filter(function (y) { return y.id === g.course.id; })[0];
+              if (c && c.share) self.replace(c.id, Object.assign({}, c.share, { guests: Math.max(0, c.share.guests - 1) }));
+            })
+            .catch(function (err) { g.error = err.message; });
+        }
+      }
+    });
+  })();
+</script>

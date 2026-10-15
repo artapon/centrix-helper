@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const asyncHandler = require('../../core/http/asyncHandler');
+const asyncHandler = require('../../core/http/async.handler');
 const testController = require('./controllers/test.controller');
 
 router.get('/test', asyncHandler(testController.index));

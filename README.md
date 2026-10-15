@@ -10,9 +10,9 @@ app/
     migrations/            sqlite schema
     auth.js                first-run setup code, session secret, sign-in throttling
     layout.js              sidebar / top bar / breadcrumb data for the layout
-    helpers/               dateHelper, encryption, number, password (scrypt)
-    http/asyncHandler.js
-    middleware/            renderPage (res.renderPage), requireAuth (+ requireAdmin), requireDbConnection
+    helpers/               date.helper, auditlookup.helper, encryption, number, password (scrypt)
+    http/async.handler.js
+    middleware/            renderpage (res.renderPage), requireauth (+ requireAdmin), requiredbconnection, requireactiveaddon, legacyredirect (*.middleware.js)
     models/                site-wide models (organisations)
     views/                 index.html layout, partials/, shared/
     modules.js             auto-mounts every module's routes
@@ -25,6 +25,8 @@ app/
       routes.open.js       (optional) no sign-in required (login, install)
       routes.public.js     (optional) signed-in users, no Mongo connection needed
       routes.js            signed-in users with a Mongo connection
+addons/
+  <id>/                    optional add-on (Marketplace): addon.json, controllers/, models/, views/, public/, routes*.js
 ```
 
 Modules: `auth`, `billing`, `doctors`, `home`, `inventory`, `logs`, `monitor`, `orders`, `overview`,
@@ -43,7 +45,7 @@ asks for a one-time setup code printed to the server console and saved in
   under a link the role lacks gets 403 (`core/permissions.js`). For routes outside the item's
   link, list their prefixes in the item's `match` array (e.g. DB Connection owns `/database/connect`).
   New menu items are granted to no role until an admin ticks them (administrators see everything).
-- Guard admin-only routes with `requireAdmin` from `core/middleware/requireAuth`, and mark
+- Guard admin-only routes with `requireAdmin` from `core/middleware/requireauth.middleware`, and mark
   admin-only menu entries with `adminOnly: true` in `menu.config.js` (never grantable to roles).
 - Sessions are in memory: restarting the app signs everyone out.
 

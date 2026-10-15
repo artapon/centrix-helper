@@ -70,7 +70,8 @@
         <i class="fas fa-hospital-user" style="color:#2563eb;"></i>
         Patient Visits Records
       </span>
-      <div style="display:flex;gap:8px;align-items:center;">
+      <!-- Extra columns and the pages of the results (also under the table): right after the table filter app.js adds -->
+      <div class="pv-tools">
         <button onclick="toggleCells()" class="btn btn-secondary btn-sm">
           <i class="fas fa-eye mr-1"></i> Toggle Extra Columns
         </button>
@@ -169,3 +170,8 @@
     </div>
   </div>
 </div>
+<style>
+  /* Results card header: the table filter (added by app.js, pushed right), then these buttons beside it */
+  .pv-tools { display: flex; gap: 8px; align-items: center; order: 2; }
+  .card-header:not(.has-filter) > .pv-tools { margin-left: auto; }   /* no filter (script off): still on the right */
+</style>

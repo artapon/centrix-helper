@@ -1,6 +1,6 @@
 const router = require('express').Router();
 const upload = require('multer')();
-const asyncHandler = require('../../core/http/asyncHandler');
+const asyncHandler = require('../../core/http/async.handler');
 const validateController = require('./controllers/validate.controller');
 const dfController = require('./controllers/df.controller');
 

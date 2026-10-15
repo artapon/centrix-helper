@@ -1,7 +1,7 @@
 const path = require('path');
 
 const MODULES_DIR = path.join(__dirname, '..', 'modules');
-const ADDONS_DIR = path.join(__dirname, '..', 'addons');
+const ADDONS_DIR = path.join(__dirname, '..', '..', 'addons');
 const SHARED_VIEWS_DIR = path.join(__dirname, 'views', 'shared');
 
 // Absolute view paths (ending in .html) are used as-is by express-es6-template-engine,
@@ -14,7 +14,7 @@ const moduleView = (moduleName, name) => path.join(MODULES_DIR, moduleName, 'vie
  * view.of('patients', 'summary') -> app/modules/patients/views/summary.html
  * view.shared('postdata')        -> app/core/views/shared/postdata.html
  *
- * require('../../../core/view').addon('querystudio')('audit') -> app/addons/querystudio/views/audit.html
+ * require('../../../app/core/view').addon('querystudio')('audit') -> addons/querystudio/views/audit.html
  */
 module.exports = function (moduleName) {
   const view = (name) => moduleView(moduleName, name);

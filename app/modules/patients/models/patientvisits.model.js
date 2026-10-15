@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 let moment = require("moment-timezone");
-let helpers = require("../../../core/helpers/dateHelper");
+let helpers = require("../../../core/helpers/date.helper");
 exports.getPatientVisitUID = async function (vn) {
   let visituid = '';
   let patientvisit = await mongoose.connection.db

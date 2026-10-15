@@ -1,6 +1,12 @@
-// Add-ons: optional features under app/addons/<id>/ that an administrator activates or
+// Add-ons: optional features under addons/<id>/ that an administrator activates or
 // deactivates from Administration > Marketplace. Each add-on folder has an addon.json manifest
 // (name, description, the paths it owns, its menu section) and the usual routes files.
+//
+// Widgets ("widgets" in addon.json) are parts of an add-on that other pages can show, e.g. Query
+// Studio's Basic Data popup in Jasper Designer. Each one has its own link, /widgets/<addon>/<key>,
+// which is a permission like a page's (Roles & Permissions > Widgets) and serves the widget's script
+// (<link>/widget.js) and data; a page asks for widgets by id (res.renderPage locals.widgets) and gets
+// those the user may use. Pages never load another add-on's code, so add-ons stay independent.
 //
 // The active state is kept in SQLite app_meta ("addon.<id>" -> {"active","by","at"}), so it
 // survives restarts and applies at once without one: an inactive add-on's menu section is
@@ -9,10 +15,12 @@ const fs = require('fs');
 const path = require('path');
 const { run, all } = require('./config/sqlite');
 
-const ADDONS_DIR = path.join(__dirname, '..', 'addons');
+const ADDONS_DIR = path.join(__dirname, '..', '..', 'addons');
 const META_PREFIX = 'addon.';
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const ADMIN_SECTION = 'Administration';
+const WIDGETS_SECTION = 'Widgets';
+const COMPONENT_RE = /^[a-z][a-z0-9]*(-[a-z0-9]+)+$/;
 const MARKETPLACE_ITEM = { text: 'Marketplace', icon: 'fas fa-store', link: '/admin/marketplace', active: true, adminOnly: true };
 
 let manifests = null;          // id -> manifest, in folder-name order
@@ -38,6 +46,14 @@ function readManifest(id) {
         // Actions inside the page, granted on their own (see core/permissions.js)
         ...(Array.isArray(item.actions) && item.actions.length ? { actions: item.actions.filter((a) => a && a.key && a.text).map((a) => ({ key: String(a.key), text: String(a.text), description: String(a.description || '') })) } : {})
       }));
+    // Widgets other pages can show; each is granted on its own (see the top of this file)
+    const widgets = (Array.isArray(m.widgets) ? m.widgets : [])
+      .filter((w) => w && ID_RE.test(String(w.key || '')) && w.text && COMPONENT_RE.test(String(w.component || '')))
+      .map((w) => ({
+        id: `${id}.${w.key}`, text: String(w.text), icon: String(w.icon || 'fas fa-puzzle-piece'),
+        description: String(w.description || ''), component: String(w.component),
+        link: `/widgets/${id}/${w.key}`, active: true, widget: true
+      }));
     return {
       id,
       name: String(m.name),
@@ -53,7 +69,8 @@ function readManifest(id) {
       packages: Array.isArray(m.packages) ? m.packages.map(String) : [],
       defaultActive: m.defaultActive !== false,
       // Paths the add-on owns: its menu links plus any listed (APIs under them are covered too).
-      paths: [...new Set((Array.isArray(m.paths) ? m.paths.map(String) : []).concat(items.map((item) => linkPath(item.link))))],
+      paths: [...new Set((Array.isArray(m.paths) ? m.paths.map(String) : []).concat(items.map((item) => linkPath(item.link)), widgets.map((w) => w.link)))],
+      widgets,
       menu: items.length ? { header: String((m.menu && m.menu.header) || m.name), icon: String((m.menu && m.menu.icon) || m.icon || 'fas fa-puzzle-piece'), after: (m.menu && m.menu.after) || '', items } : null
     };
   } catch (err) {
@@ -135,6 +152,13 @@ function composeMenu() {
     menu.splice(at, 0, section);
   });
   menu.forEach(placeAfter);
+
+  // Widgets of active add-ons: a section for permissions only (not drawn in the sidebar)
+  const widgets = [];
+  discover().forEach((m) => {
+    if (isActive(m.id)) m.widgets.forEach((w) => widgets.push({ ...w, addon: m.id, source: m.name }));
+  });
+  if (widgets.length) menu.push({ header: WIDGETS_SECTION, icon: 'fas fa-puzzle-piece', hidden: true, items: widgets });
   global.menu = menu;
   return menu;
 }
@@ -150,10 +174,14 @@ async function load() {
   });
 }
 
-// Page actions new to this install go to the roles that have their page (roles.model.grantNewActions).
+// Page actions new to this install go to the roles that have their page (roles.model.grantNewActions);
+// widgets new to this install go to every role that has any permission, so no one loses what a page showed.
 function grantNewActions() {
-  return require('../modules/auth/models/roles.model').grantNewActions(require('./permissions').grantableMenu())
-    .catch((err) => console.error('Failed to grant new page actions:', err.message));
+  const roles = require('../modules/auth/models/roles.model');
+  const widgetLinks = (global.menu || []).filter((s) => s.header === WIDGETS_SECTION).flatMap((s) => s.items.map((w) => w.link));
+  return roles.grantNewActions(require('./permissions').grantableMenu())
+    .then(() => roles.grantNewWidgets(widgetLinks))
+    .catch((err) => console.error('Failed to grant new page actions / widgets:', err.message));
 }
 
 /** Reads the manifests and builds the menu now; the stored states follow once SQLite is ready. */
@@ -170,7 +198,7 @@ exports.init = function (schemaReady) {
 
 exports.ready = () => ready;
 
-/** Mounts app/addons/<id>/<routesFile> for every add-on; requests reach it only while it is active. */
+/** Mounts addons/<id>/<routesFile> for every add-on; requests reach it only while it is active. */
 exports.mountRoutes = function (app, routesFile) {
   discover().forEach((m) => {
     const file = path.join(ADDONS_DIR, m.id, routesFile);
@@ -221,6 +249,7 @@ exports.setActive = async function (id, on, user) {
 exports.dormantPermissions = () => {
   const links = new Set();
   discover().forEach((m) => {
+    if (!isActive(m.id)) m.widgets.forEach((w) => links.add(w.link));
     if (m.menu && !isActive(m.id)) {
       m.menu.items.forEach((item) => {
         links.add(linkPath(item.link));
@@ -231,4 +260,22 @@ exports.dormantPermissions = () => {
   return links;
 };
 
+/**
+ * The widgets a page asked for (ids like "querystudio.basic-data") that the user may use: from an
+ * active add-on and granted to the user's role. { id: { text, icon, component, link, script } };
+ * a page shows a widget's button only when its id is there.
+ */
+exports.widgetsFor = function (user, ids) {
+  const permissions = require('./permissions');
+  const wanted = new Set((Array.isArray(ids) ? ids : []).map(String));
+  const out = {};
+  (global.menu || []).filter((s) => s.header === WIDGETS_SECTION).forEach((s) => s.items.forEach((w) => {
+    if (wanted.has(w.id) && permissions.canAccessItem(user, w)) {
+      out[w.id] = { text: w.text, icon: w.icon, component: w.component, link: w.link, script: w.link + '/widget.js' };
+    }
+  }));
+  return out;
+};
+
+exports.WIDGETS_SECTION = WIDGETS_SECTION;
 exports.MARKETPLACE_LINK = MARKETPLACE_ITEM.link;

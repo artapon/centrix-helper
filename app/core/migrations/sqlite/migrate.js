@@ -101,7 +101,7 @@ async function ensureSchema() {
       updated_at TEXT DEFAULT (datetime('now'))
     )
   `);
-  // Connection editor settings (see app/modules/setting/models/mongoUri.js).
+  // Connection editor settings (see app/modules/setting/models/mongouri.helper.js).
   // conn_type NULL = saved before the editor existed: replica set if mongodb_replica_set is set.
   await addMissingColumns('db_connections', {
     conn_type: 'TEXT',
@@ -214,12 +214,25 @@ async function ensureSchema() {
   await run('CREATE INDEX IF NOT EXISTS idx_query_audit_user ON query_audit (username, executed_at)');
 
   await upgradeStoredPaths();
+  await removeStoredPaths();
+}
+
+// Pages that were removed: their role permissions and shortcut links are dropped.
+const REMOVED_PATHS = [
+  '/migration/counts', '/data/validate/migration',  // นับจำนวน Migration
+  '/exports', '/data/export'                         // Export Data
+];
+
+async function removeStoredPaths() {
+  const marks = REMOVED_PATHS.map(() => '?').join(', ');
+  await run(`DELETE FROM role_permissions WHERE permission IN (${marks})`, REMOVED_PATHS);
+  await run(`DELETE FROM shortcuts WHERE url IN (${marks})`, REMOVED_PATHS);
 }
 
 // Role permissions and shortcut links saved with the old URLs (/data/..., /tool/..., /settings/...)
-// move to the domain URLs in core/routeMap.js. Runs on every start; rows already moved are skipped.
+// move to the domain URLs in core/routemap.js. Runs on every start; rows already moved are skipped.
 async function upgradeStoredPaths() {
-  const { upgrade } = require('../../routeMap');
+  const { upgrade } = require('../../routemap');
   const perms = await all('SELECT role_key, permission FROM role_permissions');
   for (const row of perms) {
     const next = upgrade(row.permission);

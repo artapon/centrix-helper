@@ -1,0 +1,85 @@
+<div class="col-12">
+<div class="el el-unlock">
+  <div class="el-unlock-card">
+    <div v-if="!course" class="el-card-media" :style="cover({ id: 0, title: 'Courses' })">
+      <span class="el-cover-ph" aria-hidden="true"><i class="fas fa-book-open"></i></span>
+    </div>
+    <div v-else class="el-card-media" :style="course.thumbUrl ? null : cover(course)">
+      <img v-if="course.thumbUrl" :src="course.thumbUrl" alt="">
+      <span v-else class="el-cover-ph" aria-hidden="true"><i class="fas fa-graduation-cap"></i></span>
+      <div class="el-card-tags"><span v-if="course.category" class="el-badge is-cat">{{ course.category }}</span></div>
+    </div>
+    <div class="el-unlock-body">
+      <template v-if="!course">
+        <div class="el-eyebrow"><i class="fas fa-lock" aria-hidden="true"></i> Shared courses</div>
+        <h1>All courses</h1>
+        <p class="el-unlock-sum">Enter the password once to open every course, and pick up where you left off.</p>
+        <ul class="el-meta">
+          <li><i class="fas fa-book-open" aria-hidden="true"></i>{{ catalogue.courses }} course{{ catalogue.courses === 1 ? '' : 's' }}</li>
+          <li><i class="far fa-file-alt" aria-hidden="true"></i>{{ catalogue.lessons }} lesson{{ catalogue.lessons === 1 ? '' : 's' }}</li>
+          <li v-if="catalogue.minutes"><i class="far fa-clock" aria-hidden="true"></i>{{ duration(catalogue.minutes) }}</li>
+        </ul>
+        <ul v-if="catalogue.titles.length" class="el-unlock-titles">
+          <li v-for="(t, i) in catalogue.titles" :key="i"><i class="fas fa-graduation-cap" aria-hidden="true"></i>{{ t }}</li>
+          <li v-if="catalogue.courses > catalogue.titles.length" class="el-muted">and {{ catalogue.courses - catalogue.titles.length }} more</li>
+        </ul>
+      </template>
+      <template v-else>
+        <div class="el-eyebrow"><i class="fas fa-lock" aria-hidden="true"></i> Shared course</div>
+        <h1>{{ course.title }}</h1>
+        <p v-if="course.summary" class="el-unlock-sum">{{ course.summary }}</p>
+        <ul class="el-meta">
+          <li v-if="course.instructor"><i class="fas fa-chalkboard-teacher" aria-hidden="true"></i>{{ course.instructor }}</li>
+          <li><i class="far fa-file-alt" aria-hidden="true"></i>{{ course.lessons }} lesson{{ course.lessons === 1 ? '' : 's' }}</li>
+          <li v-if="course.minutes"><i class="far fa-clock" aria-hidden="true"></i>{{ duration(course.minutes) }}</li>
+          <li><i class="fas fa-signal" aria-hidden="true"></i>{{ LEVELS[course.level] }}</li>
+        </ul>
+      </template>
+
+      <form class="el-unlock-form" @submit.prevent="unlock">
+        <label class="el-field">Your name <small>Shown to the instructors with your progress and results.</small>
+          <input ref="name" v-model.trim="name" class="el-input" autocomplete="name" maxlength="80" required></label>
+        <label class="el-field">{{ course ? 'Course password' : 'Password' }}
+          <span class="el-inline">
+            <input v-model="password" :type="show ? 'text' : 'password'" class="el-input" autocomplete="current-password" maxlength="200" required>
+            <button type="button" class="el-btn" :title="show ? 'Hide' : 'Show'" @click="show = !show"><i :class="show ? 'far fa-eye-slash' : 'far fa-eye'" aria-hidden="true"></i><span class="sr-only">Show password</span></button>
+          </span>
+        </label>
+        <div v-if="error" class="el-msg is-error" role="alert"><i class="fas fa-exclamation-triangle"></i><span>{{ error }}</span></div>
+        <button type="submit" class="el-btn is-primary is-lg is-block" :disabled="busy"><i :class="busy ? 'fas fa-spinner fa-spin' : 'fas fa-unlock'" aria-hidden="true"></i> {{ course ? 'Open course' : 'Open courses' }}</button>
+        <small class="el-field-note">You won't need the password again on this browser, and you can pick up where you left off.</small>
+      </form>
+    </div>
+  </div>
+</div>
+</div>
+
+<script src="/e-learning/assets/elearning.js"></script>
+<script>
+  (function () {
+    'use strict';
+    var NAME_KEY = 'elearning.guestName';
+    Page.setup({
+      data: function () {
+        var name = '';
+        try { name = localStorage.getItem(NAME_KEY) || ''; } catch (e) { /* private mode */ }
+        return { name: name, password: '', show: false, busy: false, error: '', LEVELS: ELearn.LEVELS };
+      },
+      mounted: function () { if (!this.name && this.$refs.name) this.$refs.name.focus(); },
+      methods: {
+        cover: ELearn.cover, duration: ELearn.duration,
+        unlock: function () {
+          var self = this;
+          this.busy = true;
+          this.error = '';
+          ELearn.post(this.unlockUrl, { name: this.name, password: this.password })
+            .then(function () {
+              try { localStorage.setItem(NAME_KEY, self.name); } catch (e) { /* private mode */ }
+              location.reload();
+            })
+            .catch(function (err) { self.error = err.message; self.busy = false; });
+        }
+      }
+    });
+  })();
+</script>

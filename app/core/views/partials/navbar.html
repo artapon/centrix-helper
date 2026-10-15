@@ -13,7 +13,7 @@
     ${shell.canConnect
       ? `<form method="post" action="/database/connect/last" class="conn-connect" onsubmit="var b=this.querySelector('button');b.disabled=true;b.querySelector('i').className='fas fa-spinner fa-spin';">
            <input type="hidden" name="next" value="${shell.here}">
-           <button type="submit" class="conn-btn" title="${shell.lastSite ? 'Connect to ' + shell.lastSite + ' again' : 'Connect to the last database used (or the first one in Manage Connections)'}">
+           <button type="submit" class="conn-btn" title="${shell.lastSite ? 'Connect to ' + shell.lastSite + ' again' : 'Connect to the last database used (or the first one in DB Connections)'}">
              <i class="fas fa-plug"></i> <span>${shell.lastSite ? 'Reconnect DB' : 'Connect DB'}</span>
            </button>
          </form>`

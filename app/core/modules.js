@@ -13,7 +13,7 @@ const moduleNames = () => fs.readdirSync(MODULES_DIR, { withFileTypes: true })
  * Mounts every app/modules/<name>/<routesFile> router on the app.
  *   routes.public.js -> reachable without a Mongo connection (settings, connect)
  *   routes.js        -> mounted after the requireDbConnection guard
- * Then the same file of every add-on (app/addons/<id>/), which answers only while active.
+ * Then the same file of every add-on (addons/<id>/), which answers only while active.
  */
 exports.mountRoutes = function (app, routesFile) {
   for (const name of moduleNames()) {

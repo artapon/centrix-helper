@@ -1,4 +1,59 @@
 const mongoose = require("mongoose");
+const paging = require('../../../core/http/paging');
+// Dates MongoDB can turn into text: years 0-9999 (a day off each end, for the time zone).
+const VALID_FROM = new Date(Date.UTC(0, 0, 2)), VALID_TO = new Date(Date.UTC(9999, 11, 31));
+VALID_FROM.setUTCFullYear(0);
+
+// Search text matched literally inside a $regex (a "(" or "*" typed in a box would break or slow the search).
+const escRe = (v) => String(v == null ? '' : v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// Inventory tracking in batches, to keep the database work small:
+//   1. the cheap start of the pipeline (date / item filters, the ledger rows, their transaction type) runs once as a
+//      cursor and yields only { _id, lid } of each matching ledger row, in the pipeline's own order;
+//   2. the joins (~80 lookups, then the HN / order / reference filters) run on a batch of those rows at a time;
+//   3. it stops as soon as there are enough rows for the page and one more (to know whether there is a next page).
+// The rows and their fields are the same as running the whole pipeline at once; only far fewer rows are joined.
+const TRACKING_TIME_MS = 120000;
+async function trackingInBatches(pipeline, typeFilter, page, perpage) {
+    const split = pipeline.findIndex((st) => st.$match === typeFilter);      // the early type filter ends the cheap part
+    if (split < 0) throw new Error('Inventory tracking: the type filter stage was not found');
+    const cheap = pipeline.slice(0, split + 1), joins = pipeline.slice(split + 1);
+    const coll = mongoose.connection.db.collection("stockledgers");
+    const opts = { allowDiskUse: true, maxTimeMS: TRACKING_TIME_MS };
+    const deadline = Date.now() + TRACKING_TIME_MS;
+    const want = (page + 1) * perpage + 1;
+    const key = (id, lid) => String(id) + '|' + String(lid);
+    const found = coll.aggregate(cheap.concat([{ $project: { _id: 1, lid: "$ledgerdetails._id" } }]), opts);
+    const out = [];
+    let size = Math.max(20, Math.ceil(want * 1.5));         // a few more than needed: the last filters may drop some
+    try {
+        while (out.length < want) {
+            const batch = [];
+            while (batch.length < size && await found.hasNext()) batch.push(await found.next());
+            if (!batch.length) break;
+            if (Date.now() > deadline) throw Object.assign(new Error('operation exceeded time limit'), { codeName: 'MaxTimeMSExpired' });
+            const docs = new Map(batch.map((b) => [String(b._id), b._id]));
+            const lids = batch.map((b) => b.lid);
+            const rows = await coll.aggregate([
+                { $match: { _id: { $in: [...docs.values()] } } },
+                { $addFields: { ledgerdetails: { $filter: { input: "$ledgerdetails", as: "l", cond: { $in: ["$$l._id", lids] } } } } },
+                { $unwind: "$ledgerdetails" }
+            ].concat(joins), Object.assign({}, opts, { maxTimeMS: Math.max(1000, deadline - Date.now()) })).toArray();
+            // Back in the order the cheap part found them (the join query reads by _id).
+            const at = new Map(batch.map((b, i) => [key(b._id, b.lid), i]));
+            const pos = (r) => { const i = at.get(key(r._id, r.ledgerdetails && r.ledgerdetails._id)); return i === undefined ? batch.length : i; };
+            rows.sort((a, b) => pos(a) - pos(b));
+            out.push(...rows);
+            size = Math.min(size * 2, 500);                  // the filters dropped rows: take bigger batches
+        }
+    } catch (err) {
+        console.error('Inventory tracking:', err && err.message ? err.message : err);
+        throw err;                                           // the page says why it is empty
+    } finally {
+        await found.close().catch(() => {});
+    }
+    return out.slice(page * perpage, page * perpage + perpage + 1);
+}        // optional Previous / Next paging of the list pages
 exports.getItemMasterUID = async function (code) {
     let itemmaster = await mongoose.connection.db
     .collection("itemmasters")
@@ -30,7 +85,7 @@ exports.getInventoryData = async function (orguid, page = 0, selectedDateFormat,
     let morefilter = null;
     
     if(refno != "") {
-        morefilter = {referencedispense : { $regex: '.*' + refno + '.*' }};
+        morefilter = {referencedispense : { $regex: '.*' + escRe(refno) + '.*' }};
     }
 
     let datestart = new Date(selectedDateFormat); // "2020-08-01"
@@ -59,16 +114,15 @@ exports.getInventoryData = async function (orguid, page = 0, selectedDateFormat,
         perpage = 10;
     }
 
-    if(transactiontype) {
+    // One type, or several ("all types"): a list has to be matched with $in (matching the list itself finds nothing).
+    if(transactiontype && transactiontype.length) {
         transactiontypefilter = {
-                "ledgerdetails.transactiontype"  : transactiontype
+                "ledgerdetails.transactiontype"  : Array.isArray(transactiontype) ? { $in : transactiontype } : transactiontype
                 }
         }
 
-    let inventory = await mongoose.connection.db
-    .collection("stockledgers")
-    .aggregate(
-        [
+    // The whole pipeline as it was; trackingInBatches() runs its cheap start once and its joins on a few rows at a time.
+    const pipeline = [
             {
                 $match: initfilter
             },
@@ -94,6 +148,8 @@ exports.getInventoryData = async function (orguid, page = 0, selectedDateFormat,
                 }
             },
             { $unwind: { path: '$ledgerdetails', preserveNullAndEmptyArrays: true } },
+            // The transaction type is the ledger row's own field: keep only those rows before joining anything to them.
+            { $match : transactiontypefilter },
             { $lookup: { from: "organisations", foreignField: "_id", localField: "orguid", as: "orguid" } },
             { $unwind: { path: '$orguid', preserveNullAndEmptyArrays: true } },
             { $lookup: { from: "itemmasters", foreignField: "_id", localField: "itemmasteruid", as: "itemmasteruid" } },
@@ -482,9 +538,6 @@ exports.getInventoryData = async function (orguid, page = 0, selectedDateFormat,
         },
         //------ End สำหรับ กรณี Transaction Type เป็น INVENTORIES.STOCKDISPENSE ใช้แสดง  REFERENCE_NO ในการคืนของ -----------//
         {
-            $match : transactiontypefilter
-        },    
-        {
             $project: {
                 "orguid": 1,
                 "patientvisituid": 1,
@@ -669,7 +722,7 @@ exports.getInventoryData = async function (orguid, page = 0, selectedDateFormat,
         },
         {
             $match: {
-                "mrn":  { $regex: '.*' + mrn + '.*' }
+                "mrn":  { $regex: '.*' + escRe(mrn) + '.*' }
             }
         },
         { $lookup: { from: "admissionrequests", foreignField: "patientvisituid", localField: "patientvisituid._id", as: "admissionrequests" } },
@@ -773,35 +826,24 @@ exports.getInventoryData = async function (orguid, page = 0, selectedDateFormat,
             $match : {
                 $or:[ 
                     
-                    { "ledgerdetails.transactionrefuid.stocktransfernumber" : { $regex: '.*' + orderno + '.*' }},
-                    { "ledgerdetails.transactionrefuid.vendorreturnnumber" : { $regex: '.*' + orderno + '.*' }},
-                    { "ledgerdetails.transactionrefuid.manufacturingnumber" : { $regex: '.*' + orderno + '.*' }},
-                    { "ledgerdetails.transactionrefuid.stockdispensenumber" : { $regex: '.*' + orderno + '.*' }},
-                    { "ledgerdetails.transactionrefuid.stockadjustnumber" : { $regex: '.*' + orderno + '.*' }},
-                    { "ledgerdetails.transactionrefuid.grnnumber" : { $regex: '.*' + orderno + '.*' }},
-                    { "ledgerdetails.transactionrefuid.dispensereturnnumber" : { $regex: '.*' + orderno + '.*' }},
-                    { "ledgerdetails.transactionrefuid.returnnumber" : { $regex: '.*' + orderno + '.*' }}
+                    { "ledgerdetails.transactionrefuid.stocktransfernumber" : { $regex: '.*' + escRe(orderno) + '.*' }},
+                    { "ledgerdetails.transactionrefuid.vendorreturnnumber" : { $regex: '.*' + escRe(orderno) + '.*' }},
+                    { "ledgerdetails.transactionrefuid.manufacturingnumber" : { $regex: '.*' + escRe(orderno) + '.*' }},
+                    { "ledgerdetails.transactionrefuid.stockdispensenumber" : { $regex: '.*' + escRe(orderno) + '.*' }},
+                    { "ledgerdetails.transactionrefuid.stockadjustnumber" : { $regex: '.*' + escRe(orderno) + '.*' }},
+                    { "ledgerdetails.transactionrefuid.grnnumber" : { $regex: '.*' + escRe(orderno) + '.*' }},
+                    { "ledgerdetails.transactionrefuid.dispensereturnnumber" : { $regex: '.*' + escRe(orderno) + '.*' }},
+                    { "ledgerdetails.transactionrefuid.returnnumber" : { $regex: '.*' + escRe(orderno) + '.*' }}
                 ],
-                morefilter
+                ...(morefilter || {})
             }
         },
-        { "$skip": page * perpage },
-        { "$limit": perpage },
-    ],
-        { allowDiskUse: true }
-    )
-    .toArray()
-    .then(function (res) {
-        return res;
-    })
-    .catch(function (err) {
-        console.log(err);
-    });
+    ];
 
-    return inventory;
+    return trackingInBatches(pipeline, transactiontypefilter, parseInt(page, 10) || 0, perpage);
     }
 
-    exports.getInterfaceItemMaster = async function (orguid, code) {
+    exports.getInterfaceItemMaster = async function (orguid, code, page = null) {
         let search = {};
 
         if(code) {
@@ -824,9 +866,10 @@ exports.getInventoryData = async function (orguid, page = 0, selectedDateFormat,
                 // Limit before the lookups: each item yields at least one row per store,
                 // so the newest 200 items cover the newest 200 rows.
                 { $sort : { _id : -1}},
-                { $limit : 200},
+                // Paged: enough items for the page's rows (each item gives at least one), then the page's rows.
+                { $limit : page ? page.skip + page.limit : 200},
                 { $unwind: { path: "$handlingstores", preserveNullAndEmptyArrays: true } },
-                { $limit : 200},
+                ...paging.stages(page, 200),
                 { $lookup: { from: "users", localField: "createdby", foreignField: "_id", as: "users" } },
                 { $unwind: { path: "$users", preserveNullAndEmptyArrays: true } },
                 {
@@ -903,7 +946,7 @@ exports.getInventoryData = async function (orguid, page = 0, selectedDateFormat,
         return data;
     };
 
-    exports.getInterfaceVendorMaster = async function (orguid) {
+    exports.getInterfaceVendorMaster = async function (orguid, page = null) {
         let data = await mongoose.connection.db
         .collection("vendors")
         .aggregate(
@@ -914,8 +957,8 @@ exports.getInventoryData = async function (orguid, page = 0, selectedDateFormat,
                     }
                 },
                 // Sort on the real date (the formatted dd/mm/yyyy string does not sort chronologically)
-                { $sort : {"createdat": -1}},
-                { $limit : 50},
+                { $sort : {"createdat": -1, "_id": -1}},
+                ...paging.stages(page, 50),
                 { $lookup: { from: "users", localField: "createdby", foreignField: "_id", as: "users" } },
                 { $unwind: { path: "$users", preserveNullAndEmptyArrays: true } },
                 {
@@ -940,7 +983,7 @@ exports.getInventoryData = async function (orguid, page = 0, selectedDateFormat,
         return data;
     };
 
-    exports.getInterfaceGR = async function (orguid, grn) {
+    exports.getInterfaceGR = async function (orguid, grn, page = null) {
         let search = {};
 
         if(grn)
@@ -958,7 +1001,7 @@ exports.getInventoryData = async function (orguid, page = 0, selectedDateFormat,
                     }
                 },
                 { $sort : {"_id": -1}},
-                { $limit : 50},
+                ...paging.stages(page, 50),
                 { $lookup: { from: "users", localField: "createdby", foreignField: "_id", as: "users" } },
                 { $unwind: { path: "$users", preserveNullAndEmptyArrays: true } },
                 { $lookup: { from: "inventorystores", localField: "storeuid", foreignField: "_id", as: "inventorystores" } },
@@ -1081,13 +1124,13 @@ exports.getInterfaceGRItems = async function (grnuid, orguid) {
   };
 
   
-  exports.getAvailableItemMasters = async function (orguid, itemuid = '') {
+  exports.getAvailableItemMasters = async function (orguid, itemuid = '', page = null) {
     let search = {};
     search.statusflag = 'A';
     search.orguid = mongoose.Types.ObjectId(orguid);
     search.quantity = {$gt : 0};
 
-    if(itemuid.length > 0)
+    if(Array.isArray(itemuid) && itemuid.length > 0)
         search.itemmasteruid = itemuid[0]._id;
 
     let data = await mongoose.connection.db
@@ -1097,8 +1140,9 @@ exports.getInterfaceGRItems = async function (grnuid, orguid) {
             {
                 $match : search
             },
-            { $sort : { quantity : -1}},
-            { $limit : 50},
+            // quantity, then _id: one order, so the pages neither repeat nor skip rows
+            { $sort : { quantity : -1, _id : -1 }},
+            ...paging.stages(page, 50),
             { $lookup: { from: "itemmasters", localField: "itemmasteruid", foreignField: "_id", as: "itemmasters" } },
             { $unwind: { path: "$itemmasters", preserveNullAndEmptyArrays: true } },
             { $lookup: { from: "referencevalues", localField: "quantityuom", foreignField: "_id", as: "quantityuom" } },
@@ -1117,7 +1161,15 @@ exports.getInterfaceGRItems = async function (grnuid, orguid) {
                     'type' : '$itemtypeuid.valuedescription',
                     'store_code' : '$storeuid.code',
                     'store' : '$storeuid.name',
-                    'expirydate' : { $dateToString: { date : "$expirydate", format : "%d/%m/%Y", timezone : "Asia/Bangkok" }},
+                    // A wrong expiry date (e.g. year 10007) can't be shown as text and failed the whole list;
+                    // it is shown as "⚠ invalid (year …)" instead. The range keeps a day off each end for Bangkok time.
+                    'expirydate' : { $cond : [
+                        { $and : [ { $gte : [ "$expirydate", VALID_FROM ] }, { $lt : [ "$expirydate", VALID_TO ] } ] },
+                        { $dateToString: { date : "$expirydate", format : "%d/%m/%Y", timezone : "Asia/Bangkok" }},
+                        { $cond : [ { $eq : [ { $type : "$expirydate" }, "date" ] },
+                            { $concat : [ "⚠ invalid (year ", { $toString : { $add : [ 1970, { $floor : { $divide : [ { $toLong : "$expirydate" }, 31556952000 ] } } ] } }, ")" ] },
+                            null ] }
+                    ]},
                     'batchid' : '$batchid'
                 }
             }
@@ -1129,8 +1181,10 @@ exports.getInterfaceGRItems = async function (grnuid, orguid) {
         return res;
     })
     .catch(function (err) {
-        console.log(err);
+        // Thrown on: the page shows why the list is empty (it used to break the page with "items is not defined").
+        console.error('Available items:', err && err.message ? err.message : err);
+        throw err;
     });
 
-    return data;
+    return data || [];
 };

@@ -1,0 +1,611 @@
+<div class="col-12">
+<div class="el">
+
+  <header class="el-pagehead">
+    <div>
+      <nav class="el-crumbs" aria-label="Breadcrumb">
+        <a href="/e-learning">Courses</a><i class="fas fa-chevron-right" aria-hidden="true"></i>
+        <template v-if="courseId"><a :href="'/e-learning/courses/' + courseId">{{ savedTitle }}</a><i class="fas fa-chevron-right" aria-hidden="true"></i><span>Edit</span></template>
+        <span v-else>New course</span>
+      </nav>
+      <h1>{{ courseId ? 'Edit course' : 'New course' }}</h1>
+    </div>
+    <div class="el-pagehead-tools">
+      <span v-if="dirty" class="el-dirty">Unsaved changes</span>
+      <a v-if="courseId && hasGraded" class="el-btn" :href="'/e-learning/courses/' + courseId + '/grading'"><i class="fas fa-clipboard-check" aria-hidden="true"></i> Grading</a>
+      <a v-if="courseId" class="el-btn" :href="'/e-learning/courses/' + courseId" target="_blank" rel="noopener"><i class="fas fa-external-link-alt" aria-hidden="true"></i> View course</a>
+      <button type="button" class="el-btn is-primary" :disabled="saving" @click="save"><i :class="saving ? 'fas fa-spinner fa-spin' : 'fas fa-save'" aria-hidden="true"></i> Save</button>
+    </div>
+  </header>
+
+  <div v-if="error" class="el-msg is-error" role="alert"><i class="fas fa-exclamation-triangle"></i><span>{{ error }}</span></div>
+  <div v-if="notice" class="el-msg is-ok" role="status"><i class="fas fa-check-circle"></i><span>{{ notice }}</span></div>
+
+  <div class="el-editor">
+    <main>
+      <!-- Details -->
+      <section class="el-panel">
+        <div class="el-panel-head"><div><h2>Course details</h2><p>What learners see in the catalogue and on the course page.</p></div></div>
+        <div class="el-panel-body">
+          <label class="el-field">Title
+            <input v-model="form.title" class="el-input" maxlength="200" placeholder="e.g. Registering a new patient in the HIS" required></label>
+          <label class="el-field">Short summary <small>One or two sentences, shown on the course card and under the title.</small>
+            <textarea v-model="form.summary" class="el-input" rows="2" maxlength="500"></textarea></label>
+          <div class="el-field">Overview <small>The Overview tab: what the course covers, who it is for, what learners will be able to do.</small>
+            <el-md-editor v-model="form.description" :rows="10" placeholder="## What you'll learn&#10;- …"></el-md-editor>
+          </div>
+        </div>
+      </section>
+
+      <!-- Curriculum -->
+      <section class="el-panel">
+        <div class="el-panel-head">
+          <div><h2>Curriculum</h2><p>Sections, each with its lessons in order. A lesson is text, a video, a quiz or an assignment.</p></div>
+          <span class="el-muted" style="font-size: 13px; white-space: nowrap;">{{ lessonCount }} lesson{{ lessonCount === 1 ? '' : 's' }}<template v-if="minutes"> · {{ duration(minutes) }}</template></span>
+        </div>
+        <div class="el-panel-body">
+          <div>
+            <div v-for="(s, si) in form.curriculum" :key="s.key" class="el-b-sec">
+              <div class="el-b-sechead">
+                <span class="el-b-num">Section {{ si + 1 }}</span>
+                <input v-model="s.title" class="el-input" maxlength="200" placeholder="Section title" :aria-label="'Section ' + (si + 1) + ' title'">
+                <div class="el-b-tools">
+                  <button type="button" class="el-icon-btn" title="Move up" :disabled="si === 0" @click="moveSection(si, -1)"><i class="fas fa-arrow-up" aria-hidden="true"></i><span class="sr-only">Move up</span></button>
+                  <button type="button" class="el-icon-btn" title="Move down" :disabled="si === form.curriculum.length - 1" @click="moveSection(si, 1)"><i class="fas fa-arrow-down" aria-hidden="true"></i><span class="sr-only">Move down</span></button>
+                  <button type="button" class="el-icon-btn is-danger" title="Delete section" @click="removeSection(si)"><i class="far fa-trash-alt" aria-hidden="true"></i><span class="sr-only">Delete section</span></button>
+                </div>
+              </div>
+              <div class="el-b-secsum"><input v-model="s.summary" class="el-input" maxlength="1000" placeholder="Short description (optional)" aria-label="Section description"></div>
+              <ul class="el-b-lessons">
+                <li v-for="(l, li) in s.lessons" :key="l.key" class="el-b-lesson">
+                  <span class="el-lesson-type" :class="'is-' + l.type"><i :class="lessonIcon(l)" aria-hidden="true"></i></span>
+                  <div class="el-b-lesson-main" role="button" tabindex="0" @click="editLesson(si, li)" @keydown.enter="editLesson(si, li)">
+                    <b>{{ l.title || 'Untitled lesson' }}</b>
+                    <small>{{ lessonText(l) }}</small>
+                  </div>
+                  <div class="el-b-tools">
+                    <button type="button" class="el-icon-btn" title="Move up" :disabled="si === 0 && li === 0" @click="moveLesson(si, li, -1)"><i class="fas fa-arrow-up" aria-hidden="true"></i><span class="sr-only">Move up</span></button>
+                    <button type="button" class="el-icon-btn" title="Move down" :disabled="si === form.curriculum.length - 1 && li === s.lessons.length - 1" @click="moveLesson(si, li, 1)"><i class="fas fa-arrow-down" aria-hidden="true"></i><span class="sr-only">Move down</span></button>
+                    <button type="button" class="el-icon-btn" title="Edit" @click="editLesson(si, li)"><i class="fas fa-pen" aria-hidden="true"></i><span class="sr-only">Edit</span></button>
+                    <button type="button" class="el-icon-btn is-danger" title="Delete lesson" @click="removeLesson(si, li)"><i class="far fa-trash-alt" aria-hidden="true"></i><span class="sr-only">Delete lesson</span></button>
+                  </div>
+                </li>
+                <li v-if="!s.lessons.length" class="el-b-empty">No lessons in this section yet.</li>
+              </ul>
+              <div class="el-b-add">
+                <button type="button" class="el-btn is-sm" @click="newLesson(si, 'text')"><i class="far fa-file-alt" aria-hidden="true"></i> Text lesson</button>
+                <button type="button" class="el-btn is-sm" @click="newLesson(si, 'video')"><i class="fas fa-play" aria-hidden="true"></i> Video lesson</button>
+                <button type="button" class="el-btn is-sm" @click="newLesson(si, 'quiz')"><i class="fas fa-question-circle" aria-hidden="true"></i> Quiz</button>
+                <button type="button" class="el-btn is-sm" @click="newLesson(si, 'assignment')"><i class="fas fa-clipboard-check" aria-hidden="true"></i> Assignment</button>
+              </div>
+            </div>
+            <button type="button" class="el-btn is-block el-b-addsec" @click="addSection"><i class="fas fa-plus" aria-hidden="true"></i> Add section</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Instructor -->
+      <section class="el-panel">
+        <div class="el-panel-head"><div><h2>Instructor</h2><p>Shown on the course card and the Instructor tab.</p></div></div>
+        <div class="el-panel-body">
+          <label class="el-field">Name <input v-model="form.instructor" class="el-input" maxlength="120"></label>
+          <label class="el-field">About <span class="el-opt">(optional, Markdown)</span>
+            <textarea v-model="form.instructorBio" class="el-input" rows="3" maxlength="2000" placeholder="Role, department, experience…"></textarea></label>
+        </div>
+      </section>
+    </main>
+
+    <aside>
+      <!-- Publish -->
+      <section class="el-panel">
+        <div class="el-panel-head"><div><h2>Publish</h2></div></div>
+        <div class="el-panel-body">
+          <fieldset class="el-status">
+            <legend class="sr-only">Status</legend>
+            <label class="is-draft" :class="{ 'is-on': form.status === 'draft' }"><input type="radio" class="sr-only" value="draft" v-model="form.status">
+              <span><i class="fas fa-pen" aria-hidden="true"></i> Draft</span><small>Only course managers see it</small></label>
+            <label :class="{ 'is-on': form.status === 'published' }"><input type="radio" class="sr-only" value="published" v-model="form.status">
+              <span><i class="fas fa-globe" aria-hidden="true"></i> Published</span><small>In the catalogue for everyone</small></label>
+          </fieldset>
+          <div class="el-savebar">
+            <button type="button" class="el-btn is-primary is-block" :disabled="saving" @click="save"><i :class="saving ? 'fas fa-spinner fa-spin' : 'fas fa-save'" aria-hidden="true"></i> Save course</button>
+            <div v-if="course" class="el-savebar-meta">
+              <span>Created {{ when(course.createdAt) }}<template v-if="course.createdBy"> by {{ course.createdBy }}</template></span>
+              <span>Updated {{ when(course.updatedAt) }}<template v-if="course.updatedBy"> by {{ course.updatedBy }}</template></span>
+              <span v-if="course.learners">{{ course.learners }} learner{{ course.learners === 1 ? '' : 's' }} started it</span>
+            </div>
+            <button v-if="courseId" type="button" class="el-btn is-danger is-block is-sm" @click="askDelete"><i class="far fa-trash-alt" aria-hidden="true"></i> Delete course</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Thumbnail -->
+      <section class="el-panel">
+        <div class="el-panel-head"><div><h2>Thumbnail</h2><p>16:9, cropped to fit. JPEG, PNG or WebP.</p></div></div>
+        <div class="el-panel-body">
+          <div class="el-thumb" :style="thumbSrc ? null : cover(form)">
+            <img v-if="thumbSrc" :src="thumbSrc" alt="Course thumbnail">
+            <span v-else class="el-cover-ph" aria-hidden="true"><i class="fas fa-graduation-cap"></i></span>
+          </div>
+          <div class="el-thumb-tools">
+            <label class="el-btn is-sm" style="margin: 0;"><input type="file" accept="image/jpeg,image/png,image/webp" class="sr-only" @change="pickThumb"><i class="far fa-image" aria-hidden="true"></i> {{ thumbSrc ? 'Change' : 'Choose image' }}</label>
+            <button v-if="thumbSrc" type="button" class="el-btn is-sm is-ghost" @click="form.thumb = ''">Remove</button>
+          </div>
+          <small v-if="!thumbSrc" class="el-field-note">Without an image, the card gets its category's colour.</small>
+        </div>
+      </section>
+
+      <!-- Category & level -->
+      <section class="el-panel">
+        <div class="el-panel-head"><div><h2>Organise</h2></div></div>
+        <div class="el-panel-body">
+          <div class="el-field">Categories <small>The first is the main one: its colour is the card's when there is no image.</small>
+            <div v-if="form.categories.length" class="el-chips">
+              <span v-for="(name, i) in form.categories" :key="name" class="el-chip" :class="{ 'is-main': i === 0 }">
+                <button v-if="i > 0" type="button" class="el-chip-btn" title="Make it the main category" @click="mainCategory(i)"><i class="far fa-star" aria-hidden="true"></i><span class="sr-only">Make main</span></button>
+                <i v-else class="fas fa-star" title="Main category" aria-hidden="true"></i>
+                {{ name }}<em v-if="categories.indexOf(name) < 0" title="No longer in the list of categories"> (removed)</em>
+                <button type="button" class="el-chip-btn" :title="'Remove ' + name" @click="form.categories.splice(i, 1)"><i class="fas fa-times" aria-hidden="true"></i><span class="sr-only">Remove</span></button>
+              </span>
+            </div>
+            <select v-if="categoryOptions.length" class="el-select" value="" aria-label="Add a category" @change="addCategory($event)">
+              <option value="">{{ form.categories.length ? '+ Add another category' : '+ Add a category' }}</option>
+              <option v-for="c in categoryOptions" :key="c" :value="c">{{ c }}</option>
+            </select>
+            <small v-if="!categories.length" class="el-field-note">No categories yet.<template v-if="canCategories"> <a href="/e-learning/categories" target="_blank" rel="noopener">Add categories</a>, then reload this page.</template></small>
+            <small v-else-if="canCategories" class="el-field-note"><a href="/e-learning/categories" target="_blank" rel="noopener"><i class="fas fa-tags" aria-hidden="true"></i> Manage categories</a></small>
+          </div>
+          <label class="el-field">Level
+            <select v-model="form.level" class="el-select"><option v-for="l in levels" :key="l" :value="l">{{ LEVELS[l] }}</option></select>
+          </label>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <!-- Lesson editor -->
+  <div v-if="m" class="el-modal" role="dialog" aria-modal="true" aria-labelledby="el-lesson-title" @mousedown.self="closeLesson">
+    <div class="el-modal-box">
+      <div class="el-modal-head">
+        <h3 id="el-lesson-title">{{ m.li == null ? 'New lesson' : 'Edit lesson' }}</h3>
+        <button type="button" class="el-icon-btn" title="Close" @click="closeLesson"><i class="fas fa-times" aria-hidden="true"></i><span class="sr-only">Close</span></button>
+      </div>
+      <div class="el-modal-body">
+        <label class="el-field">Title
+          <input ref="lessonTitle" v-model="m.d.title" class="el-input" maxlength="200" placeholder="e.g. Searching for a patient"></label>
+
+        <div class="el-field">Type
+            <fieldset class="el-types">
+              <legend class="sr-only">Lesson type</legend>
+              <label v-for="t in LESSON_TYPES" :key="t.key" :class="{ 'is-on': m.d.type === t.key }"><input type="radio" class="sr-only" :value="t.key" v-model="m.d.type" @change="typeChanged"><i :class="t.icon" aria-hidden="true"></i><span>{{ t.label }}</span></label>
+            </fieldset>
+        </div>
+        <div class="el-row">
+          <label class="el-field">Section
+            <select v-model="m.si" class="el-select"><option v-for="(s, i) in form.curriculum" :key="s.key" :value="i">{{ i + 1 }}. {{ s.title || 'Untitled section' }}</option></select>
+          </label>
+          <label class="el-field">Duration <small>minutes, for the course total</small>
+            <input v-model.number="m.d.durationMin" type="number" min="0" max="100000" step="1" class="el-input" placeholder="0"></label>
+        </div>
+
+        <template v-if="m.d.type === 'video'">
+          <div class="el-field">Where is the video?
+            <fieldset class="el-types">
+              <legend class="sr-only">Video source</legend>
+              <label v-for="src in VIDEO_SOURCES" :key="src.key" :class="{ 'is-on': m.d.videoSource === src.key }">
+                <input type="radio" class="sr-only" :value="src.key" v-model="m.d.videoSource" @change="sourceChanged">
+                <i :class="src.icon" aria-hidden="true"></i><span>{{ src.label }}<small>{{ src.note }}</small></span>
+              </label>
+            </fieldset>
+          </div>
+
+          <div class="el-field">{{ sourceInfo.field }}
+            <div class="el-inline">
+              <input v-model.trim="m.d.videoUrl" class="el-input is-mono" :placeholder="sourceInfo.placeholder" @input="m.player = null; m.verr = ''" @keydown.enter.prevent="checkVideo">
+              <button v-if="m.d.videoSource === 'share'" type="button" class="el-btn" :disabled="!folders.length" @click="openBrowser"><i class="far fa-folder-open" aria-hidden="true"></i> Browse</button>
+              <button type="button" class="el-btn" :disabled="m.checking || !m.d.videoUrl" @click="checkVideo"><i :class="m.checking ? 'fas fa-spinner fa-spin' : 'fas fa-eye'" aria-hidden="true"></i> Preview</button>
+            </div>
+            <small>{{ sourceInfo.help }}</small>
+            <small v-if="m.d.videoSource === 'share' && shareLabel" class="el-muted"><i class="far fa-folder" aria-hidden="true"></i> {{ shareLabel }}</small>
+          </div>
+
+          <div v-if="m.d.videoSource === 'share' && !folders.length" class="el-msg is-info"><i class="fas fa-info-circle"></i>
+            <span>No shared folders yet. <template v-if="isAdmin">Add them in <a href="/e-learning/settings" target="_blank" rel="noopener">E-Learning Settings</a> (the server must be able to read them), then reopen this page.</template><template v-else>An administrator adds them in E-Learning Settings.</template></span>
+          </div>
+
+          <div v-if="m.browse" class="el-browser">
+            <div class="el-browser-bar">
+              <select v-model="m.browse.folder" class="el-select" aria-label="Shared folder" @change="browse('')"><option v-for="f in folders" :key="f.key" :value="f.key">{{ f.name }}</option></select>
+              <div class="el-browser-path">
+                <button type="button" @click="browse('')"><i class="fas fa-home" aria-hidden="true" style="font-size: 12px; color: inherit;"></i><span class="sr-only">Top</span></button>
+                <template v-for="(p, i) in crumbs"><i :key="'s' + i" class="fas fa-chevron-right" aria-hidden="true"></i><button :key="'b' + i" type="button" @click="browse(p.path)">{{ p.name }}</button></template>
+              </div>
+              <button type="button" class="el-icon-btn" style="margin-left: auto;" title="Close" @click="m.browse = null"><i class="fas fa-times" aria-hidden="true"></i><span class="sr-only">Close</span></button>
+            </div>
+            <div v-if="m.browse.loading" class="el-browser-msg"><i class="fas fa-spinner fa-spin"></i> Reading the folder…</div>
+            <div v-else-if="m.browse.error" class="el-browser-msg" style="color: var(--el-bad);">{{ m.browse.error }}</div>
+            <ul v-else-if="m.browse.data" class="el-browser-list">
+              <li v-if="m.browse.data.parent !== null"><button type="button" @click="browse(m.browse.data.parent)"><i class="fas fa-level-up-alt" aria-hidden="true"></i><span>..</span></button></li>
+              <li v-for="e in m.browse.data.entries" :key="e.path">
+                <button v-if="e.dir" type="button" @click="browse(e.path)"><i class="fas fa-folder" aria-hidden="true"></i><span>{{ e.name }}</span></button>
+                <button v-else type="button" :class="{ 'is-on': m.d.videoUrl === e.ref }" @click="pickFile(e)"><i class="far fa-file-video" aria-hidden="true"></i><span>{{ e.name }}</span><small>{{ size(e.size) }}</small></button>
+              </li>
+              <li v-if="!m.browse.data.entries.length" class="el-browser-msg">No folders or video files here.</li>
+            </ul>
+          </div>
+
+          <div v-if="m.verr" class="el-msg is-error" role="alert"><i class="fas fa-exclamation-triangle"></i><span>{{ m.verr }}</span></div>
+          <div v-if="m.player" class="el-preview"><el-player :player="m.player" @duration="gotDuration"></el-player></div>
+
+          <div class="el-field">Notes below the video <span class="el-opt">(optional)</span>
+            <el-md-editor v-model="m.d.content" :rows="6" placeholder="Key points, steps to follow, links…"></el-md-editor>
+          </div>
+        </template>
+
+        <template v-else-if="m.d.type === 'quiz'">
+          <div class="el-field">Introduction <span class="el-opt">(optional, shown before the quiz starts)</span>
+            <el-md-editor v-model="m.d.content" :rows="3" placeholder="What the quiz covers, how long it takes…"></el-md-editor>
+          </div>
+          <el-quiz-builder :settings="m.d.settings"></el-quiz-builder>
+        </template>
+
+        <template v-else-if="m.d.type === 'assignment'">
+          <div class="el-field">Instructions <small>What learners should do and hand in, and how it will be graded.</small>
+            <el-md-editor v-model="m.d.content" :rows="8" placeholder="## Task&#10;Describe…&#10;&#10;## How it is graded&#10;- …"></el-md-editor>
+          </div>
+          <el-assignment-builder :settings="m.d.settings"></el-assignment-builder>
+        </template>
+
+        <div v-else class="el-field">Lesson text
+          <el-md-editor v-model="m.d.content" :rows="16" placeholder="## Step 1&#10;Open the registration screen…"></el-md-editor>
+        </div>
+
+        <div v-if="m.error" class="el-msg is-error" role="alert"><i class="fas fa-exclamation-triangle"></i><span>{{ m.error }}</span></div>
+      </div>
+      <div class="el-modal-foot">
+        <span class="el-grow el-muted" style="font-size: 12px;">Changes are kept when you click Save course.</span>
+        <button type="button" class="el-btn" @click="closeLesson">Cancel</button>
+        <button type="button" class="el-btn is-primary" :disabled="m.checking" @click="applyLesson"><i :class="m.checking ? 'fas fa-spinner fa-spin' : 'fas fa-check'" aria-hidden="true"></i> {{ m.li == null ? 'Add lesson' : 'Done' }}</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm -->
+  <div v-if="confirmBox" class="el-modal" role="alertdialog" aria-modal="true" aria-labelledby="el-confirm-title" @mousedown.self="confirmBox = null">
+    <div class="el-modal-box is-sm">
+      <div class="el-modal-head"><h3 id="el-confirm-title">{{ confirmBox.title }}</h3></div>
+      <div class="el-modal-body"><p style="margin: 0; font-size: 14px; color: var(--el-text-2);">{{ confirmBox.text }}</p></div>
+      <div class="el-modal-foot">
+        <button type="button" class="el-btn" @click="confirmBox = null">Cancel</button>
+        <button type="button" class="el-btn is-primary" style="background: var(--el-bad); border-color: var(--el-bad);" :disabled="confirmBox.busy" @click="confirmBox.run()">{{ confirmBox.ok }}</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<script src="/e-learning/assets/elearning.js"></script>
+<script src="/e-learning/assets/builder.js"></script>
+<script>
+  (function () {
+    'use strict';
+    var VIDEO_SOURCES = [
+      { key: 'youtube', label: 'YouTube', icon: 'fab fa-youtube', note: 'Public or unlisted' },
+      { key: 'gdrive', label: 'Google Drive', icon: 'fab fa-google-drive', note: 'A shared file' },
+      { key: 'share', label: 'Shared folder', icon: 'fas fa-network-wired', note: 'On the network' }
+    ];
+    var SOURCE_INFO = {
+      youtube: { field: 'YouTube link', placeholder: 'https://www.youtube.com/watch?v=…  or  https://youtu.be/…', help: 'The video\'s link (Share > Copy link). A start time (?t=90) is kept. Private videos don\'t play; use Unlisted.' },
+      gdrive: { field: 'Google Drive link', placeholder: 'https://drive.google.com/file/d/…/view', help: 'In Drive: Share > General access "Anyone with the link" (or share it with the learners), then Copy link.' },
+      share: { field: 'Video file', placeholder: '\\\\fileserver\\training\\HIS\\registration.mp4', help: 'Browse a shared folder, or paste the file\'s full path. MP4 (H.264) and WebM play in every browser.' }
+    };
+    var LESSON_TYPES = [
+      { key: 'text', label: 'Text', icon: 'far fa-file-alt' },
+      { key: 'video', label: 'Video', icon: 'fas fa-play' },
+      { key: 'quiz', label: 'Quiz', icon: 'fas fa-question-circle' },
+      { key: 'assignment', label: 'Assignment', icon: 'fas fa-clipboard-check' }
+    ];
+    var graded = function (type) { return type === 'quiz' || type === 'assignment'; };
+    var MAX_THUMB = 1400000;
+    var seq = 0;
+    var key = function () { return 'k' + (++seq); };
+
+    var lessonFrom = function (l) {
+      return { key: key(), id: l.id || null, title: l.title || '', type: l.type || 'text', content: l.content || '',
+        videoSource: l.videoSource || 'youtube', videoUrl: l.type === 'video' && l.videoSource === 'share' ? (l.videoRef || l.videoUrl || '') : (l.videoUrl || ''), durationMin: l.durationMin || 0,
+        settings: graded(l.type) ? ELearnBuilder.complete(l.type, l.settings) : null };
+    };
+    var formFrom = function (c, me) {
+      c = c || {};
+      return {
+        title: c.title || '', summary: c.summary || '', description: c.description || '', categories: (c.categories || []).slice(), level: c.level || 'all',
+        instructor: c.id ? (c.instructor || '') : me, instructorBio: c.instructorBio || '', status: c.status || 'draft',
+        thumb: undefined, thumbUrl: c.thumbUrl || null,
+        curriculum: (c.curriculum && c.curriculum.length ? c.curriculum : [{ title: 'Introduction', lessons: [] }]).map(function (s) {
+          return { key: key(), id: s.id || null, title: s.title || '', summary: s.summary || '', lessons: (s.lessons || []).map(lessonFrom) };
+        })
+      };
+    };
+    // What is sent to the server (and compared for "Unsaved changes")
+    var payload = function (f) {
+      var out = {
+        title: f.title, summary: f.summary, description: f.description, categories: f.categories, level: f.level,
+        instructor: f.instructor, instructorBio: f.instructorBio, status: f.status,
+        curriculum: f.curriculum.map(function (s) {
+          return { id: s.id, title: s.title, summary: s.summary, lessons: s.lessons.map(function (l) {
+            return { id: l.id, title: l.title, type: l.type, content: l.content, videoSource: l.type === 'video' ? l.videoSource : '', videoUrl: l.type === 'video' ? l.videoUrl : '', durationMin: +l.durationMin || 0,
+              settings: graded(l.type) ? l.settings : undefined };
+          }) };
+        })
+      };
+      if (f.thumb !== undefined) out.thumb = f.thumb;
+      return out;
+    };
+    var words = function (s) { return (String(s || '').match(/\S+/g) || []).length; };
+
+    // An image file -> a 16:9 JPEG data: URL (cropped to fill, at most 1280 x 720)
+    function resize(file) {
+      return new Promise(function (resolve, reject) {
+        var url = URL.createObjectURL(file), img = new Image();
+        img.onload = function () {
+          URL.revokeObjectURL(url);
+          var w = Math.min(1280, img.naturalWidth), h = Math.round(w * 9 / 16);
+          var scale = Math.max(w / img.naturalWidth, h / img.naturalHeight);
+          var sw = w / scale, sh = h / scale, sx = (img.naturalWidth - sw) / 2, sy = (img.naturalHeight - sh) / 2;
+          var canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          var ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(0, 0, w, h);
+          ctx.drawImage(img, sx, sy, sw, sh, 0, 0, w, h);
+          var q = 0.86, data = canvas.toDataURL('image/jpeg', q);
+          while (data.length > MAX_THUMB && q > 0.4) { q -= 0.1; data = canvas.toDataURL('image/jpeg', q); }
+          resolve(data);
+        };
+        img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('This image could not be read.')); };
+        img.src = url;
+      });
+    }
+
+    Page.setup({
+      data: function () {
+        var form = formFrom(Page.data.course, Page.data.me);
+        return {
+          form: form, saved: JSON.stringify(payload(form)), courseId: Page.data.course ? Page.data.course.id : null,
+          savedTitle: Page.data.course ? Page.data.course.title : '',
+          saving: false, error: '', notice: '', m: null, confirmBox: null,
+          LEVELS: ELearn.LEVELS, VIDEO_SOURCES: VIDEO_SOURCES, LESSON_TYPES: LESSON_TYPES
+        };
+      },
+      computed: {
+        // The categories not picked yet
+        categoryOptions: function () {
+          var picked = this.form.categories;
+          return this.categories.filter(function (c) { return picked.indexOf(c) < 0; });
+        },
+        hasGraded: function () { return this.form.curriculum.some(function (s) { return s.lessons.some(function (l) { return l.id && graded(l.type); }); }); },
+        dirty: function () { return JSON.stringify(payload(this.form)) !== this.saved; },
+        thumbSrc: function () { return this.form.thumb === undefined ? this.form.thumbUrl : this.form.thumb || null; },
+        lessonCount: function () { return this.form.curriculum.reduce(function (n, s) { return n + s.lessons.length; }, 0); },
+        minutes: function () { return this.form.curriculum.reduce(function (n, s) { return n + s.lessons.reduce(function (k, l) { return k + (+l.durationMin || 0); }, 0); }, 0); },
+        sourceInfo: function () { return SOURCE_INFO[this.m.d.videoSource] || SOURCE_INFO.youtube; },
+        // "Training › HIS/registration.mp4" for a picked "<key>|<path>"
+        shareLabel: function () {
+          var v = this.m.d.videoUrl || '', i = v.indexOf('|');
+          if (i <= 0) return '';
+          var f = this.folders.filter(function (x) { return x.key === v.slice(0, i); })[0];
+          return f ? f.name + ' › ' + v.slice(i + 1) : '';
+        },
+        crumbs: function () {
+          var dir = this.m && this.m.browse && this.m.browse.data ? this.m.browse.data.dir : '';
+          var acc = [];
+          return dir ? dir.split('/').map(function (name) { acc.push(name); return { name: name, path: acc.join('/') }; }) : [];
+        }
+      },
+      mounted: function () {
+        var self = this;
+        window.addEventListener('beforeunload', function (e) {
+          if (self.dirty && !self.leaving) { e.preventDefault(); e.returnValue = ''; }
+        });
+        document.addEventListener('keydown', function (e) {
+          if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (!self.m) self.save(); }
+          if (e.key === 'Escape') { if (self.confirmBox) self.confirmBox = null; else if (self.m) self.closeLesson(); }
+        });
+      },
+      methods: {
+        addCategory: function (e) {
+          if (e.target.value) this.form.categories.push(e.target.value);
+          e.target.value = '';
+        },
+        mainCategory: function (i) { this.form.categories.unshift(this.form.categories.splice(i, 1)[0]); },
+        duration: ELearn.duration, when: ELearn.when, cover: ELearn.cover, size: ELearn.size,
+        lessonIcon: function (l) {
+          if (l.type === 'quiz') return 'fas fa-question-circle';
+          if (l.type === 'assignment') return 'fas fa-clipboard-check';
+          if (l.type !== 'video') return 'far fa-file-alt';
+          return { youtube: 'fab fa-youtube', gdrive: 'fab fa-google-drive', share: 'fas fa-network-wired' }[l.videoSource] || 'fas fa-play';
+        },
+        lessonText: function (l) {
+          var parts = l.type === 'video' ? ['Video', ELearn.SOURCES[l.videoSource] || '']
+            : l.type === 'quiz' ? ['Quiz', l.settings.questions.length + ' question' + (l.settings.questions.length === 1 ? '' : 's'), 'pass ' + l.settings.passPct + '%']
+              : l.type === 'assignment' ? ['Assignment', l.settings.maxPoints + ' points']
+                : ['Text', words(l.content) + ' words'];
+          if (l.durationMin) parts.push(ELearn.duration(l.durationMin));
+          return parts.join(' · ');
+        },
+
+        // ---- sections ----
+        addSection: function () {
+          this.form.curriculum.push({ key: key(), id: null, title: '', summary: '', lessons: [] });
+          var self = this;
+          this.$nextTick(function () {
+            var inputs = self.$el.querySelectorAll('.el-b-sechead .el-input');
+            if (inputs.length) inputs[inputs.length - 1].focus();
+          });
+        },
+        moveSection: function (i, d) {
+          var list = this.form.curriculum, s = list.splice(i, 1)[0];
+          list.splice(i + d, 0, s);
+        },
+        removeSection: function (i) {
+          var s = this.form.curriculum[i], self = this;
+          var drop = function () { self.form.curriculum.splice(i, 1); self.confirmBox = null; };
+          if (!s.lessons.length) return drop();
+          this.confirmBox = { title: 'Delete this section?', ok: 'Delete section', run: drop,
+            text: '"' + (s.title || 'Untitled section') + '" and its ' + s.lessons.length + ' lesson' + (s.lessons.length === 1 ? '' : 's') + ' will be deleted when you save the course. Learners\' progress on them is deleted too.' };
+        },
+
+        // ---- lessons ----
+        moveLesson: function (si, li, d) {
+          var secs = this.form.curriculum, lessons = secs[si].lessons, l = lessons[li];
+          var to = li + d;
+          if (to >= 0 && to < lessons.length) { lessons.splice(li, 1); lessons.splice(to, 0, l); return; }
+          // past the end of its section: into the next / previous section
+          var other = secs[si + d];
+          if (!other) return;
+          lessons.splice(li, 1);
+          if (d < 0) other.lessons.push(l); else other.lessons.unshift(l);
+        },
+        removeLesson: function (si, li) {
+          var self = this, l = this.form.curriculum[si].lessons[li];
+          this.confirmBox = { title: 'Delete this lesson?', ok: 'Delete lesson', run: function () { self.form.curriculum[si].lessons.splice(li, 1); self.confirmBox = null; },
+            text: '"' + (l.title || 'Untitled lesson') + '" will be deleted when you save the course.' + (l.id ? ' Learners\' progress on it is deleted too.' : '') };
+        },
+        openModal: function (si, li, d) {
+          this.m = { si: si, from: si, li: li, d: d, error: '', verr: '', checking: false, player: null, browse: null };
+          var self = this;
+          this.$nextTick(function () { if (self.$refs.lessonTitle) self.$refs.lessonTitle.focus(); });
+          if (d.type === 'video' && d.videoUrl) this.checkVideo();
+        },
+        newLesson: function (si, type) {
+          var d = lessonFrom({ type: type });
+          d.settingsType = graded(type) ? type : null;
+          this.openModal(si, null, d);
+        },
+        editLesson: function (si, li) {
+          var l = this.form.curriculum[si].lessons[li];
+          this.openModal(si, li, Object.assign({}, l, { settings: l.settings ? JSON.parse(JSON.stringify(l.settings)) : null, settingsType: l.settings ? l.type : null }));
+        },
+        closeLesson: function () { this.m = null; },
+        // A quiz / assignment needs its settings (kept when switching back and forth)
+        typeChanged: function () {
+          var d = this.m.d;
+          if (graded(d.type) && (!d.settings || d.settingsType !== d.type)) {
+            d.settings = ELearnBuilder.complete(d.type, d.settingsType === d.type ? d.settings : null);
+            d.settingsType = d.type;
+          }
+        },
+        sourceChanged: function () { this.m.d.videoUrl = ''; this.m.player = null; this.m.verr = ''; this.m.browse = null; },
+        checkVideo: function () {
+          var m = this.m;
+          if (!m.d.videoUrl) return Promise.resolve(false);
+          m.checking = true;
+          m.verr = '';
+          return ELearn.post('/e-learning/video/check', { source: m.d.videoSource, url: m.d.videoUrl })
+            .then(function (r) { m.player = r.player; return true; })
+            .catch(function (err) { m.player = null; m.verr = err.message; return false; })
+            .finally(function () { m.checking = false; });
+        },
+        gotDuration: function (sec) { if (this.m && !this.m.d.durationMin) this.m.d.durationMin = Math.max(1, Math.round(sec / 60)); },
+        openBrowser: function () {
+          var v = this.m.d.videoUrl || '', i = v.indexOf('|');
+          var keyOf = i > 0 && this.folders.some(function (f) { return f.key === v.slice(0, i); }) ? v.slice(0, i) : this.folders[0].key;
+          var dir = i > 0 ? v.slice(i + 1).split('/').slice(0, -1).join('/') : '';
+          this.m.browse = { folder: keyOf, loading: false, error: '', data: null };
+          this.browse(dir);
+        },
+        browse: function (dir) {
+          var b = this.m.browse;
+          b.loading = true;
+          b.error = '';
+          return ELearn.getJson('/e-learning/browse?folder=' + encodeURIComponent(b.folder) + '&dir=' + encodeURIComponent(dir || ''))
+            .then(function (d) { b.data = d; })
+            .catch(function (err) {
+              b.error = err.message;
+              if (dir) b.data = null;
+            })
+            .finally(function () { b.loading = false; });
+        },
+        pickFile: function (e) {
+          this.m.d.videoUrl = e.ref;
+          if (!this.m.d.title) this.m.d.title = e.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+          this.m.d.durationMin = 0;          // read again from the new file
+          this.checkVideo();
+        },
+        applyLesson: function () {
+          var m = this.m, self = this;
+          m.error = '';
+          if (!m.d.title.trim()) { m.error = 'The lesson needs a title.'; return; }
+          var finish = function () {
+            var list = self.form.curriculum;
+            if (m.li != null) list[m.from].lessons.splice(m.li, 1, m.d);
+            if (m.li == null) list[m.si].lessons.push(m.d);
+            else if (m.si !== m.from) { list[m.from].lessons.splice(m.li, 1); list[m.si].lessons.push(m.d); }
+            self.m = null;
+          };
+          if (graded(m.d.type)) {
+            var problem = ELearnBuilder.check(m.d.type, m.d.settings);
+            if (problem) { m.error = problem; return; }
+            if (m.d.type === 'assignment' && !m.d.content.trim()) { m.error = 'Write the instructions: what should learners hand in?'; return; }
+            return finish();
+          }
+          if (m.d.type === 'text') {
+            if (!m.d.content.trim()) { m.error = 'Write the lesson\'s text, or choose Video.'; return; }
+            return finish();
+          }
+          if (!m.d.videoUrl) { m.error = 'Add the link (or file) of the video.'; return; }
+          // the link is checked before the lesson is kept, so Save does not fail on it later
+          this.checkVideo().then(function (ok) { if (ok) finish(); else m.error = 'Fix the video link first: ' + m.verr; });
+        },
+
+        // ---- thumbnail ----
+        pickThumb: function (e) {
+          var file = e.target.files && e.target.files[0], self = this;
+          e.target.value = '';
+          if (!file) return;
+          resize(file).then(function (data) { self.form.thumb = data; }).catch(function (err) { self.error = err.message; });
+        },
+
+        // ---- save / delete ----
+        save: function () {
+          var self = this, body = payload(this.form);
+          this.error = '';
+          this.notice = '';
+          if (!body.title.trim()) { this.error = 'The course needs a title.'; window.scrollTo(0, 0); return; }
+          var untitled = this.form.curriculum.findIndex(function (s) { return !s.title.trim(); });
+          if (untitled >= 0) { this.error = 'Section ' + (untitled + 1) + ' needs a title.'; return; }
+          this.saving = true;
+          ELearn.post(this.courseId ? '/e-learning/courses/' + this.courseId : '/e-learning/courses', body, true)
+            .then(function (r) {
+              var c = r.course;
+              Page.data.course = c;
+              self.course = c;
+              self.form = formFrom(c, Page.data.me);
+              self.saved = JSON.stringify(payload(self.form));
+              self.savedTitle = c.title;
+              if (!self.courseId) history.replaceState(null, '', '/e-learning/courses/' + c.id + '/edit');
+              self.courseId = c.id;
+              self.notice = c.status === 'published' ? 'Saved. The course is published in the catalogue.' : 'Saved as a draft. Publish it when it is ready for learners.';
+              setTimeout(function () { self.notice = ''; }, 6000);
+            })
+            .catch(function (err) { self.error = err.message; window.scrollTo(0, 0); })
+            .finally(function () { self.saving = false; });
+        },
+        askDelete: function () {
+          var self = this;
+          this.confirmBox = {
+            title: 'Delete this course?', ok: 'Delete course', busy: false,
+            text: '"' + this.savedTitle + '", its ' + (this.course.lessons || 0) + ' lessons and every learner\'s progress on it will be deleted. This cannot be undone.',
+            run: function () {
+              self.confirmBox.busy = true;
+              ELearn.post('/e-learning/courses/' + self.courseId + '/delete', {})
+                .then(function () { self.leaving = true; location.href = '/e-learning'; })
+                .catch(function (err) { self.confirmBox = null; self.error = err.message; });
+            }
+          };
+        }
+      }
+    });
+  })();
+</script>

@@ -1,4 +1,5 @@
 const organisationsModel = require("../../../core/models/organisations.model");
+const paging = require('../../../core/http/paging');        // Previous / Next paging (?page=)
 const patientvisitModel = require("../../patients/models/patientvisits.model");
 const patientorderModel = require("../models/patientorders.model");
 const patientModel = require("../../patients/models/patient.model");
@@ -22,10 +23,13 @@ exports.diets = async function (req, res) {
     patientModel.getPatientUID(hn),
     patientvisitModel.getPatientVisitUID(vn)
   ]);
-  let diets = await patientorderModel.getPatientOrdersByCate(org[0]._id, patientuid, visituid, "DIET");
-  
+  const p = paging.read(req);
+  const { rows: diets, paging: pg } = paging.page(req, p,
+    await patientorderModel.getPatientOrdersByCate(org[0]._id, patientuid, visituid, "DIET", "", { skip: p.skip, limit: p.limit }));
+
   return res.renderPage(view('diet'), {
     title:  'Patient Diets : ' + org[0].name,
-    diets: diets
+    diets: diets,
+    paging: pg, query: { mrn: hn, vn: vn }
   });
 };

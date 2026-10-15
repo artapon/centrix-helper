@@ -1,0 +1,547 @@
+<div class="col-12">
+<div class="sms" :class="{ 'is-dark': isDark }">
+
+  <header class="sms-head">
+    <div class="sms-eyebrow">Service Monitor</div>
+    <h1>Settings</h1>
+    <p>Options for everyone who uses the Service Monitor pages. Only administrators can change them.</p>
+  </header>
+
+  <form class="sms-form" @submit.prevent="save">
+
+    <!-- Appearance -->
+    <section class="sms-card">
+      <div class="sms-card-head">
+        <h2>Appearance</h2>
+        <p>The colour theme of Service Health, its public status page and this page. The rest of the app keeps its own look.</p>
+      </div>
+      <fieldset class="sms-themes">
+        <legend class="sr-only">Theme</legend>
+        <label v-for="t in THEMES" :key="t.key" class="sms-theme" :class="{ 'is-on': choice === t.key }">
+          <input type="radio" name="theme" :value="t.key" v-model="choice" class="sr-only">
+          <span class="sms-preview" :class="'is-' + t.key" aria-hidden="true">
+            <span class="sms-pv" :class="t.key === 'dark' ? 'is-dark' : 'is-light'">
+              <span class="sms-pv-bar"></span>
+              <span class="sms-pv-row"><i class="is-up"></i><b></b></span>
+              <span class="sms-pv-row"><i class="is-down"></i><b></b></span>
+              <span class="sms-pv-beats"><em v-for="n in 14" :key="n" :class="{ 'is-down': n === 10 || n === 11 }"></em></span>
+            </span>
+            <span v-if="t.key === 'system'" class="sms-pv is-dark is-half">
+              <span class="sms-pv-bar"></span>
+              <span class="sms-pv-row"><i class="is-up"></i><b></b></span>
+              <span class="sms-pv-row"><i class="is-down"></i><b></b></span>
+              <span class="sms-pv-beats"><em v-for="n in 14" :key="n" :class="{ 'is-down': n === 10 || n === 11 }"></em></span>
+            </span>
+          </span>
+          <span class="sms-theme-text">
+            <span class="sms-radio" aria-hidden="true"></span>
+            <span><b><i :class="t.icon" aria-hidden="true"></i> {{ t.label }}</b><small>{{ t.note }}</small></span>
+          </span>
+        </label>
+      </fieldset>
+      <p v-if="choice === 'system'" class="sms-hint"><i class="fas fa-info-circle"></i> This device is set to <b>{{ sysDark ? 'dark' : 'light' }}</b>, so the pages show {{ sysDark ? 'dark' : 'light' }} here. Each user sees their own device's setting.</p>
+    </section>
+
+    <!-- Auto reset statistics -->
+    <section class="sms-card">
+      <div class="sms-card-head is-row">
+        <div>
+          <h2>Auto reset statistics</h2>
+          <p>Clears the statistics of every monitor on a schedule, like Service Health › Reset statistics with "All monitors" and "Everything". Monitors and their settings are kept.</p>
+        </div>
+        <label class="sms-switch-label"><input type="checkbox" class="sms-switch" v-model="ar.enabled" aria-label="Auto reset statistics"><span>{{ ar.enabled ? 'On' : 'Off' }}</span></label>
+      </div>
+      <div class="sms-card-body" :class="{ 'is-off': !ar.enabled }">
+        <div class="sms-row">
+          <label class="sms-field">Reset every
+            <span class="sms-unit"><input v-model.number="ar.everyDays" type="number" min="1" max="365" step="1" required :disabled="!ar.enabled"><span>days</span></span>
+          </label>
+          <label class="sms-field">At <small>server time</small>
+            <input v-model="ar.at" type="time" required :disabled="!ar.enabled" class="sms-time">
+          </label>
+        </div>
+        <div class="sms-field">Clear
+          <label class="sms-check"><input type="checkbox" v-model="ar.checks" :disabled="!ar.enabled"> <span><b>Check history</b> <small>uptime, response times and heartbeats</small></span></label>
+          <label class="sms-check"><input type="checkbox" v-model="ar.events" :disabled="!ar.enabled"> <span><b>Incidents</b> <small>the status changes</small></span></label>
+        </div>
+        <div class="sms-sched">
+          <div><small>Next reset</small><b>{{ ar.enabled ? (nextReset ? when(nextReset) : '—') : 'Off' }}</b><span v-if="ar.enabled && nextReset">{{ untilText }}</span></div>
+          <div><small>Last reset</small><b>{{ current.autoReset.lastRunAt ? when(current.autoReset.lastRunAt) : 'Never' }}</b>
+            <span v-if="current.autoReset.lastResult">{{ num(current.autoReset.lastResult.checks) }} checks, {{ num(current.autoReset.lastResult.events) }} incidents cleared</span></div>
+        </div>
+        <p class="sms-note"><i class="fas fa-info-circle"></i> A new or changed schedule counts from when it is saved. Check history is also never kept longer than {{ checkDays }} days.</p>
+      </div>
+    </section>
+
+    <!-- Browser notifications -->
+    <section class="sms-card">
+      <div class="sms-card-head">
+        <h2>Browser notifications</h2>
+        <p>A notification from the browser when a monitor goes down and when it is back up. Each person turns them on for their own browser with the bell on the page; browsers allow them only on HTTPS (or localhost).</p>
+      </div>
+      <div class="sms-card-body">
+        <label class="sms-check"><input type="checkbox" v-model="nt.health"> <span><b>Service Health</b> <small>offer the bell to signed-in users</small></span></label>
+        <label class="sms-check"><input type="checkbox" v-model="nt.public"> <span><b>Public status page</b> <small>offer the bell to visitors of the shared link</small></span></label>
+        <p class="sms-note"><i class="fas fa-info-circle"></i> Turned off, the bell is hidden and no notifications are sent from that page. While notifications are on, the page keeps checking in a background tab.</p>
+      </div>
+    </section>
+
+    <!-- Backup & restore (their own actions, not part of Save) -->
+    <section class="sms-card">
+      <div class="sms-card-head">
+        <h2>Backup &amp; restore</h2>
+        <p>A .json file with every group and monitor (all their settings) and these settings. Check history and incidents are not included.</p>
+      </div>
+      <div class="sms-card-body">
+        <div class="sms-row is-center">
+          <a class="sms-btn" href="/service-monitor/settings/backup" download><i class="fas fa-download" aria-hidden="true"></i> Download backup (.json)</a>
+          <label class="sms-btn sms-file">
+            <input type="file" accept=".json,application/json" @change="pickRestore" ref="restoreFile" class="sr-only">
+            <i class="fas fa-upload" aria-hidden="true"></i> Restore from backup…
+          </label>
+          <span v-if="rst.file" class="sms-file-name"><i class="far fa-file-code" aria-hidden="true"></i> {{ rst.file }}</span>
+          <span v-if="rst.loading" class="sms-meta"><i class="fas fa-spinner fa-spin"></i> Reading…</span>
+          <button v-if="rst.plan || rst.error || rst.result" type="button" class="sms-link" @click="clearRestore">Clear</button>
+        </div>
+
+        <div v-if="rst.error" class="sms-msg is-error" role="alert"><i class="fas fa-exclamation-triangle"></i> {{ rst.error }}</div>
+        <div v-if="rst.result" class="sms-msg is-ok" role="status"><i class="fas fa-check-circle"></i>
+          <span><template v-if="rst.result.mode === 'replace'">Deleted {{ rst.result.removed.monitors }} monitors and {{ rst.result.removed.groups }} groups, then restored</template><template v-else>Restored</template>
+            {{ rst.result.imported }} monitor{{ rst.result.imported === 1 ? '' : 's' }}<template v-if="rst.result.createdGroups"> and {{ rst.result.createdGroups }} group{{ rst.result.createdGroups === 1 ? '' : 's' }}</template><template v-if="rst.result.settings">, and the settings (reload this page to see them)</template>. <a href="/service-monitor">Open Service Health</a></span>
+        </div>
+
+        <template v-if="rst.plan && !rst.result">
+          <p class="sms-meta">Backup made {{ rst.plan.exportedAt ? when(rst.plan.exportedAt) : 'at an unknown time' }}<template v-if="rst.plan.exportedBy"> by {{ rst.plan.exportedBy }}</template> · {{ rst.plan.rows.length }} monitors, {{ rst.plan.groups.length }} groups.</p>
+          <fieldset class="sms-modes">
+            <legend class="sms-field">How to restore</legend>
+            <label class="sms-mode" :class="{ 'is-on': rst.mode === 'add' }"><input type="radio" value="add" v-model="rst.mode" @change="previewRestore">
+              <span><b>Add to the current monitors</b><small>Keeps everything here; monitors already here (same type and target) are skipped.</small></span></label>
+            <label class="sms-mode is-danger" :class="{ 'is-on': rst.mode === 'replace' }"><input type="radio" value="replace" v-model="rst.mode" @change="previewRestore">
+              <span><b>Replace all monitors</b><small>Deletes the {{ rst.plan.current.monitors }} monitors and {{ rst.plan.current.groups }} groups here, with their check history and incidents, then restores the backup.</small></span></label>
+          </fieldset>
+
+          <div class="sms-kuma-sum">
+            <span class="sms-pill is-import"><b>{{ rstCount.import }}</b> to restore</span>
+            <span v-if="rstCount.exists" class="sms-pill is-exists"><b>{{ rstCount.exists }}</b> already here</span>
+            <span v-if="rstCount.skip" class="sms-pill is-skip"><b>{{ rstCount.skip }}</b> skipped</span>
+          </div>
+          <div class="sms-table-wrap">
+            <table class="sms-table">
+              <thead><tr><th>Status</th><th>Monitor</th><th>Type</th><th>Target</th><th>Group</th><th>Notes</th></tr></thead>
+              <tbody>
+                <tr v-for="r in rst.plan.rows" :key="r.i" :class="'is-' + r.action">
+                  <td><span class="sms-pill" :class="'is-' + r.action">{{ r.action === 'import' ? 'Restore' : r.action === 'exists' ? 'Exists' : 'Skip' }}</span></td>
+                  <td><b>{{ r.name }}</b><small v-if="!r.enabled" class="sms-sub">paused</small></td>
+                  <td class="sms-nowrap">{{ TYPE_AS[r.type] || r.type }}</td>
+                  <td class="sms-mono sms-target" :title="r.target">{{ r.target || '—' }}</td>
+                  <td>{{ r.group || '—' }}</td>
+                  <td class="sms-notes">{{ r.reason || '—' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <label v-if="rst.mode === 'add' && rstCount.exists" class="sms-check"><input type="checkbox" v-model="rst.includeExisting"> <span>Also restore the {{ rstCount.exists }} already here <small>(adds duplicates)</small></span></label>
+          <label v-if="rst.plan.settings" class="sms-check"><input type="checkbox" v-model="rst.settings"> <span>Also restore the settings <small>(theme {{ rst.plan.settings.theme }}, auto reset {{ rst.plan.settings.autoReset ? 'on' : 'off' }})</small></span></label>
+          <label v-if="rst.mode === 'replace'" class="sms-check is-danger"><input type="checkbox" v-model="rst.confirm"> <span><b>I understand the current monitors, groups and their history will be deleted.</b></span></label>
+          <div class="sms-row is-center">
+            <button type="button" class="sms-btn" :class="rst.mode === 'replace' ? 'is-danger' : 'is-primary'" @click="runRestore"
+                    :disabled="rst.running || !rstToRestore || (rst.mode === 'replace' && !rst.confirm)">
+              <i class="fas" :class="rst.running ? 'fa-spinner fa-spin' : rst.mode === 'replace' ? 'fa-exclamation-triangle' : 'fa-upload'"></i>
+              {{ rst.mode === 'replace' ? 'Replace with ' + rstToRestore + ' monitors' : 'Restore ' + rstToRestore + ' monitor' + (rstToRestore === 1 ? '' : 's') }}
+            </button>
+          </div>
+        </template>
+      </div>
+    </section>
+
+    <!-- Import from Uptime Kuma (its own action, not part of Save) -->
+    <section class="sms-card">
+      <div class="sms-card-head">
+        <h2>Import from Uptime Kuma</h2>
+        <p>Adds the monitors and groups of an Uptime Kuma 1.x backup (Settings › Backup › Export JSON). Nothing that already exists here is changed. Notifications and history are not imported.</p>
+      </div>
+      <div class="sms-card-body">
+        <div class="sms-row is-center">
+          <label class="sms-btn sms-file">
+            <input type="file" accept=".json,application/json" @change="pickKuma" ref="kumaFile" class="sr-only">
+            <i class="fas fa-file-upload" aria-hidden="true"></i> Choose backup file…
+          </label>
+          <span v-if="kuma.file" class="sms-file-name"><i class="far fa-file-code" aria-hidden="true"></i> {{ kuma.file }}</span>
+          <span v-if="kuma.loading" class="sms-meta"><i class="fas fa-spinner fa-spin"></i> Reading…</span>
+          <button v-if="kuma.plan || kuma.error" type="button" class="sms-link" @click="clearKuma">Clear</button>
+        </div>
+
+        <div v-if="kuma.error" class="sms-msg is-error" role="alert"><i class="fas fa-exclamation-triangle"></i> {{ kuma.error }}</div>
+        <div v-if="kuma.result" class="sms-msg is-ok" role="status"><i class="fas fa-check-circle"></i>
+          <span>Imported {{ kuma.result.imported }} monitor{{ kuma.result.imported === 1 ? '' : 's' }}<template v-if="kuma.result.createdGroups"> and {{ kuma.result.createdGroups }} new group{{ kuma.result.createdGroups === 1 ? '' : 's' }}</template>. They are checked within a minute. <a href="/service-monitor">Open Service Health</a></span>
+        </div>
+
+        <template v-if="kuma.plan && !kuma.result">
+          <div class="sms-kuma-sum">
+            <span class="sms-pill is-import"><b>{{ kumaCount.import }}</b> to import</span>
+            <span class="sms-pill is-exists"><b>{{ kumaCount.exists }}</b> already monitored</span>
+            <span class="sms-pill is-skip"><b>{{ kumaCount.skip }}</b> skipped</span>
+            <span v-if="kuma.plan.groups.length" class="sms-meta">Groups: <template v-for="(g, i) in kuma.plan.groups">{{ i ? ', ' : '' }}{{ g.name }}{{ g.exists ? ' (exists)' : ' (new)' }}</template></span>
+          </div>
+          <div class="sms-table-wrap">
+            <table class="sms-table">
+              <thead><tr><th>Status</th><th>Monitor</th><th>Type</th><th>Target</th><th>Group</th><th>Notes</th></tr></thead>
+              <tbody>
+                <tr v-for="r in kuma.plan.rows" :key="r.kumaId" :class="'is-' + r.action">
+                  <td><span class="sms-pill" :class="'is-' + r.action">{{ r.action === 'import' ? 'Import' : r.action === 'exists' ? 'Exists' : 'Skip' }}</span></td>
+                  <td><b>{{ r.name }}</b><small v-if="r.action !== 'skip' && r.enabled === false" class="sms-sub">paused</small></td>
+                  <td class="sms-nowrap">{{ r.type }}<template v-if="r.as"> → {{ TYPE_AS[r.as] }}</template></td>
+                  <td class="sms-mono sms-target" :title="r.target">{{ r.target || '—' }}</td>
+                  <td>{{ r.group || '—' }}</td>
+                  <td class="sms-notes">{{ [r.reason].concat(r.notes || []).filter(Boolean).join(' · ') || '—' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <label v-if="kumaCount.exists" class="sms-check"><input type="checkbox" v-model="kuma.includeExisting"> <span>Also import the {{ kumaCount.exists }} already monitored <small>(adds duplicates)</small></span></label>
+          <div class="sms-row is-center">
+            <button type="button" class="sms-btn is-primary" @click="importKuma" :disabled="kuma.importing || !kumaToImport">
+              <i class="fas" :class="kuma.importing ? 'fa-spinner fa-spin' : 'fa-file-import'"></i> Import {{ kumaToImport }} monitor{{ kumaToImport === 1 ? '' : 's' }}
+            </button>
+          </div>
+        </template>
+      </div>
+    </section>
+
+    <!-- Save -->
+    <div class="sms-savebar">
+      <div v-if="error" class="sms-msg is-error" role="alert"><i class="fas fa-exclamation-triangle"></i> {{ error }}</div>
+      <div v-if="notice" class="sms-msg is-ok" role="status"><i class="fas fa-check-circle"></i> {{ notice }}</div>
+      <div class="sms-foot">
+        <small v-if="current.updatedAt" class="sms-meta">Last changed {{ when(current.updatedAt) }}<template v-if="current.updatedBy"> by {{ current.updatedBy }}</template></small>
+        <span class="sms-grow"></span>
+        <button type="button" class="sms-btn" @click="revert" :disabled="!changed || saving">Cancel</button>
+        <button type="submit" class="sms-btn is-primary" :disabled="!changed || saving"><i v-if="saving" class="fas fa-spinner fa-spin"></i> Save</button>
+      </div>
+    </div>
+  </form>
+</div>
+</div>
+
+<style>
+  .sms {
+    --sm-bg: #F5F6F8; --sm-surface: var(--surface, #FFFFFF); --sm-sunken: #F9FAFB; --sm-line: #E4E7EC; --sm-input: #D0D5DD;
+    --sm-text: #101828; --sm-text-2: #475467; --sm-text-3: #344054; --sm-muted: #667085; --sm-accent: var(--primary, #2563EB); --sm-accent-soft: #EFF4FF;
+    --up-text: #067647; --up-soft: #ECFDF3; --up-ring: #ABEFC6; --down-text: #B42318; --down-soft: #FEF3F2; --down-ring: #FECDCA;
+    --sm-mono: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+    display: flex; flex-direction: column; gap: 16px; padding-bottom: 32px; color: var(--sm-text);
+  }
+  .sms.is-dark {
+    color-scheme: dark;
+    --sm-bg: #0C111D; --sm-surface: #161B26; --sm-sunken: #1F242F; --sm-line: #333741; --sm-input: #414651;
+    --sm-text: #F5F5F6; --sm-text-2: #CECFD2; --sm-text-3: #CECFD2; --sm-muted: #94969C; --sm-accent: #4C8DF6; --sm-accent-soft: rgba(76, 141, 246, .16);
+    --up-text: #47CD89; --up-soft: rgba(23, 178, 106, .14); --up-ring: rgba(23, 178, 106, .4); --down-text: #F97066; --down-soft: rgba(240, 68, 56, .14); --down-ring: rgba(240, 68, 56, .4);
+    background: var(--sm-bg); padding: 20px 20px 32px; border-radius: 12px; min-height: calc(100vh - var(--topbar-h, 56px) - 48px);
+  }
+  .sms *, .sms *::before, .sms *::after { box-sizing: border-box; }
+  /* headings follow the theme (the app's h1-h6 use its own, always-light text colour) */
+  .sms h1, .sms h2, .sms h3, .sms h4, .sms h5, .sms h6 { color: var(--sm-text); }
+  .sms .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .sms-eyebrow { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--sm-muted); }
+  .sms-head h1 { margin: 0; font-size: 24px; line-height: 32px; font-weight: 700; letter-spacing: -.01em; }
+  .sms-head p { margin: 2px 0 0; font-size: 14px; color: var(--sm-text-2); }
+  .sms-form { display: flex; flex-direction: column; gap: 16px; }
+  .sms-card { background: var(--sm-surface); border: 1px solid var(--sm-line); border-radius: 12px; display: flex; flex-direction: column; }
+  .sms-card-head { padding: 18px 20px 0; }
+  .sms-card-head.is-row { display: flex; align-items: flex-start; gap: 16px; }
+  .sms-card-head.is-row > div { flex: 1; }
+  .sms-card-head h2 { margin: 0; font-size: 16px; font-weight: 600; }
+  .sms-card-head p { margin: 2px 0 0; font-size: 13px; color: var(--sm-muted); }
+  .sms-card-body { padding: 16px 20px 18px; display: flex; flex-direction: column; gap: 16px; }
+  .sms-card-body.is-off .sms-row, .sms-card-body.is-off .sms-field, .sms-card-body.is-off .sms-sched > div:first-child { opacity: .55; }
+
+  .sms-themes { border: 0; margin: 0; padding: 16px 20px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; min-width: 0; }
+  @media (max-width: 760px) { .sms-themes { grid-template-columns: 1fr; } }
+  .sms-theme { display: flex; flex-direction: column; border: 1px solid var(--sm-line); border-radius: 10px; overflow: hidden; cursor: pointer; margin: 0; background: var(--sm-surface); }
+  .sms-theme:hover { border-color: var(--sm-muted); }
+  .sms-theme.is-on { border: 2px solid var(--sm-accent); box-shadow: 0 0 0 3px var(--sm-accent-soft); }
+  .sms-theme:focus-within { outline: 2px solid var(--sm-accent); outline-offset: 2px; }
+  .sms-preview { height: 120px; display: flex; background: var(--sm-sunken); border-bottom: 1px solid var(--sm-line); padding: 14px 14px 0; }
+  .sms-pv { flex: 1; border-radius: 8px 8px 0 0; padding: 10px; display: flex; flex-direction: column; gap: 7px; border: 1px solid; border-bottom: 0; }
+  .sms-pv.is-light { background: #FFFFFF; border-color: #E4E7EC; }
+  .sms-pv.is-dark { background: #161B26; border-color: #333741; }
+  .sms-preview.is-system .sms-pv.is-light { border-radius: 8px 0 0 0; border-right: 0; }
+  .sms-pv.is-half { border-radius: 0 8px 0 0; border-left: 0; }
+  .sms-pv-bar { height: 8px; width: 45%; border-radius: 4px; }
+  .sms-pv.is-light .sms-pv-bar { background: #101828; } .sms-pv.is-dark .sms-pv-bar { background: #F5F5F6; }
+  .sms-pv-row { display: flex; align-items: center; gap: 6px; }
+  .sms-pv-row i { width: 18px; height: 8px; border-radius: 4px; }
+  .sms-pv-row i.is-up { background: #12B76A; } .sms-pv-row i.is-down { background: #F04438; }
+  .sms-pv-row b { height: 6px; flex: 1; border-radius: 3px; }
+  .sms-pv.is-light .sms-pv-row b { background: #EAECF0; } .sms-pv.is-dark .sms-pv-row b { background: #333741; }
+  .sms-pv-beats { display: flex; gap: 2px; height: 14px; margin-top: 2px; }
+  .sms-pv-beats em { flex: 1; border-radius: 1px; background: #12B76A; }
+  .sms-pv-beats em.is-down { background: #F04438; }
+  .sms-theme-text { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; }
+  .sms-theme-text b { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; }
+  .sms-theme-text b i { color: var(--sm-muted); font-size: 13px; }
+  .sms-theme-text small { display: block; font-size: 12px; color: var(--sm-muted); margin-top: 2px; }
+  .sms-radio { width: 18px; height: 18px; flex: none; margin-top: 1px; border-radius: 999px; border: 1px solid var(--sm-input); background: var(--sm-surface); position: relative; }
+  .sms-theme.is-on .sms-radio { border-color: var(--sm-accent); background: var(--sm-accent); }
+  .sms-theme.is-on .sms-radio::after { content: ''; position: absolute; inset: 5px; border-radius: 999px; background: #FFFFFF; }
+  .sms-hint { margin: 0 20px 16px; font-size: 13px; color: var(--sm-text-2); display: flex; gap: 8px; align-items: baseline; }
+  .sms-hint i { color: var(--sm-accent); }
+
+  .sms-row { display: flex; flex-wrap: wrap; gap: 14px 16px; }
+  .sms-field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 500; color: var(--sm-text-3); margin: 0; }
+  .sms-field > small { font-weight: 400; color: var(--sm-muted); }
+  .sms-unit { display: flex; border: 1px solid var(--sm-input); border-radius: 8px; overflow: hidden; background: var(--sm-surface); width: 180px; }
+  .sms-unit input { flex: 1; min-width: 0; height: 38px; border: 0; padding: 0 12px; font-family: var(--sm-mono); font-size: 14px; background: transparent; color: var(--sm-text); outline: 0; }
+  .sms-unit > span { padding: 0 12px; display: inline-flex; align-items: center; background: var(--sm-sunken); border-left: 1px solid var(--sm-input); color: var(--sm-text-2); font-weight: 400; }
+  .sms-unit:focus-within, .sms-time:focus { border-color: var(--sm-accent); box-shadow: 0 0 0 3px var(--sm-accent-soft); }
+  .sms-time { height: 40px; width: 140px; padding: 0 12px; border: 1px solid var(--sm-input); border-radius: 8px; background: var(--sm-surface); color: var(--sm-text); font-family: var(--sm-mono); font-size: 14px; outline: 0; }
+  .sms-check { display: flex; align-items: center; gap: 8px; margin: 0; font-weight: 400; cursor: pointer; }
+  .sms-check b { font-weight: 600; color: var(--sm-text); } .sms-check small { color: var(--sm-muted); font-size: 12px; }
+  .sms-check input { width: 16px; height: 16px; accent-color: var(--sm-accent); }
+  .sms-switch-label { display: inline-flex; align-items: center; gap: 8px; margin: 2px 0 0; font-size: 13px; font-weight: 600; color: var(--sm-text-2); cursor: pointer; white-space: nowrap; }
+  .sms-switch { appearance: none; -webkit-appearance: none; width: 40px; height: 22px; margin: 0; border-radius: 999px; background: var(--sm-input); position: relative; cursor: pointer; transition: background .15s; }
+  .sms-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 999px; background: #FFFFFF; box-shadow: 0 1px 2px rgba(16, 24, 40, .2); transition: transform .15s; }
+  .sms-switch:checked { background: var(--sm-accent); } .sms-switch:checked::after { transform: translateX(18px); }
+  .sms-switch:focus-visible { outline: 2px solid var(--sm-accent); outline-offset: 2px; }
+  .sms-sched { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid var(--sm-line); border-radius: 10px; overflow: hidden; }
+  .sms-sched > div { padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
+  .sms-sched > div + div { border-left: 1px solid var(--sm-line); }
+  .sms-sched small { font-size: 12px; font-weight: 600; color: var(--sm-text-2); }
+  .sms-sched b { font-family: var(--sm-mono); font-size: 16px; font-weight: 600; }
+  .sms-sched span { font-size: 12px; color: var(--sm-muted); }
+  .sms-note { margin: 0; font-size: 12px; color: var(--sm-muted); display: flex; gap: 6px; align-items: baseline; }
+
+  .sms-row.is-center { align-items: center; }
+  a.sms-btn { text-decoration: none; }
+  .sms-btn.is-danger { background: #D92D20; border-color: #D92D20; color: #FFFFFF; font-weight: 600; }
+  .sms-modes { border: 0; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; min-width: 0; }
+  .sms-modes legend { grid-column: 1 / -1; margin-bottom: 4px; padding: 0; width: auto; }
+  @media (max-width: 700px) { .sms-modes { grid-template-columns: 1fr; } }
+  .sms-mode { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; margin: 0; border: 1px solid var(--sm-line); border-radius: 10px; cursor: pointer; }
+  .sms-mode input { margin-top: 3px; accent-color: var(--sm-accent); }
+  .sms-mode b { display: block; font-size: 14px; } .sms-mode small { display: block; font-size: 12px; color: var(--sm-muted); margin-top: 2px; }
+  .sms-mode.is-on { border: 2px solid var(--sm-accent); padding: 11px 13px; }
+  .sms-mode.is-danger.is-on { border-color: var(--down-text); background: var(--down-soft); }
+  .sms-mode.is-danger.is-on input { accent-color: var(--down-text); }
+  .sms-check.is-danger b { color: var(--down-text); }
+  .sms-file { position: relative; cursor: pointer; margin: 0; }
+  .sms-file:focus-within { outline: 2px solid var(--sm-accent); outline-offset: 2px; }
+  .sms-file-name { font-size: 13px; color: var(--sm-text-2); display: inline-flex; gap: 6px; align-items: center; }
+  .sms-link { border: 0; background: none; color: var(--sm-accent); font-size: 13px; font-weight: 600; cursor: pointer; padding: 0; }
+  .sms-kuma-sum { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .sms-pill { display: inline-flex; gap: 4px; align-items: center; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 2px 10px; white-space: nowrap; background: var(--sm-sunken); color: var(--sm-text-2); border: 1px solid var(--sm-line); }
+  .sms-pill.is-import { background: var(--up-soft); color: var(--up-text); border-color: var(--up-ring); }
+  .sms-pill.is-skip { background: var(--down-soft); color: var(--down-text); border-color: var(--down-ring); }
+  .sms-table-wrap { max-height: 380px; overflow: auto; border: 1px solid var(--sm-line); border-radius: 10px; }
+  .sms-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .sms-table th { position: sticky; top: 0; background: var(--sm-sunken); color: var(--sm-muted); font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--sm-line); }
+  .sms-table td { padding: 8px 12px; border-bottom: 1px solid var(--sm-line); vertical-align: top; }
+  .sms-table tr:last-child td { border-bottom: 0; }
+  .sms-table tr.is-skip td:not(:first-child), .sms-table tr.is-exists td:not(:first-child) { color: var(--sm-muted); }
+  .sms-sub { display: block; font-size: 11px; color: var(--sm-muted); }
+  .sms-mono { font-family: var(--sm-mono); font-size: 12px; }
+  .sms-nowrap { white-space: nowrap; }
+  .sms-target { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sms-notes { font-size: 12px; color: var(--sm-text-2); min-width: 180px; }
+  .sms-savebar { display: flex; flex-direction: column; gap: 10px; }
+  .sms-msg { display: flex; gap: 8px; align-items: center; padding: 10px 14px; border-radius: 10px; font-size: 13px; }
+  .sms-msg.is-error { background: var(--down-soft); color: var(--down-text); border: 1px solid var(--down-ring); }
+  .sms-msg.is-ok { background: var(--up-soft); color: var(--up-text); border: 1px solid var(--up-ring); }
+  .sms-foot { display: flex; align-items: center; gap: 8px; padding: 14px 20px; border: 1px solid var(--sm-line); background: var(--sm-surface); border-radius: 12px; }
+  .sms-grow { flex: 1; }
+  .sms-meta { font-size: 12px; color: var(--sm-muted); }
+  .sms-btn { height: 36px; padding: 0 14px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--sm-input); background: var(--sm-surface); border-radius: 8px; font-size: 14px; font-weight: 500; color: var(--sm-text-3); cursor: pointer; }
+  .sms-btn:hover:not(:disabled) { background: var(--sm-sunken); }
+  .sms-btn:disabled { opacity: .5; cursor: default; }
+  .sms-btn.is-primary { background: var(--sm-accent); border-color: var(--sm-accent); color: #FFFFFF; font-weight: 600; }
+  .sms-btn:focus-visible { outline: 2px solid var(--sm-accent); outline-offset: 2px; }
+</style>
+
+<script>
+  (function () {
+    'use strict';
+    var THEMES = [
+      { key: 'light', label: 'Light', icon: 'fas fa-sun', note: 'Light pages, as the rest of the app.' },
+      { key: 'dark', label: 'Dark', icon: 'fas fa-moon', note: 'Dark pages, easier on the eyes in a control room or at night.' },
+      { key: 'system', label: 'Match system', icon: 'fas fa-desktop', note: 'Follows each user\'s device setting, light or dark.' }
+    ];
+    var TIME_RE = /^\d\d:\d\d$/;
+    var TYPE_AS = { http: 'HTTP(s)', tcp: 'TCP port', ping: 'Ping', dns: 'DNS' };
+    // The fields of an Uptime Kuma monitor the import reads; the rest (heartbeats, notifications, ...) stays in the browser.
+    var KUMA_FIELDS = ['id', 'name', 'type', 'url', 'method', 'hostname', 'port', 'maxretries', 'active', 'interval', 'retryInterval', 'timeout', 'keyword',
+      'invertKeyword', 'maxredirects', 'expiryNotification', 'ignoreTls', 'upsideDown', 'accepted_statuscodes', 'dns_resolve_type', 'dns_resolve_server', 'parent', 'description', 'authMethod'];
+    var ntFrom = function (n) { n = n || {}; return { health: n.health !== false, public: n.public !== false }; };
+    var rstBlank = function () { return { file: '', text: '', plan: null, mode: 'add', loading: false, running: false, error: '', result: null, includeExisting: false, settings: false, confirm: false }; };
+    var kumaBlank = function () { return { file: '', backup: null, plan: null, loading: false, importing: false, error: '', result: null, includeExisting: false }; };
+    var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+    var arFrom = function (a) {
+      a = a || {};
+      return { enabled: !!a.enabled, everyDays: a.everyDays || 30, at: a.at || '00:00', checks: a.checks !== false, events: a.events !== false };
+    };
+
+    Page.setup({
+      data: function () {
+        var mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+        return { TYPE_AS: TYPE_AS, kuma: kumaBlank(), rst: rstBlank(), THEMES: THEMES, choice: 'light', current: { theme: 'light', autoReset: {} }, ar: arFrom(), nt: ntFrom(), saving: false, error: '', notice: '', sysDark: !!(mq && mq.matches), now: Date.now() };
+      },
+      // The saved settings come with the page (Page.data.saved), read once it exists.
+      created: function () { this.load(this.saved); },
+      computed: {
+        changed: function () {
+          return this.choice !== this.current.theme || JSON.stringify(this.ar) !== JSON.stringify(arFrom(this.current.autoReset)) ||
+            JSON.stringify(this.nt) !== JSON.stringify(ntFrom(this.current.notify));
+        },
+        // The page previews the theme being chosen.
+        isDark: function () { return this.choice === 'dark' || (this.choice === 'system' && this.sysDark); },
+        // As the server works it out: N days after the last reset (or after saving a new / changed schedule), at the set time.
+        nextReset: function () {
+          var a = this.ar, c = this.current.autoReset;
+          if (!a.enabled || !(a.everyDays >= 1) || !TIME_RE.test(a.at || '')) return null;
+          var fresh = !c.enabled || c.everyDays !== a.everyDays || c.at !== a.at;
+          var base = new Date(fresh ? this.now : (c.lastRunAt || c.since || this.now)), t = a.at.split(':');
+          return new Date(base.getFullYear(), base.getMonth(), base.getDate() + a.everyDays, +t[0], +t[1]).toISOString();
+        },
+        kumaCount: function () {
+          var c = { import: 0, exists: 0, skip: 0 };
+          (this.kuma.plan ? this.kuma.plan.rows : []).forEach(function (r) { c[r.action]++; });
+          return c;
+        },
+        rstCount: function () {
+          var c = { import: 0, exists: 0, skip: 0 };
+          (this.rst.plan ? this.rst.plan.rows : []).forEach(function (r) { c[r.action]++; });
+          return c;
+        },
+        rstToRestore: function () { return this.rstCount.import + (this.rst.mode === 'add' && this.rst.includeExisting ? this.rstCount.exists : 0); },
+        kumaToImport: function () { return this.kumaCount.import + (this.kuma.includeExisting ? this.kumaCount.exists : 0); },
+        untilText: function () {
+          var ms = new Date(this.nextReset).getTime() - this.now;
+          if (ms <= 0) return 'due now';
+          var d = Math.floor(ms / 86400000), hr = Math.floor(ms % 86400000 / 3600000);
+          return 'in ' + (d ? d + ' day' + (d === 1 ? '' : 's') + (hr ? ' ' + hr + ' h' : '') : hr ? hr + ' h' : Math.max(1, Math.round(ms / 60000)) + ' min');
+        }
+      },
+      watch: {
+        choice: function () { this.notice = ''; this.error = ''; },
+        ar: { deep: true, handler: function () { this.notice = ''; this.error = ''; } },
+        nt: { deep: true, handler: function () { this.notice = ''; this.error = ''; } }
+      },
+      methods: {
+        load: function (s) {
+          this.current = JSON.parse(JSON.stringify(s));
+          this.choice = this.current.theme;
+          this.ar = arFrom(this.current.autoReset);
+          this.nt = ntFrom(this.current.notify);
+        },
+        revert: function () { this.load(this.current); },
+        post: function (url, body) {
+          return fetch(url, {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify(body)
+          }).then(function (r) {
+            if (r.status === 413) throw new Error('The backup has too many monitors to send at once.');
+            return r.json().then(function (d) { if (!r.ok || d.error) throw new Error(d.error || ('HTTP ' + r.status)); return d; });
+          });
+        },
+        // Read the chosen backup in the browser, keep only the monitors' fields the import reads, and ask for a preview.
+        pickKuma: function (e) {
+          var vm = this, file = e.target.files && e.target.files[0];
+          if (!file) return;
+          vm.kuma = Object.assign(kumaBlank(), { file: file.name, loading: true });
+          var reader = new FileReader();
+          reader.onload = function () {
+            var data;
+            try { data = JSON.parse(reader.result); } catch (err) { vm.kuma = Object.assign(kumaBlank(), { file: file.name, error: 'This file is not JSON. Choose the .json file exported in Uptime Kuma under Settings › Backup.' }); return; }
+            var list = data && Array.isArray(data.monitorList) ? data.monitorList : null;
+            if (!list) { vm.kuma = Object.assign(kumaBlank(), { file: file.name, error: 'This is not an Uptime Kuma backup: it has no "monitorList". Export it in Uptime Kuma under Settings › Backup.' }); return; }
+            var backup = { monitorList: list.map(function (m) {
+              var o = {};
+              KUMA_FIELDS.forEach(function (k) { if (m && m[k] !== undefined) o[k] = m[k]; });
+              if (m && (m.body || m.headers)) o.body = true;            // only whether there was one, for the notes
+              return o;
+            }) };
+            vm.post('/service-monitor/settings/import-kuma/preview', { backup: backup })
+              .then(function (plan) { vm.kuma = Object.assign(kumaBlank(), { file: file.name, backup: backup, plan: plan }); })
+              .catch(function (err) { vm.kuma = Object.assign(kumaBlank(), { file: file.name, error: err.message }); });
+          };
+          reader.onerror = function () { vm.kuma = Object.assign(kumaBlank(), { file: file.name, error: 'The file could not be read.' }); };
+          reader.readAsText(file);
+        },
+        importKuma: function () {
+          var vm = this;
+          vm.kuma.importing = true; vm.kuma.error = '';
+          vm.post('/service-monitor/settings/import-kuma', { backup: vm.kuma.backup, includeExisting: vm.kuma.includeExisting })
+            .then(function (d) { vm.kuma.result = d; })
+            .catch(function (err) { vm.kuma.error = err.message; })
+            .then(function () { vm.kuma.importing = false; });
+        },
+        // ---- Backup & restore ----
+        // The file goes to the server as text (it can be larger than the app's JSON body limit); options in the query.
+        postText: function (url, text) {
+          return fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'text/plain; charset=utf-8', Accept: 'application/json' }, body: text })
+            .then(function (r) { return r.json().catch(function () { return { error: 'The server answered ' + r.status + '.' }; }).then(function (d) { if (!r.ok || d.error) throw new Error(d.error || ('HTTP ' + r.status)); return d; }); });
+        },
+        pickRestore: function (e) {
+          var vm = this, file = e.target.files && e.target.files[0];
+          if (!file) return;
+          vm.rst = Object.assign(rstBlank(), { file: file.name, loading: true });
+          var reader = new FileReader();
+          reader.onload = function () { vm.rst.text = String(reader.result || ''); vm.previewRestore(); };
+          reader.onerror = function () { vm.rst = Object.assign(rstBlank(), { file: file.name, error: 'The file could not be read.' }); };
+          reader.readAsText(file);
+        },
+        previewRestore: function () {
+          var vm = this, r = vm.rst;
+          r.loading = true; r.error = ''; r.confirm = false;
+          vm.postText('/service-monitor/settings/restore/preview?mode=' + r.mode, r.text)
+            .then(function (plan) { r.plan = plan; })
+            .catch(function (err) { r.plan = null; r.error = err.message; })
+            .then(function () { r.loading = false; });
+        },
+        runRestore: function () {
+          var vm = this, r = vm.rst;
+          if (r.mode === 'replace' && !r.confirm) return;
+          r.running = true; r.error = '';
+          var q = '?mode=' + r.mode + '&includeExisting=' + (r.includeExisting ? 1 : 0) + '&settings=' + (r.settings ? 1 : 0) + (r.mode === 'replace' ? '&confirm=replace' : '');
+          vm.postText('/service-monitor/settings/restore' + q, r.text)
+            .then(function (d) { r.result = d; })
+            .catch(function (err) { r.error = err.message; })
+            .then(function () { r.running = false; });
+        },
+        clearRestore: function () {
+          this.rst = rstBlank();
+          if (this.$refs.restoreFile) this.$refs.restoreFile.value = '';
+        },
+        clearKuma: function () {
+          this.kuma = kumaBlank();
+          if (this.$refs.kumaFile) this.$refs.kumaFile.value = '';
+        },
+        num: function (v) { return Number(v || 0).toLocaleString('en-US'); },
+        when: function (iso) { var d = new Date(iso); return pad(d.getDate()) + '-' + pad(d.getMonth() + 1) + '-' + d.getFullYear() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); },
+        save: function () {
+          var vm = this;
+          vm.saving = true; vm.error = ''; vm.notice = '';
+          fetch('/service-monitor/settings', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({ theme: vm.choice, autoReset: vm.ar, notify: vm.nt })
+          }).then(function (r) { return r.json().then(function (d) { if (!r.ok || d.error) throw new Error(d.error || ('HTTP ' + r.status)); return d; }); })
+            .then(function (d) {
+              vm.load(d);
+              vm.now = Date.now();
+              vm.notice = 'Settings saved.' + (d.autoReset.enabled && d.autoReset.nextAt ? ' Next automatic reset: ' + vm.when(d.autoReset.nextAt) + '.' : '');
+            })
+            .catch(function (err) { vm.error = err.message; })
+            .then(function () { vm.saving = false; });
+        }
+      },
+      mounted: function () {
+        var vm = this, mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+        setInterval(function () { vm.now = Date.now(); }, 60000);
+        if (!mq) return;
+        var on = function (e) { vm.sysDark = e.matches; };
+        if (mq.addEventListener) mq.addEventListener('change', on); else if (mq.addListener) mq.addListener(on);
+      }
+    });
+  })();
+</script>

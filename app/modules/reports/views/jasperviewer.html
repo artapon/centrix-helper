@@ -13,7 +13,7 @@
       {{ servers.length ? (servers.length === 1 ? 'JasperServer ' + servers[0].name : servers.length + ' JasperServers') : 'No JasperServer set up' }} · login from Reports &gt; Settings
     </span>
     <a v-if="isAdmin" class="btn btn-sm btn-light" href="/reports/settings" title="Reports > Settings: JasperServers and their login"><i class="fas fa-sliders-h"></i> Settings</a>
-    <button type="button" class="btn btn-sm btn-light" @click="basicOpen = true" title="Organisation, date, visit and encounter-type ids to type into the report parameters"><i class="fas fa-id-card"></i> Basic Data</button>
+    <button v-if="widgets['querystudio.basic-data']" type="button" class="btn btn-sm btn-light" @click="basicOpen = true" title="Organisation, date, visit and encounter-type ids to type into the report parameters"><i class="fas fa-id-card"></i> Basic Data</button>
     <button type="button" class="btn btn-sm btn-light" @click="toggleFullscreen" :title="fullscreen ? 'Exit full screen (Esc)' : 'Full screen'" :aria-pressed="fullscreen ? 'true' : 'false'"><i class="fas" :class="fullscreen ? 'fa-compress' : 'fa-expand'"></i> {{ fullscreen ? 'Exit full screen' : 'Full screen' }}</button>
   </header>
 
@@ -167,7 +167,7 @@
         <div class="jv-card-head">
           <h2><i class="fas fa-sliders-h"></i> Input Parameters</h2>
           <button type="button" class="jv-icon" @click="fillSamples" :disabled="sampling || !report" title="Fill empty ID parameters with values from the connected Centrix site"><i class="fas" :class="sampling ? 'fa-spinner fa-spin' : 'fa-magic'"></i></button>
-          <button type="button" class="jv-icon" @click="basicOpen = true" title="Basic Data: ids to type in"><i class="fas fa-id-card"></i></button>
+          <button v-if="widgets['querystudio.basic-data']" type="button" class="jv-icon" @click="basicOpen = true" title="Basic Data: ids to type in"><i class="fas fa-id-card"></i></button>
           <button type="button" class="jv-icon" @click="resetValues" :disabled="!report" title="Clear the values (defaults are used)"><i class="fas fa-undo"></i></button>
           <button type="button" class="jv-icon" @click="togglePanel('params')" title="Hide Input Parameters" aria-label="Hide Input Parameters"><i class="fas fa-times"></i></button>
         </div>
@@ -237,7 +237,7 @@
     </aside>
   </div>
 
-  <qs-basic-data :open="basicOpen" base="/reports/viewer/basic-data" @close="basicOpen = false"></qs-basic-data>
+  <component v-if="widgets['querystudio.basic-data']" :is="widgets['querystudio.basic-data'].component" :open="basicOpen" :base="widgets['querystudio.basic-data'].link" @close="basicOpen = false"></component>
 </div>
 </div>
 
@@ -399,7 +399,6 @@
   }
 </style>
 
-<script src="/reports/viewer/basic-data.js"></script>
 <script>
   (function () {
     'use strict';

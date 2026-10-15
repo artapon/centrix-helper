@@ -8,17 +8,17 @@ const view = require('../../../core/view')('reports');
 const { ADMIN_ROLE } = require('../../../core/permissions');
 
 // The Jasper add-on (Reports > Settings and its JasperServer client); the viewer needs it to run reports.
-const ADDON = '../../../addons/jasperprintout/models/';
+const ADDON = '../../../../addons/jasperprintout/models/';
 function addon() {
   try {
     return {
       settingsModel: require(ADDON + 'settings.model'),
       pub: require(ADDON + 'publish.service'),
       jasper: require(ADDON + 'jasper.service'),
-      datasetQuery: require(ADDON + 'datasetQuery')
+      datasetQuery: require(ADDON + 'datasetquery.service')
     };
   } catch (e) {
-    throw bad('The Jasper Print-Out Builder add-on (Reports > Settings) is not installed, so reports cannot be opened.', 501);
+    throw bad('The Jasper Designer add-on (Reports > Settings) is not installed, so reports cannot be opened.', 501);
   }
 }
 
@@ -125,6 +125,8 @@ exports.index = async function (req, res) {
 
   return res.renderPage(view('jasperviewer'), {
     title: 'Jasper Report Viewer',
+    // Basic Data (Query Studio's widget, core/addons.js): shown when its add-on is active and the role has it.
+    widgets: ['querystudio.basic-data'],
     servers, configured, setupError, templates, output,
     org: org ? { id: String(org._id || ''), name: org.name || '', code: org.code || '' } : null,
     isAdmin: !!req.user && req.user.role === ADMIN_ROLE,
@@ -248,20 +250,6 @@ exports.run = async function (req, res) {
     if (!err.expose) console.error('Jasper Viewer run:', err);
     res.status(err.status || 500).json({ error: err.expose ? err.message : 'Something went wrong. The details are in the server log.' });
   }
-};
-
-// Basic Data popup (Query Studio's component and data: organisation, date, visit and encounter-type ids to
-// type into the parameters), under the viewer's own permission.
-const BASIC_DATA_JS = require('path').join(__dirname, '../../../addons/querystudio/public/basic-data.js');
-exports.basicDataScript = (req, res) => res.type('application/javascript').sendFile(BASIC_DATA_JS, (err) => {
-  if (err && !res.headersSent) res.status(404).type('application/javascript').send('/* Basic Data needs the Query Studio add-on. */');
-});
-exports.basicData = (name) => (req, res, next) => {
-  let qs;
-  try { qs = require('../../../addons/querystudio/controllers/querydata.controller'); } catch (e) {
-    return res.status(501).json({ error: 'Basic Data needs the Query Studio add-on.' });
-  }
-  return qs[name](req, res, next);
 };
 
 exports._test = { jrxmlParams };

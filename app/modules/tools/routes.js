@@ -1,12 +1,11 @@
 const router = require('express').Router();
 const upload = require('multer')();
-const asyncHandler = require('../../core/http/asyncHandler');
+const asyncHandler = require('../../core/http/async.handler');
 const toolController = require('./controllers/tool.controller');
 const labresultController = require('./controllers/labresult.controller');
 const xrayresultController = require('./controllers/xrayresult.controller');
 const labmasterController = require('./controllers/labmaster.controller');
 const generatorController = require('./controllers/generator.controller');
-const exportController = require('./controllers/export.controller');
 
 router.get('/tools/encrypt-decrypt', asyncHandler(toolController.encryptDecrypt));
 router.post('/tools/encrypt-decrypt/centrix-encrypt', asyncHandler(toolController.centrixEncrypt));
@@ -24,11 +23,5 @@ router.get('/tools/erp-manual', asyncHandler(toolController.erpManual));
 router.get('/tools/erp-to-excel', asyncHandler(toolController.erpDataToExcel));
 router.post('/tools/erp-to-excel/convert', upload.single('file_name'), asyncHandler(toolController.erpDataToExcelConvert));
 router.get('/tools/api-generator', asyncHandler(generatorController.index));
-router.get('/exports', asyncHandler(exportController.index));
-router.get('/exports/itemmaster-orderitems', asyncHandler(exportController.exportItemMasterOrderitems));
-router.get('/exports/itemmaster-without-orderitems', asyncHandler(exportController.exportItemMasterNoOrderitems));
-router.get('/exports/orderitems-without-itemmaster', asyncHandler(exportController.exportOrderitemsNoItemMasters));
-router.get('/exports/all-files', asyncHandler(exportController.exportAllFiles));
-router.get('/exports/order-df', asyncHandler(exportController.exportOrderDF));
 
 module.exports = router;

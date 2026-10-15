@@ -1,0 +1,52 @@
+{
+  "id": "jasperprintout",
+  "name": "Jasper Designer",
+  "version": "1.3.0",
+  "author": "Centrix HIS Helper Tools",
+  "category": "Reports",
+  "icon": "fas fa-file-pdf",
+  "summary": "Turn scanned or PDF forms into Jasper print-out reports, publish them to JasperServer and register them in Centrix HIS.",
+  "description": "Crop pages or areas from PDF files, or upload images, put them in page order, and publish them as a one-page or multi-page JRXML report unit on JasperServer. Optionally registers the report as a Visit Slip report template in the connected Centrix site, with an audit log entry. The JRXML can also be downloaded for Jaspersoft Studio.",
+  "features": [
+    "Crop A4 pages or any area from one or more PDF files",
+    "Upload images and drag pages into order",
+    "Publish single-page or multi-page reports to JasperServer",
+    "Register the report as a Visit Slip in Centrix HIS (report templates)",
+    "Download the JRXML, or a ZIP with images, for Jaspersoft Studio",
+    "Save the pages to the Jasper Designer file manager (folders, replace, delete) then open them again here or in Jasper Designer",
+    "Publish Report: send saved Jasper Designer reports to JasperServer, optionally saving them to Centrix HIS",
+    "Deploy workflow: deploy to the UAT JasperServer, run and approve the report there, then deploy the approved version to Production",
+    "Jasper Designer: drag-and-drop report design (text, images, barcodes, shapes incl. ellipses, checkboxes, radios, subreports) with JRXML source, publish and PDF preview",
+    "Reports Overview: charts of the designs, publishing, the UAT -> Production deploys and the HIS report templates",
+    "Settings: one page for the JasperServers (publish to one or several at once), Centrix HIS registration and each tool's defaults, set by an administrator"
+  ],
+  "requires": ["JasperServer REST access (set in Reports > Settings)", "MongoDB connection to register reports in HIS"],
+  "packages": ["sharp", "multer", "axios"],
+  "defaultActive": true,
+  "paths": ["/reports/overview", "/reports/print-out-builder", "/reports/jasper-designer", "/reports/publish", "/reports/settings", "/reports/print-out-settings"],
+  "menu": {
+    "header": "Reports",
+    "items": [
+      { "text": "Overview", "icon": "fas fa-chart-pie", "link": "/reports/overview" },
+      { "text": "Jasper Printout", "icon": "fas fa-file-pdf", "link": "/reports/print-out-builder",
+        "actions": [
+          { "key": "publish", "text": "Direct publish", "description": "Publish the print-out straight to JasperServer (when Reports > Settings allows it)" },
+          { "key": "save", "text": "Save to file manager", "description": "Save print-outs and create folders in the Jasper Designer library" },
+          { "key": "delete", "text": "Delete designs", "description": "Delete saved designs and empty folders" }
+        ] },
+      { "text": "Jasper Designer", "icon": "fas fa-drafting-compass", "link": "/reports/jasper-designer",
+        "actions": [
+          { "key": "publish", "text": "Direct publish", "description": "Publish the design straight to JasperServer (when Reports > Settings allows it)" },
+          { "key": "delete", "text": "Delete designs", "description": "Delete saved designs and empty folders" }
+        ] },
+      { "text": "Publish Report", "icon": "fas fa-cloud-upload-alt", "link": "/reports/publish",
+        "actions": [
+          { "key": "direct-publish", "text": "Direct publish", "description": "Publish saved reports straight to the chosen JasperServers (when Reports > Settings allows it)" },
+          { "key": "deploy-uat", "text": "Deploy to UAT", "description": "Send saved reports to the UAT JasperServers" },
+          { "key": "review", "text": "Approve / reject on UAT", "description": "Approve a report checked on UAT for Production, or reject it" },
+          { "key": "deploy-prod", "text": "Deploy to Production", "description": "Send approved reports to the Production JasperServers (and Centrix HIS)" }
+        ] },
+      { "text": "Settings", "icon": "fas fa-sliders-h", "link": "/reports/settings", "adminOnly": true }
+    ]
+  }
+}

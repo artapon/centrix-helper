@@ -1,0 +1,445 @@
+<div class="col-12">
+<div class="gd">
+  <nav class="gd-crumbs gd-no-print"><a href="/admin/marketplace"><i class="fas fa-store"></i> Marketplace</a> <i class="fas fa-chevron-right"></i> Developer guide</nav>
+
+  <header class="card gd-hero">
+    <button type="button" class="btn btn-light btn-sm gd-pdf gd-no-print" @click="savePdf" title="Opens the print dialog: choose “Save as PDF”"><i class="fas fa-file-pdf mr-1"></i> Save as PDF</button>
+    <div>
+      <h1><i class="fas fa-book"></i> Build an add-on</h1>
+      <p>An add-on is a folder under <code>addons/&lt;id&gt;/</code> with an <code>addon.json</code> manifest and the usual
+        <code>controllers/</code>, <code>models/</code>, <code>views/</code> and routes files. It gets its own menu section, its pages are granted to roles like any other,
+        and an administrator turns it on and off here. Start from the starter add-on below, then read the sections you need.</p>
+    </div>
+  </header>
+
+  <div class="gd-layout">
+    <aside class="gd-toc gd-no-print" aria-label="On this page">
+      <b>On this page</b>
+      <a v-for="s in SECTIONS" :key="s[0]" :href="'#' + s[0]">{{ s[1] }}</a>
+    </aside>
+
+    <main class="gd-main">
+      <!-- Quick start -->
+      <section id="start" class="card gd-sec">
+        <h2>1. Quick start</h2>
+        <p>Download a working add-on (a Notes page with an SQLite table and one role action) named as you like, and change it into yours.</p>
+        <form class="gd-starter gd-no-print" :action="starterLink" method="get" @submit.prevent="downloadStarter">
+          <label>Id <small>folder name: a-z, 0-9, "-"</small>
+            <input v-model.trim="starter.id" class="form-control form-control-sm" maxlength="40" pattern="[a-z0-9][a-z0-9-]*" required placeholder="ward-notes">
+          </label>
+          <label>Name <small>shown in the menu and here</small>
+            <input v-model.trim="starter.name" class="form-control form-control-sm" maxlength="60" required placeholder="Ward Notes">
+          </label>
+          <button type="submit" class="btn btn-primary btn-sm" :disabled="!idOk"><i class="fas fa-download mr-1"></i> Download starter (.zip)</button>
+        </form>
+        <small v-if="starter.id && !idOk" class="gd-bad">The id takes lower-case letters, digits and "-", and starts with a letter or digit.</small>
+        <ol class="gd-steps">
+          <li><b>Install it</b>: upload the .zip in <a href="/admin/marketplace">Marketplace › Upload add-on</a>, or unzip it into <code>addons/</code> on the server.</li>
+          <li><b>Restart the server</b> (<code>pm2 restart all</code>): routes and manifests are read at start.</li>
+          <li><b>Activate it</b> in the Marketplace (the starter is <code>"defaultActive": false</code>).</li>
+          <li><b>Grant it</b>: administrators see it at once; give its menu items (and actions) to roles in <a href="/admin/roles">Roles &amp; Permissions</a>.</li>
+          <li><b>Change it</b>: edit the files; restart after changing JavaScript or <code>addon.json</code>. Views (<code>.html</code>) are read on each request.</li>
+        </ol>
+        <p class="gd-ai-tip"><i class="fas fa-robot"></i> Prefer to have it written for you? <a href="#ai">Build it with an AI assistant</a>: describe it and copy a ready prompt.</p>
+      </section>
+
+      <!-- Layout -->
+      <section id="layout" class="card gd-sec">
+        <h2>2. Folder layout</h2>
+        <pre v-pre><code>addons/
+  ward-notes/                  the folder name is the add-on's id
+    addon.json                 manifest (required)
+    routes.open.js             routes without sign-in            (optional)
+    routes.public.js           signed-in users, no MongoDB needed (optional)
+    routes.js                  signed-in users + Centrix database (optional)
+    controllers/  ward-notes.controller.js
+    models/       notes.model.js
+    views/        ward-notes.html
+    public/       browser files (scripts, images) you serve yourself
+    README.md</code></pre>
+        <p>Name files <code>&lt;name&gt;.controller.js</code>, <code>&lt;name&gt;.model.js</code>, <code>&lt;name&gt;.service.js</code>, <code>&lt;name&gt;.helper.js</code>, as the app does.
+          An add-on only uses the app's code (<code>app/core/…</code>, and models of <code>app/modules/…</code>); it never changes it, so it can be removed or updated on its own.</p>
+      </section>
+
+      <!-- Manifest -->
+      <section id="manifest" class="card gd-sec">
+        <h2>3. addon.json</h2>
+        <pre v-pre><code>{
+  "id": "ward-notes",
+  "name": "Ward Notes",
+  "version": "1.0.0",
+  "author": "IT department",
+  "category": "Tools",
+  "icon": "fas fa-sticky-note",
+  "summary": "One line for the Marketplace card.",
+  "description": "A few sentences for the add-on's Marketplace page.",
+  "features": ["What it does, one line each"],
+  "requires": ["What it needs, e.g. a MongoDB connection"],
+  "packages": ["axios"],
+  "defaultActive": false,
+  "paths": ["/ward-notes"],
+  "menu": {
+    "header": "Ward Notes",
+    "icon": "fas fa-sticky-note",
+    "after": "Tools",
+    "items": [
+      { "text": "Notes", "icon": "fas fa-sticky-note", "link": "/ward-notes",
+        "actions": [{ "key": "add", "text": "Add notes", "description": "Add and delete notes" }] },
+      { "text": "Settings", "icon": "fas fa-sliders-h", "link": "/ward-notes/settings", "adminOnly": true }
+    ]
+  }
+}</code></pre>
+        <div class="gd-table-wrap">
+          <table class="gd-table">
+            <thead><tr><th>Field</th><th>Required</th><th>Meaning</th></tr></thead>
+            <tbody>
+              <tr v-for="f in FIELDS" :key="f[0]"><td><code>{{ f[0] }}</code></td><td>{{ f[1] }}</td><td>{{ f[2] }}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Routes -->
+      <section id="routes" class="card gd-sec">
+        <h2>4. Routes and access</h2>
+        <p>Each routes file exports an Express router. The app mounts them for every add-on, in this order, and they answer only while the add-on is active:</p>
+        <div class="gd-table-wrap">
+          <table class="gd-table">
+            <thead><tr><th>File</th><th>Who reaches it</th><th>Use it for</th></tr></thead>
+            <tbody>
+              <tr><td><code>routes.open.js</code></td><td>Anyone, no sign-in</td><td>Public pages and webhooks. Check access yourself (e.g. a secret token in the link).</td></tr>
+              <tr><td><code>routes.public.js</code></td><td>Signed-in users with the permission</td><td>Pages that use SQLite or other systems, not the Centrix database.</td></tr>
+              <tr><td><code>routes.js</code></td><td>Same, and only with a Centrix (MongoDB) connection</td><td>Pages that read or write Centrix data.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><b>Permissions follow the menu.</b> A request belongs to the menu item whose <code>link</code> is the longest prefix of its path; a role needs that item to open it (administrators have every item).
+          Put every URL of a page under its menu link (<code>/ward-notes</code>, <code>/ward-notes/notes</code>, …), and list other prefixes the add-on owns in <code>paths</code>.</p>
+        <pre v-pre><code>// routes.public.js
+const express = require('express');
+const asyncHandler = require('../../app/core/http/async.handler');
+const { requireAction, requireAdmin } = require('../../app/core/middleware/requireauth.middleware');
+const controller = require('./controllers/ward-notes.controller');
+
+const LINK = '/ward-notes';
+const router = express.Router();
+
+router.get(LINK, asyncHandler(controller.index));                              // the page
+router.get(`${LINK}/notes`, controller.list);                                   // its JSON
+router.post(`${LINK}/notes`, requireAction(LINK, 'add'), controller.add);       // an action granted per role
+router.get(`${LINK}/settings`, requireAdmin, asyncHandler(controller.settings)); // administrators only
+router.use(`${LINK}/assets`, express.static(require('path').join(__dirname, 'public')));
+
+module.exports = router;</code></pre>
+      </section>
+
+      <!-- Pages -->
+      <section id="pages" class="card gd-sec">
+        <h2>5. Controllers and views</h2>
+        <p>A page is rendered with the app's layout (menu, top bar) by <code>res.renderPage(viewFile, locals)</code>. Get the view file from the add-on's <code>views/</code> folder with the view helper:</p>
+        <pre v-pre><code>// controllers/ward-notes.controller.js
+const view = require('../../../app/core/view').addon('ward-notes');
+const { actionsFor } = require('../../../app/core/permissions');
+
+exports.index = async function (req, res) {
+  return res.renderPage(view('ward-notes'), {
+    title: 'Ward Notes',                              // the browser tab and breadcrumb
+    can: actionsFor(req.user, '/ward-notes')           // { add: true | false } for the page's buttons
+  });
+};</code></pre>
+        <p>The view is a <b>Vue 2</b> template; the <code>locals</code> are its data (read-only: replace a top-level key to change it). There is no build step.
+          <code>&lt;style&gt;</code> and <code>&lt;script&gt;</code> blocks in the view are applied with the page; add Vue options with <code>Page.setup</code>:</p>
+        <pre v-pre><code>&lt;div class="col-12"&gt;
+  &lt;h1&gt;{{ title }}&lt;/h1&gt;
+  &lt;button v-if="can.add" class="btn btn-primary" @click="add"&gt;Add&lt;/button&gt;
+  &lt;ul&gt;&lt;li v-for="n in notes" :key="n.id"&gt;{{ n.text }}&lt;/li&gt;&lt;/ul&gt;
+&lt;/div&gt;
+
+&lt;script&gt;
+  Page.setup({
+    data: function () { return { notes: [] }; },
+    methods: {
+      load: function () { var vm = this; fetch('/ward-notes/notes').then(function (r) { return r.json(); }).then(function (d) { vm.notes = d.notes; }); },
+      add: function () { /* POST, then this.load() */ }
+    },
+    mounted: function () { this.load(); }
+  });
+&lt;/script&gt;</code></pre>
+        <p>Answer JSON endpoints with <code>{ error: '…' }</code> and a 4xx / 5xx status when something fails, and log the details with <code>console.error</code>. Pages already have Vue 2, Bootstrap 4 classes,
+          Font Awesome 5 icons and the app's CSS variables (<code>--primary</code>, <code>--surface</code>, <code>--border</code>, <code>--text</code>, …); Chart.js is at <code>/lib/chart.js/dist/chart.umd.min.js</code>.</p>
+      </section>
+
+      <!-- Data -->
+      <section id="data" class="card gd-sec">
+        <h2>6. Data</h2>
+        <ul class="gd-list">
+          <li><b>SQLite</b> (<code>data/app.sqlite</code>), always available: <code>const { run, get, all } = require('../../../app/core/config/sqlite')</code>. Create your tables with
+            <code>CREATE TABLE IF NOT EXISTS</code> on first use, and start their names with your id (<code>ward_notes_…</code>). Add columns later with <code>PRAGMA table_info</code> + <code>ALTER TABLE</code>.</li>
+          <li><b>Settings</b>: one JSON row in <code>app_meta</code>, key <code>&lt;id&gt;.settings</code>.</li>
+          <li><b>Centrix data</b> (MongoDB): require the app's models, e.g. <code>require('../../../app/modules/patients/models/patient.model')</code>, and put those routes in <code>routes.js</code>.</li>
+          <li><b>npm packages</b>: list them in <code>"packages"</code>. While one is missing the Marketplace shows <code>npm install …</code> and the add-on cannot be activated.</li>
+          <li>Deactivating keeps the add-on's tables and settings; updating it keeps them too.</li>
+        </ul>
+      </section>
+
+      <!-- Permissions -->
+      <section id="permissions" class="card gd-sec">
+        <h2>7. Permissions</h2>
+        <ul class="gd-list">
+          <li><b>Pages</b>: each menu item is a permission in <a href="/admin/roles">Roles &amp; Permissions</a>. New items are granted to no role until an administrator ticks them.</li>
+          <li><b>Actions</b> (<code>"actions"</code> of a menu item): extra rights inside a page, such as "Add notes". Check them with <code>requireAction(link, key)</code> on the route and
+            <code>actionsFor(req.user, link)</code> for the buttons. When an add-on is first activated, its actions go to the roles that have the page.</li>
+          <li><b>Administrators only</b>: <code>"adminOnly": true</code> on a menu item, and <code>requireAdmin</code> on its routes.</li>
+          <li><b>Widgets</b> (<code>"widgets"</code>): parts other pages can show (as Query Studio's Basic Data). Each has its own link <code>/widgets/&lt;id&gt;/&lt;key&gt;</code> and permission, and serves <code>&lt;link&gt;/widget.js</code>.</li>
+        </ul>
+      </section>
+
+      <!-- Package -->
+      <section id="package" class="card gd-sec">
+        <h2>8. Package and upload</h2>
+        <ul class="gd-list">
+          <li>Zip the add-on folder (<code>ward-notes/addon.json</code>, …) or its contents (<code>addon.json</code> at the top). One add-on per .zip.</li>
+          <li>Limits: 20 MB zipped, 50 MB and 2,000 files unpacked; plain file names (letters, digits, <code>. _ - @ ( ) +</code> and spaces). No <code>node_modules</code>; no encrypted or ZIP64 archives.</li>
+          <li>Upload it in <a href="/admin/marketplace">Marketplace › Upload add-on</a>. You see what it is and what it does (new or update, files, routes, packages, paths shared with other add-ons) before installing.</li>
+          <li>Updating an installed add-on (same id) moves the old folder to <code>data/addon-backups/&lt;id&gt;-&lt;time&gt;</code>; copy it back to roll back.</li>
+          <li>Restart the server after installing or updating. Raise <code>"version"</code> with every release.</li>
+        </ul>
+        <div class="gd-warn"><i class="fas fa-shield-alt"></i><span><b>Security.</b> An add-on runs inside the app with its full rights: the files, the databases and the network.
+          Only administrators can upload, and only code you trust should be installed. Check input in your routes, and keep open routes (<code>routes.open.js</code>) behind a secret or read-only.</span></div>
+      </section>
+
+      <!-- Checklist -->
+      <section id="checklist" class="card gd-sec">
+        <h2>9. Checklist</h2>
+        <ul class="gd-check">
+          <li v-for="c in CHECKS" :key="c"><i class="far fa-check-square"></i> {{ c }}</li>
+        </ul>
+      </section>
+
+      <!-- AI prompt -->
+      <section id="ai" class="card gd-sec">
+        <h2>10. Build it with an AI assistant</h2>
+        <p>Describe the add-on, then copy the prompt into an AI assistant (Claude, ChatGPT, …). The prompt carries this app's add-on rules, so the code it writes fits:
+          ask it for every file, check the result against the checklist, zip the folder and upload it.</p>
+        <div class="gd-ai-form gd-no-print">
+          <label>Id <small>a-z, 0-9, "-"</small><input v-model.trim="ai.id" class="form-control form-control-sm" maxlength="40" placeholder="ward-notes"></label>
+          <label>Name<input v-model.trim="ai.name" class="form-control form-control-sm" maxlength="60" placeholder="Ward Notes"></label>
+          <label>Data
+            <select v-model="ai.data" class="form-control form-control-sm">
+              <option value="sqlite">Its own tables in SQLite</option>
+              <option value="mongo">Centrix data (MongoDB)</option>
+              <option value="api">An outside system / API</option>
+              <option value="mixed">Centrix data + its own tables</option>
+            </select>
+          </label>
+          <label class="is-wide">What should it do? <small>pages, who uses them, what they see and change</small>
+            <textarea v-model="ai.goal" class="form-control form-control-sm" rows="4" maxlength="3000"
+                      placeholder="e.g. A page for ward nurses to log equipment checks per ward and shift: a list with filters (ward, date), add / edit / delete a check (admins only delete), and an export to CSV. A summary of overdue checks on top."></textarea>
+          </label>
+          <div class="gd-ai-opts is-wide">
+            <label><input type="checkbox" v-model="ai.settings"> A settings page for administrators</label>
+            <label><input type="checkbox" v-model="ai.public"> A public page without sign-in</label>
+            <label><input type="checkbox" v-model="ai.chart"> Charts (Chart.js)</label>
+          </div>
+        </div>
+        <div class="gd-ai-out">
+          <div class="gd-ai-bar">
+            <b><i class="fas fa-robot"></i> Prompt</b>
+            <small>{{ aiPrompt.length.toLocaleString('en-US') }} characters</small>
+            <span class="gd-grow"></span>
+            <button type="button" class="btn btn-primary btn-sm gd-no-print" @click="copyPrompt" :disabled="!ai.goal.trim()" :title="ai.goal.trim() ? '' : 'Describe what it should do first'">
+              <i class="fas mr-1" :class="copied ? 'fa-check' : 'fa-copy'"></i> {{ copied ? 'Copied' : 'Copy prompt' }}
+            </button>
+          </div>
+          <pre class="gd-print-only gd-ai-print">{{ aiPrompt }}</pre>
+          <textarea ref="prompt" class="gd-ai-text gd-no-print" readonly :value="aiPrompt" aria-label="AI prompt" @focus="$event.target.select()"></textarea>
+        </div>
+        <p class="gd-ai-tip"><i class="fas fa-lightbulb"></i> Give the assistant feedback in the same chat (errors from the server log, what to change) and ask for the changed files only.
+          AI-written code is yours to check: read the routes and their permissions before installing it.</p>
+      </section>
+    </main>
+  </div>
+</div>
+</div>
+
+<style>
+  .gd { display: flex; flex-direction: column; gap: 16px; padding-bottom: 32px; }
+  .gd-crumbs { font-size: .82rem; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .gd-crumbs i.fa-chevron-right { font-size: .6rem; }
+  .gd-hero { padding: 20px 24px; }
+  .gd-hero h1 { font-size: 1.25rem; margin: 0 0 6px; display: flex; gap: 10px; align-items: center; }
+  .gd-hero h1 i { color: var(--primary); }
+  .gd-hero p { margin: 0; color: var(--text-2); font-size: .88rem; line-height: 1.6; max-width: 90ch; }
+  .gd-layout { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+  .gd-toc { flex: 0 0 210px; position: sticky; top: calc(var(--topbar-h, 56px) + 16px); display: flex; flex-direction: column; gap: 2px; padding: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); font-size: .84rem; }
+  .gd-toc b { font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .gd-toc a { color: var(--text-2); padding: 4px 8px; border-radius: 6px; }
+  .gd-toc a:hover { background: var(--surface-2); color: var(--primary); text-decoration: none; }
+  .gd-main { flex: 1 1 600px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+  @media (max-width: 991px) { .gd-toc { position: static; flex: 1 1 100%; flex-direction: row; flex-wrap: wrap; } .gd-toc b { width: 100%; } }
+  .gd-sec { padding: 18px 22px; scroll-margin-top: calc(var(--topbar-h, 56px) + 16px); }
+  .gd-sec h2 { font-size: 1.05rem; margin: 0 0 10px; }
+  .gd-sec p { color: var(--text-2); font-size: .87rem; line-height: 1.6; margin: 0 0 10px; }
+  .gd-sec pre { background: #0f172a; color: #e2e8f0; border-radius: var(--radius-sm); padding: 14px 16px; font-size: .78rem; line-height: 1.55; overflow: auto; margin: 0 0 12px; }
+  .gd-sec pre code { color: inherit; background: none; padding: 0; font-size: inherit; }
+  .gd-sec code { font-size: .82em; }
+  .gd-starter { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; padding: 14px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 6px; }
+  .gd-starter label { display: flex; flex-direction: column; gap: 4px; font-size: .78rem; font-weight: 600; color: var(--text-2); margin: 0; flex: 1 1 200px; }
+  .gd-starter label small { font-weight: 400; color: var(--muted); }
+  .gd-bad { color: var(--danger); font-size: .78rem; }
+  .gd-steps, .gd-list { margin: 10px 0 0; padding-left: 20px; font-size: .87rem; line-height: 1.65; color: var(--text-2); }
+  .gd-steps li, .gd-list li { margin-bottom: 4px; }
+  .gd-steps b, .gd-list b { color: var(--text); }
+  .gd-table-wrap { overflow-x: auto; margin-bottom: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+  .gd-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+  .gd-table th { background: var(--surface-2); color: var(--muted); font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  .gd-table td { padding: 8px 12px; border-bottom: 1px solid var(--surface-3, var(--border)); vertical-align: top; color: var(--text-2); }
+  .gd-table td:first-child { white-space: nowrap; }
+  .gd-warn { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--danger-soft); font-size: .85rem; line-height: 1.55; }
+  .gd-warn i { color: var(--danger); margin-top: 3px; }
+  .gd-ai-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 14px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 12px; }
+  .gd-ai-form label { display: flex; flex-direction: column; gap: 4px; font-size: .78rem; font-weight: 600; color: var(--text-2); margin: 0; }
+  .gd-ai-form label small { font-weight: 400; color: var(--muted); }
+  .gd-ai-form .is-wide { grid-column: 1 / -1; }
+  .gd-ai-opts { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+  .gd-ai-opts label { flex-direction: row; align-items: center; gap: 6px; font-weight: 500; color: var(--text); cursor: pointer; }
+  @media (max-width: 700px) { .gd-ai-form { grid-template-columns: 1fr; } }
+  .gd-ai-out { border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+  .gd-ai-bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); font-size: .84rem; }
+  .gd-ai-bar b i { color: var(--primary); margin-right: 4px; }
+  .gd-ai-bar small { color: var(--muted); }
+  .gd-grow { flex: 1; }
+  .gd-ai-text { display: block; width: 100%; height: 320px; border: 0; padding: 12px 14px; resize: vertical; background: #0f172a; color: #e2e8f0; font-family: var(--font-mono, monospace); font-size: .76rem; line-height: 1.55; outline: 0; }
+  .gd-ai-tip { margin: 10px 0 0 !important; font-size: .82rem !important; display: flex; gap: 8px; align-items: baseline; }
+  .gd-ai-tip i { color: var(--warning); }
+  .gd-hero { position: relative; }
+  .gd-pdf { position: absolute; top: 16px; right: 16px; }
+  .gd-hero > div { padding-right: 130px; }
+  .gd-print-only { display: none; }
+  @media print {
+    .gd-no-print { display: none !important; }
+    .gd-print-only { display: block !important; }
+    .gd-hero > div { padding-right: 0; }
+    .gd-layout { display: block; }
+    .gd-sec, .gd-hero { border: 0 !important; padding: 8px 0 !important; break-inside: auto; }
+    .gd-sec h2 { break-after: avoid; }
+    .gd-sec pre, .gd-ai-print { background: #f6f8fa !important; color: #111827 !important; border: 1px solid #d0d5dd; white-space: pre-wrap; word-break: break-word; overflow: visible; break-inside: auto; font-size: 9pt; }
+    .gd-ai-out { border: 0; }
+    .gd-ai-bar { background: none; border: 0; padding: 0 0 6px; }
+    .gd-table-wrap { overflow: visible; }
+    a { color: inherit; text-decoration: none; }
+  }
+  .gd-check { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 6px 16px; font-size: .86rem; color: var(--text-2); }
+  .gd-check i { color: var(--success); margin-right: 6px; }
+</style>
+
+<script>
+  (function () {
+    var ID_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
+    Page.setup({
+      data: function () {
+        return {
+          starter: { id: 'my-addon', name: 'My Add-on' },
+          SECTIONS: [['start', '1. Quick start'], ['layout', '2. Folder layout'], ['manifest', '3. addon.json'], ['routes', '4. Routes and access'],
+            ['pages', '5. Controllers and views'], ['data', '6. Data'], ['permissions', '7. Permissions'], ['package', '8. Package and upload'], ['checklist', '9. Checklist'],
+            ['ai', '10. Build it with AI']],
+          ai: { id: 'my-addon', name: 'My Add-on', data: 'sqlite', goal: '', settings: false, public: false, chart: false },
+          copied: false,
+          FIELDS: [
+            ['id', 'yes', 'Unique; equals the folder name. 1-40 characters: a-z, 0-9 and "-".'],
+            ['name', 'yes', 'Shown in the Marketplace and as the menu section (unless menu.header says otherwise).'],
+            ['version', '', 'Your release number, e.g. 1.2.0. Shown in the Marketplace; raise it with every update.'],
+            ['author', '', 'Who publishes it.'],
+            ['category', '', 'Groups add-ons in the Marketplace filter (default "Other").'],
+            ['icon', '', 'A Font Awesome 5 class, e.g. "fas fa-heartbeat".'],
+            ['summary / description', '', 'One line for the card; a few sentences for the add-on\'s page.'],
+            ['features / requires', '', 'Lists shown on the add-on\'s page: what it does, what it needs.'],
+            ['packages', '', 'npm packages it loads. While one is missing it cannot be activated.'],
+            ['defaultActive', '', 'Active right after it is installed (default true). false: an administrator turns it on.'],
+            ['paths', '', 'URL prefixes the add-on owns beyond its menu links; closed while it is inactive.'],
+            ['menu.header / icon / after', '', 'Its menu section: title, icon, and the section it comes after.'],
+            ['menu.items[]', '', 'text, icon, link (one page each), adminOnly, actions[] { key, text, description }.'],
+            ['widgets[]', '', 'key, text, icon, component (Vue component name with a "-"), description.']
+          ],
+          CHECKS: [
+            'The folder name equals "id" in addon.json',
+            'Every URL of a page starts with its menu link',
+            'Changing routes check requireAction / requireAdmin',
+            'JSON errors answer { error } with a 4xx / 5xx status',
+            'Tables and settings keys start with the add-on\'s id',
+            'npm packages are listed in "packages"',
+            'Open routes (no sign-in) are behind a secret or read-only',
+            'No changes to the app\'s own files',
+            '"version" raised for the release',
+            'Tested: install, restart, activate, grant to a role, deactivate'
+          ]
+        };
+      },
+      computed: {
+        idOk: function () { return ID_RE.test(this.starter.id); },
+        // The prompt: what to build (from the form) and this app's add-on rules.
+        aiPrompt: function () {
+          var a = this.ai, id = ID_RE.test(a.id) ? a.id : 'my-addon', name = a.name || 'My Add-on', link = '/' + id, tbl = id.replace(/-/g, '_');
+          var data = {
+            sqlite: 'Its own tables in the app\'s SQLite database.',
+            mongo: 'Centrix HIS data in MongoDB (read through the app\'s mongoose models).',
+            api: 'An outside system over HTTP (axios is available).',
+            mixed: 'Centrix HIS data in MongoDB plus its own tables in SQLite.'
+          }[a.data];
+          var extras = [];
+          if (a.settings) extras.push('- A Settings page for administrators only (menu item with "adminOnly": true, routes with requireAdmin), stored as one JSON row in SQLite app_meta under the key "' + id + '.settings".');
+          if (a.public) extras.push('- A public page without sign-in in routes.open.js, reachable only with a secret token in its link (crypto.randomBytes, kept in the settings) and read-only; it is a standalone HTML file (res.sendFile) with its own <scr' + 'ipt src="/lib/vue/dist/vue.min.js">, not the app layout.');
+          if (a.chart) extras.push('- Charts with Chart.js 4: load <scr' + 'ipt src="/lib/chart.js/dist/chart.umd.min.js"></scr' + 'ipt> in the view; one y-axis per chart, a legend for 2+ series, colours readable for colour-blind users.');
+          var mongoRules = a.data === 'mongo' || a.data === 'mixed'
+            ? '- MongoDB (Centrix data): require the app\'s mongoose models, e.g. require(\'../../../app/modules/patients/models/patient.model\'); routes that use them go in routes.js (mounted only while a Centrix database is connected). Never write to Centrix collections unless the task says so.\n'
+            : '';
+          return [
+            'You are writing an add-on for "Centrix HIS Helper Tools", a Node.js / Express 4 web app (CommonJS, Node 18). Write the complete add-on and give every file in full.',
+            '',
+            '## What to build',
+            'Add-on id: ' + id + '   (folder addons/' + id + '/, the folder name must equal the id)',
+            'Name: ' + name,
+            'Data: ' + data,
+            'What it must do:',
+            (a.goal.trim() || '(describe the add-on here)'),
+            extras.length ? '\nAlso:\n' + extras.join('\n') : '',
+            '',
+            '## How add-ons work in this app',
+            '- An add-on is a folder addons/<id>/ with addon.json, routes files, controllers/, models/, views/ (and public/ for browser files). It is discovered when the server starts, turned on and off in Administration > Marketplace, and must never change the app\'s own files (app/…, server.js).',
+            '- addon.json: { "id", "name", "version": "1.0.0", "author", "category", "icon": "fas fa-…" (Font Awesome 5), "summary" (one line), "description", "features": [..], "requires": [..], "packages": [npm names it requires, e.g. "axios"], "defaultActive": false, "paths": ["' + link + '"], "menu": { "header": "' + name + '", "icon": "fas fa-…", "after": "Tools", "items": [ { "text", "icon", "link": "' + link + '", "actions": [ { "key", "text", "description" } ] }, { "text": "Settings", "icon": "fas fa-sliders-h", "link": "' + link + '/settings", "adminOnly": true } ] } }.',
+            '- Routes files export an express.Router and are mounted for every add-on in this order, answering only while it is active: routes.open.js = no sign-in; routes.public.js = signed-in users, no MongoDB needed; routes.js = signed-in users with a Centrix MongoDB connection.',
+            '- Access follows the menu: a request belongs to the menu item whose link is the longest prefix of its path, and the user\'s role needs that item. So every URL of a page starts with its menu link (' + link + ', ' + link + '/items, …).',
+            '- Rights inside a page are menu-item "actions": guard the route with requireAction(LINK, \'key\') and give the page actionsFor(req.user, LINK) ({ key: true | false }) to show or hide buttons. requireAdmin for administrator-only routes. From addons/<id>/routes.*.js: const { requireAction, requireAdmin } = require(\'../../app/core/middleware/requireauth.middleware\'); const asyncHandler = require(\'../../app/core/http/async.handler\'); From controllers: const { actionsFor } = require(\'../../../app/core/permissions\');',
+            '- Pages: in a controller, const view = require(\'../../../app/core/view\').addon(\'' + id + '\'); then return res.renderPage(view(\'' + id + '\'), { title: \'' + name + '\', can: actionsFor(req.user, LINK), ...data }); renders views/' + id + '.html inside the app layout (menu, top bar). Wrap the page route handler in asyncHandler.',
+            '- Views are Vue 2 templates (no build step). The locals are the Vue data (read-only: replace a top-level key to change it). Start with <div class="col-12">. Add behaviour in a <script> block with Page.setup({ data, computed, methods, mounted }); Page.setup is global. Use <style> blocks with class names prefixed by the id. Bootstrap 4 classes, Font Awesome 5 icons and CSS variables (--primary, --primary-soft, --surface, --surface-2, --border, --text, --text-2, --muted, --success, --danger, --warning) are available. Load page data with fetch(..., { credentials: \'same-origin\' }) from JSON endpoints.',
+            '- SQLite (always available): const { run, get, all } = require(\'../../../app/core/config/sqlite\'); (from models/) — promise-based; run returns { lastID, changes }. Create tables on first use with CREATE TABLE IF NOT EXISTS, names starting with ' + tbl + '_; add later columns with PRAGMA table_info + ALTER TABLE ADD COLUMN. Store times as ISO strings (UTC).',
+            mongoRules + '- JSON endpoints answer { error: \'message\' } with a 4xx / 5xx status on failure, and log details with console.error; validate and limit every input; never trust ids from the browser without checking them.',
+            '- Never put secrets or patient data in logs or in the browser beyond what the page needs.',
+            '',
+            '## Conventions',
+            '- File names: <name>.controller.js, <name>.model.js, <name>.service.js, <name>.helper.js; plain CommonJS; 2-space indents; short comments that say why.',
+            '- Menu link and URLs under ' + link + '; tables ' + tbl + '_…; settings key "' + id + '.settings" in app_meta.',
+            '- Accessible markup: real <button>, <label> for inputs, aria-label on icon-only buttons, no colour-only meaning.',
+            '',
+            '## Output',
+            '1. The file tree of addons/' + id + '/.',
+            '2. Every file in full, each under a heading with its path (addons/' + id + '/addon.json, routes.public.js, controllers/…, models/…, views/…). No placeholders or "rest of code" comments.',
+            '3. Short install notes: zip the ' + id + ' folder, upload it in Administration > Marketplace > Upload add-on, restart the server, activate the add-on and grant its menu items (and actions) to roles in Roles & Permissions; list any npm packages to install.'
+          ].join('\n');
+        },
+        starterLink: function () { return '/admin/marketplace/guide/starter.zip?id=' + encodeURIComponent(this.starter.id) + '&name=' + encodeURIComponent(this.starter.name); }
+      },
+      methods: {
+        // The browser's print dialog, where "Save as PDF" is a destination; the page has print styles of its own.
+        savePdf: function () { var t = document.title; document.title = 'Add-on developer guide'; window.print(); document.title = t; },
+        downloadStarter: function () { if (this.idOk) window.location.href = this.starterLink; },
+        copyPrompt: function () {
+          var vm = this, text = vm.aiPrompt, done = function () { vm.copied = true; setTimeout(function () { vm.copied = false; }, 2000); };
+          var fallback = function () { var el = vm.$refs.prompt; el.focus(); el.select(); try { document.execCommand('copy'); done(); } catch (e) { /* the text stays selected to copy by hand */ } };
+          if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done, fallback);
+          else fallback();
+        }
+      }
+    });
+  })();
+</script>

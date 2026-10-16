@@ -16,6 +16,7 @@ const router = express.Router();
 // "Settings" (administrators only): the pages' light / dark theme.
 router.get(`${LINK}/settings`, requireAdmin, asyncHandler(controller.settingsIndex));
 router.post(`${LINK}/settings`, requireAdmin, controller.settingsSave);
+router.post(`${LINK}/settings/slack/test`, requireAdmin, controller.slackTest);
 router.post(`${LINK}/settings/import-kuma/preview`, requireAdmin, controller.kumaPreview);
 router.post(`${LINK}/settings/import-kuma`, requireAdmin, controller.kumaImport);
 // Backup & restore: the restore requests send the file as text (it can be larger than the JSON body limit).

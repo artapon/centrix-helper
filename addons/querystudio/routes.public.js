@@ -32,6 +32,12 @@ router.get('/query-studio/run-template', templates.pickList);
 router.get('/query-studio/connections', controller.connections);
 router.post('/query-studio/connection', controller.switchConnection);
 
+// Light / dark mode of the Query Studio pages. Not under /query-studio, so it loads for anyone who
+// can open any of the pages (Query Data, Query Template, Query Data Audit each have their own permission).
+const themeFile = (file, type) => (req, res) => res.type(type).set('Cache-Control', 'no-cache').sendFile(path.join(__dirname, 'public', file));
+router.get('/query-studio-theme/theme.js', themeFile('theme.js', 'application/javascript'));
+router.get('/query-studio-theme/dark.css', themeFile('dark.css', 'text/css'));
+
 // Query Data's browser components.
 router.use('/query-studio/assets', express.static(path.join(__dirname, 'public'), { maxAge: 0 }));
 

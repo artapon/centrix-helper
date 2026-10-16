@@ -1,3 +1,6 @@
+<!-- Light / dark mode (public/theme.js, public/dark.css): first, so the page draws in the chosen theme -->
+<style>@import url('/query-studio-theme/dark.css');</style>
+<script src="/query-studio-theme/theme.js"></script>
 <div class="col-12">
   <div class="qd-layout" :class="{ 'is-side-hidden': !sideOpen }">
 
@@ -96,11 +99,11 @@
           </button>
           <span class="qd-flash" v-if="flash" role="status"><i class="fas fa-check-circle"></i> {{ flash }}</span>
           <div class="qd-toolbar-actions">
-            <button type="button" class="btn btn-sm btn-outline-primary" @click="openTemplates()" aria-haspopup="dialog" title="Queries with parameters: fill in an HN, a VN, a date… and run">
-              <i class="fas fa-clone"></i> Templates
-            </button>
             <button type="button" class="btn btn-sm btn-outline-secondary" @click="openBasic" title="Organisation, date, visit and encounter-type ids to paste into queries">
               <i class="fas fa-id-card"></i> Basic Data
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-primary" @click="openTemplates()" aria-haspopup="dialog" title="Queries with parameters: fill in an HN, a VN, a date… and run">
+              <i class="fas fa-clone"></i> Templates
             </button>
             <button type="button" class="btn btn-sm btn-outline-primary" @click="toggleBuilder" aria-haspopup="dialog">
               <i class="fas fa-magic"></i> Query Builder

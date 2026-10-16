@@ -15,7 +15,14 @@ const DEFAULT_RESET = { enabled: false, everyDays: 30, at: '00:00', checks: true
 const DEFAULT_SHARE = { enabled: false, token: '', title: 'Service Status', showTargets: false, expandGroups: true, updatedBy: '', updatedAt: null };
 // Browser notifications (a monitor down / back up), offered on Service Health and on the public status page.
 const DEFAULT_NOTIFY = { health: true, public: true };
-const DEFAULTS = { theme: 'light', autoReset: DEFAULT_RESET, share: DEFAULT_SHARE, notify: DEFAULT_NOTIFY };
+// Slack (models/slack.service.js): an incoming webhook, notified per monitor or per group.
+//   notifySlow: slow counts as a problem too; showTargets: URLs / hosts and error texts in the messages.
+const SLACK_LEVELS = ['monitor', 'group'];
+const DEFAULT_SLACK = { enabled: false, webhookUrl: '', level: 'monitor', notifySlow: false, showTargets: true };
+// Don't notify: groups (0 = Ungrouped) and monitors left out of Slack and browser notifications, by id.
+// A muted group covers all of its monitors, also ones added to it later.
+const DEFAULT_MUTE = { groups: [], monitors: [] };
+const DEFAULTS = { theme: 'light', autoReset: DEFAULT_RESET, share: DEFAULT_SHARE, notify: DEFAULT_NOTIFY, slack: DEFAULT_SLACK, mute: DEFAULT_MUTE };
 
 let cache = null;
 
@@ -29,6 +36,16 @@ async function write(next) {
   return next;
 }
 
+// A list of distinct ids (whole numbers >= 0).
+const ids = (list) => Array.from(new Set((Array.isArray(list) ? list : []).map(Number).filter((n) => Number.isInteger(n) && n >= 0)));
+const muteFrom = (m) => ({ groups: ids(m && m.groups), monitors: ids(m && m.monitors) });
+
+/** Whether a monitor ({ id, groupId }) is left out of notifications by `mute` (the settings' mute). */
+exports.isMuted = function (mute, m) {
+  if (!mute || !m) return false;
+  return mute.monitors.includes(m.id) || mute.groups.includes(m.groupId || 0);
+};
+
 exports.get = async function () {
   if (cache) return cache;
   const row = await get('SELECT value FROM app_meta WHERE key = ?', [KEY]);
@@ -37,7 +54,9 @@ exports.get = async function () {
   cache = Object.assign({}, DEFAULTS, stored, {
     autoReset: Object.assign({}, DEFAULT_RESET, stored.autoReset || {}),
     share: Object.assign({}, DEFAULT_SHARE, stored.share || {}),
-    notify: Object.assign({}, DEFAULT_NOTIFY, stored.notify || {})
+    notify: Object.assign({}, DEFAULT_NOTIFY, stored.notify || {}),
+    slack: Object.assign({}, DEFAULT_SLACK, stored.slack || {}),
+    mute: muteFrom(stored.mute)
   });
   if (!THEMES.includes(cache.theme)) cache.theme = DEFAULTS.theme;
   return cache;
@@ -73,7 +92,20 @@ exports.save = async function (body, username) {
     autoReset = Object.assign({}, cur.autoReset, { enabled, everyDays, at, checks, events }, changed ? { since: new Date().toISOString(), lastRunAt: null } : {});
   }
   const notify = b.notify ? { health: b.notify.health !== false, public: b.notify.public !== false } : cur.notify;
-  return write(Object.assign({}, cur, { theme, autoReset, notify, updatedBy: username || '', updatedAt: new Date().toISOString() }));
+
+  let slack = cur.slack;
+  if (b.slack) {
+    const k = b.slack;
+    const level = String(k.level || 'monitor');
+    if (!SLACK_LEVELS.includes(level)) throw invalid('Slack: choose Monitor level or Group level.');
+    // A blank URL keeps the saved one (the page only sees it masked).
+    const webhookUrl = k.webhookUrl ? require('./slack.service').validUrl(k.webhookUrl) : cur.slack.webhookUrl;
+    const enabled = !!k.enabled;
+    if (enabled && !webhookUrl) throw invalid('Slack: enter the incoming webhook URL.');
+    slack = { enabled, webhookUrl, level, notifySlow: !!k.notifySlow, showTargets: k.showTargets !== false };
+  }
+  const mute = b.mute ? muteFrom(b.mute) : cur.mute;
+  return write(Object.assign({}, cur, { theme, autoReset, notify, slack, mute, updatedBy: username || '', updatedAt: new Date().toISOString() }));
 };
 
 /** Records an automatic reset that ran. */

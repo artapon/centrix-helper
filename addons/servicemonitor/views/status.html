@@ -527,7 +527,7 @@
           before.forEach(function (s) { old[s.ref] = s; });
           after.forEach(function (s) {
             var p = old[s.ref];
-            if (!p || p.status === s.status) return;
+            if (!p || p.status === s.status || s.quiet) return;   // quiet: in Settings > Don't notify
             if (s.status === 'down') vm.notifyOne(s, 'Down: ' + s.name, (s.error || 'Not answering') + ' · ' + vm.dayTime(s.lastChangeAt || new Date().toISOString()), true);
             else if (p.status === 'down' && (s.status === 'up' || s.status === 'slow')) {
               vm.notifyOne(s, 'Back up: ' + s.name, p.lastChangeAt ? 'Was down for ' + vm.span(Date.now() - new Date(p.lastChangeAt).getTime()) : 'Answering again', false);

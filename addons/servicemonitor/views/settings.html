@@ -82,7 +82,88 @@
       <div class="sms-card-body">
         <label class="sms-check"><input type="checkbox" v-model="nt.health"> <span><b>Service Health</b> <small>offer the bell to signed-in users</small></span></label>
         <label class="sms-check"><input type="checkbox" v-model="nt.public"> <span><b>Public status page</b> <small>offer the bell to visitors of the shared link</small></span></label>
-        <p class="sms-note"><i class="fas fa-info-circle"></i> Turned off, the bell is hidden and no notifications are sent from that page. While notifications are on, the page keeps checking in a background tab.</p>
+        <p class="sms-note"><i class="fas fa-info-circle"></i> Turned off, the bell is hidden and no notifications are sent from that page. While notifications are on, the page keeps checking in a background tab. Monitors under Don't notify are skipped.</p>
+      </div>
+    </section>
+
+    <!-- Slack notifications -->
+    <section class="sms-card">
+      <div class="sms-card-head is-row">
+        <div>
+          <h2><i class="fab fa-slack" aria-hidden="true"></i> Slack notifications</h2>
+          <p>Posts to a Slack channel when monitors go down and when they are back up, through an incoming webhook (Slack › Apps › Incoming Webhooks › Add to Slack, then pick the channel).</p>
+        </div>
+        <label class="sms-switch-label"><input type="checkbox" class="sms-switch" v-model="sk.enabled" aria-label="Slack notifications"><span>{{ sk.enabled ? 'On' : 'Off' }}</span></label>
+      </div>
+      <div class="sms-card-body" :class="{ 'is-off': !sk.enabled }">
+        <label class="sms-field">Webhook URL
+          <small v-if="current.slack.webhookSet">Saved: <span class="sms-mono">{{ current.slack.webhookHint }}</span> — leave blank to keep it.</small>
+          <input v-model.trim="sk.webhookUrl" type="url" class="sms-input sms-mono" autocomplete="off" spellcheck="false"
+                 :placeholder="current.slack.webhookSet ? 'Leave blank to keep the saved webhook' : 'https://hooks.slack.com/services/T000/B000/XXXX'">
+        </label>
+
+        <fieldset class="sms-modes">
+          <legend class="sms-field">Notify level</legend>
+          <label class="sms-mode" :class="{ 'is-on': sk.level === 'monitor' }"><input type="radio" value="monitor" v-model="sk.level">
+            <span><b><i class="fas fa-heartbeat" aria-hidden="true"></i> Monitor level</b><small>A message for each monitor when it goes down and when it is back up, with how long it was down. When more than 10 change at once, one summary.</small></span></label>
+          <label class="sms-mode" :class="{ 'is-on': sk.level === 'group' }"><input type="radio" value="group" v-model="sk.level">
+            <span><b><i class="fas fa-layer-group" aria-hidden="true"></i> Group level</b><small>A message for each group when its state changes — all up, partly down, all down — listing the monitors with a problem. Quieter for large groups.</small></span></label>
+        </fieldset>
+
+        <div class="sms-field">Options
+          <label class="sms-check"><input type="checkbox" v-model="sk.notifySlow"> <span><b>Notify slow too</b> <small>a monitor slower than its slow threshold counts as a problem</small></span></label>
+          <label class="sms-check"><input type="checkbox" v-model="sk.showTargets"> <span><b>Show targets and errors</b> <small>URLs, hosts and error texts in the messages</small></span></label>
+        </div>
+
+        <div class="sms-row is-center">
+          <button type="button" class="sms-btn" @click="testSlack" :disabled="skTest.running || (!sk.webhookUrl && !current.slack.webhookSet)">
+            <i class="fas" :class="skTest.running ? 'fa-spinner fa-spin' : 'fa-paper-plane'" aria-hidden="true"></i> Send test message
+          </button>
+          <span v-if="skTest.ok" class="sms-meta"><i class="fas fa-check-circle" style="color: var(--up-text)"></i> Sent. Check the Slack channel.</span>
+          <span v-else-if="lastSlack.sentAt" class="sms-meta">Last message sent {{ when(lastSlack.sentAt) }}</span>
+        </div>
+        <div v-if="skTest.error" class="sms-msg is-error" role="alert"><i class="fas fa-exclamation-triangle"></i> {{ skTest.error }}</div>
+        <div v-else-if="lastSlack.error && !skTest.ok" class="sms-msg is-error" role="alert"><i class="fas fa-exclamation-triangle"></i> The last message failed {{ when(lastSlack.errorAt) }}: {{ lastSlack.error }}</div>
+        <p class="sms-note"><i class="fas fa-info-circle"></i> Changes are gathered for 5 seconds, so monitors failing together arrive together. Retries count as up: a message is sent only once a monitor is really down. Paused monitors and those under Don't notify are left out. The webhook is not in backups.</p>
+      </div>
+    </section>
+
+    <!-- Don't notify: groups and monitors left out of Slack and browser notifications -->
+    <section class="sms-card">
+      <div class="sms-card-head">
+        <h2><i class="fas fa-bell-slash" aria-hidden="true"></i> Don't notify</h2>
+        <p>Groups and monitors left out of Slack and browser notifications. They are still checked and still show on the pages and in Incidents. A group covers all of its monitors, also ones added to it later.</p>
+      </div>
+      <div class="sms-card-body">
+        <div v-if="!muteTree.length && !mtQuery" class="sms-note"><i class="fas fa-info-circle"></i> No monitors yet.</div>
+        <template v-else>
+          <div class="sms-row is-center">
+            <input v-model.trim="mtQuery" type="search" class="sms-input sms-mute-search" placeholder="Find a group or monitor" aria-label="Find a group or monitor">
+            <span class="sms-meta">{{ muteSummary }}</span>
+            <button v-if="mt.groups.length || mt.monitors.length" type="button" class="sms-link" @click="mt = { groups: [], monitors: [] }">Notify all</button>
+          </div>
+          <div class="sms-mute">
+            <div v-if="!muteTree.length" class="sms-mute-empty">Nothing matches "{{ mtQuery }}".</div>
+            <div v-for="g in muteTree" :key="g.id" class="sms-mute-group" :class="{ 'is-muted': g.muted }">
+              <div class="sms-mute-head">
+                <button type="button" class="sms-mute-caret" :aria-expanded="g.open ? 'true' : 'false'" :aria-label="(g.open ? 'Hide' : 'Show') + ' the monitors of ' + g.name" @click="toggleOpen(g.id)" :disabled="!g.monitors.length">
+                  <i class="fas" :class="g.open ? 'fa-chevron-down' : 'fa-chevron-right'" aria-hidden="true"></i>
+                </button>
+                <label class="sms-check">
+                  <input type="checkbox" :checked="g.muted" @change="toggleMute('groups', g.id)">
+                  <span class="sms-mute-dot" :style="{ background: g.color || 'var(--sm-muted)' }" aria-hidden="true"></span>
+                  <span><b>{{ g.name }}</b> <small>{{ g.total }} monitor{{ g.total === 1 ? '' : 's' }}<template v-if="g.muted"> · not notified</template><template v-else-if="g.mutedCount"> · {{ g.mutedCount }} not notified</template></small></span>
+                </label>
+              </div>
+              <div v-if="g.open && g.monitors.length" class="sms-mute-list">
+                <label v-for="m in g.monitors" :key="m.id" class="sms-check" :title="g.muted ? 'The whole group is not notified' : ''">
+                  <input type="checkbox" :checked="g.muted || m.muted" :disabled="g.muted" @change="toggleMute('monitors', m.id)">
+                  <span>{{ m.name }} <small v-if="!m.enabled">paused</small></span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </template>
       </div>
     </section>
 
@@ -253,7 +334,7 @@
   .sms-card-head h2 { margin: 0; font-size: 16px; font-weight: 600; }
   .sms-card-head p { margin: 2px 0 0; font-size: 13px; color: var(--sm-muted); }
   .sms-card-body { padding: 16px 20px 18px; display: flex; flex-direction: column; gap: 16px; }
-  .sms-card-body.is-off .sms-row, .sms-card-body.is-off .sms-field, .sms-card-body.is-off .sms-sched > div:first-child { opacity: .55; }
+  .sms-card-body.is-off .sms-row, .sms-card-body.is-off .sms-field, .sms-card-body.is-off .sms-sched > div:first-child, .sms-card-body.is-off .sms-modes { opacity: .55; }
 
   .sms-themes { border: 0; margin: 0; padding: 16px 20px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; min-width: 0; }
   @media (max-width: 760px) { .sms-themes { grid-template-columns: 1fr; } }
@@ -294,6 +375,9 @@
   .sms-unit input { flex: 1; min-width: 0; height: 38px; border: 0; padding: 0 12px; font-family: var(--sm-mono); font-size: 14px; background: transparent; color: var(--sm-text); outline: 0; }
   .sms-unit > span { padding: 0 12px; display: inline-flex; align-items: center; background: var(--sm-sunken); border-left: 1px solid var(--sm-input); color: var(--sm-text-2); font-weight: 400; }
   .sms-unit:focus-within, .sms-time:focus { border-color: var(--sm-accent); box-shadow: 0 0 0 3px var(--sm-accent-soft); }
+  .sms-input { height: 40px; width: 100%; max-width: 640px; padding: 0 12px; border: 1px solid var(--sm-input); border-radius: 8px; background: var(--sm-surface); color: var(--sm-text); font-size: 13px; outline: 0; font-weight: 400; }
+  .sms-input:focus { border-color: var(--sm-accent); box-shadow: 0 0 0 3px var(--sm-accent-soft); }
+  .sms-card-head h2 .fa-slack { color: var(--sm-muted); }
   .sms-time { height: 40px; width: 140px; padding: 0 12px; border: 1px solid var(--sm-input); border-radius: 8px; background: var(--sm-surface); color: var(--sm-text); font-family: var(--sm-mono); font-size: 14px; outline: 0; }
   .sms-check { display: flex; align-items: center; gap: 8px; margin: 0; font-weight: 400; cursor: pointer; }
   .sms-check b { font-weight: 600; color: var(--sm-text); } .sms-check small { color: var(--sm-muted); font-size: 12px; }
@@ -309,6 +393,19 @@
   .sms-sched small { font-size: 12px; font-weight: 600; color: var(--sm-text-2); }
   .sms-sched b { font-family: var(--sm-mono); font-size: 16px; font-weight: 600; }
   .sms-sched span { font-size: 12px; color: var(--sm-muted); }
+  .sms-mute-search { max-width: 320px; height: 36px; }
+  .sms-mute { border: 1px solid var(--sm-line); border-radius: 10px; max-height: 420px; overflow: auto; }
+  .sms-mute-group + .sms-mute-group { border-top: 1px solid var(--sm-line); }
+  .sms-mute-head { display: flex; align-items: center; gap: 4px; padding: 8px 12px 8px 6px; }
+  .sms-mute-group.is-muted .sms-mute-head { background: var(--sm-sunken); }
+  .sms-mute-caret { width: 28px; height: 28px; flex: none; border: 0; background: none; border-radius: 6px; color: var(--sm-muted); font-size: 11px; cursor: pointer; }
+  .sms-mute-caret:hover:not(:disabled) { background: var(--sm-sunken); }
+  .sms-mute-caret:disabled { opacity: .3; cursor: default; }
+  .sms-mute-caret:focus-visible { outline: 2px solid var(--sm-accent); outline-offset: 1px; }
+  .sms-mute-dot { width: 10px; height: 10px; flex: none; border-radius: 3px; }
+  .sms-mute-list { display: flex; flex-direction: column; gap: 8px; padding: 4px 12px 12px 58px; font-size: 13px; }
+  .sms-mute-list .sms-check input:disabled + span { color: var(--sm-muted); }
+  .sms-mute-empty { padding: 14px; font-size: 13px; color: var(--sm-muted); }
   .sms-note { margin: 0; font-size: 12px; color: var(--sm-muted); display: flex; gap: 6px; align-items: baseline; }
 
   .sms-row.is-center { align-items: center; }
@@ -370,7 +467,15 @@
     // The fields of an Uptime Kuma monitor the import reads; the rest (heartbeats, notifications, ...) stays in the browser.
     var KUMA_FIELDS = ['id', 'name', 'type', 'url', 'method', 'hostname', 'port', 'maxretries', 'active', 'interval', 'retryInterval', 'timeout', 'keyword',
       'invertKeyword', 'maxredirects', 'expiryNotification', 'ignoreTls', 'upsideDown', 'accepted_statuscodes', 'dns_resolve_type', 'dns_resolve_server', 'parent', 'description', 'authMethod'];
+    // ids sorted, so a change is a JSON difference
+    var mtFrom = function (m) {
+      m = m || {};
+      var ids = function (l) { return (l || []).slice().sort(function (a, b) { return a - b; }); };
+      return { groups: ids(m.groups), monitors: ids(m.monitors) };
+    };
     var ntFrom = function (n) { n = n || {}; return { health: n.health !== false, public: n.public !== false }; };
+    // webhookUrl: a new one to save; blank keeps the saved one (the page only gets it masked)
+    var skFrom = function (k) { k = k || {}; return { enabled: !!k.enabled, webhookUrl: '', level: k.level === 'group' ? 'group' : 'monitor', notifySlow: !!k.notifySlow, showTargets: k.showTargets !== false }; };
     var rstBlank = function () { return { file: '', text: '', plan: null, mode: 'add', loading: false, running: false, error: '', result: null, includeExisting: false, settings: false, confirm: false }; };
     var kumaBlank = function () { return { file: '', backup: null, plan: null, loading: false, importing: false, error: '', result: null, includeExisting: false }; };
     var pad = function (n) { return (n < 10 ? '0' : '') + n; };
@@ -382,14 +487,42 @@
     Page.setup({
       data: function () {
         var mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
-        return { TYPE_AS: TYPE_AS, kuma: kumaBlank(), rst: rstBlank(), THEMES: THEMES, choice: 'light', current: { theme: 'light', autoReset: {} }, ar: arFrom(), nt: ntFrom(), saving: false, error: '', notice: '', sysDark: !!(mq && mq.matches), now: Date.now() };
+        return { TYPE_AS: TYPE_AS, kuma: kumaBlank(), rst: rstBlank(), THEMES: THEMES, choice: 'light', current: { theme: 'light', autoReset: {}, slack: {}, mute: {} }, ar: arFrom(), nt: ntFrom(), mt: mtFrom(), mtQuery: '', mtOpen: [], sk: skFrom(), skTest: { running: false, ok: false, error: '' }, lastSlack: {}, saving: false, error: '', notice: '', sysDark: !!(mq && mq.matches), now: Date.now() };
       },
       // The saved settings come with the page (Page.data.saved), read once it exists.
       created: function () { this.load(this.saved); },
       computed: {
         changed: function () {
           return this.choice !== this.current.theme || JSON.stringify(this.ar) !== JSON.stringify(arFrom(this.current.autoReset)) ||
-            JSON.stringify(this.nt) !== JSON.stringify(ntFrom(this.current.notify));
+            JSON.stringify(this.nt) !== JSON.stringify(ntFrom(this.current.notify)) ||
+            JSON.stringify(this.mt) !== JSON.stringify(mtFrom(this.current.mute)) ||
+            JSON.stringify(this.sk) !== JSON.stringify(skFrom(this.current.slack));
+        },
+        // Don't notify: the groups (and Ungrouped, id 0) with their monitors, narrowed by the search.
+        // A group is open when opened by hand, when it has a monitor left out (see load) and while searching.
+        muteTree: function () {
+          var vm = this, t = vm.targets || { groups: [], monitors: [] }, q = vm.mtQuery.toLowerCase(), known = {};
+          var has = function (v) { return String(v || '').toLowerCase().indexOf(q) >= 0; };
+          t.groups.forEach(function (g) { known[g.id] = true; });
+          var list = t.groups.concat(t.monitors.some(function (m) { return !known[m.groupId]; }) ? [{ id: 0, name: 'Ungrouped', color: '' }] : []);
+          return list.map(function (g) {
+            var all = t.monitors.filter(function (m) { return (known[m.groupId] ? m.groupId : 0) === g.id; });
+            var mons = q && !has(g.name) ? all.filter(function (m) { return has(m.name); }) : all;
+            return {
+              id: g.id, name: g.name, color: g.color, total: all.length,
+              muted: vm.mt.groups.indexOf(g.id) >= 0,
+              mutedCount: all.filter(function (m) { return vm.mt.monitors.indexOf(m.id) >= 0; }).length,
+              open: !!q || vm.mtOpen.indexOf(g.id) >= 0,
+              shown: !q || has(g.name) || mons.length > 0,
+              monitors: mons.map(function (m) { return { id: m.id, name: m.name, enabled: m.enabled !== false, muted: vm.mt.monitors.indexOf(m.id) >= 0 }; })
+            };
+          }).filter(function (g) { return g.shown; });
+        },
+        muteSummary: function () {
+          var t = this.targets || { groups: [], monitors: [] }, mt = this.mt, known = {};
+          t.groups.forEach(function (g) { known[g.id] = true; });
+          var n = t.monitors.filter(function (m) { return mt.monitors.indexOf(m.id) >= 0 || mt.groups.indexOf(known[m.groupId] ? m.groupId : 0) >= 0; }).length;
+          return n ? n + ' of ' + t.monitors.length + ' monitor' + (t.monitors.length === 1 ? '' : 's') + ' not notified' : 'All monitors are notified';
         },
         // The page previews the theme being chosen.
         isDark: function () { return this.choice === 'dark' || (this.choice === 'system' && this.sysDark); },
@@ -423,7 +556,9 @@
       watch: {
         choice: function () { this.notice = ''; this.error = ''; },
         ar: { deep: true, handler: function () { this.notice = ''; this.error = ''; } },
-        nt: { deep: true, handler: function () { this.notice = ''; this.error = ''; } }
+        nt: { deep: true, handler: function () { this.notice = ''; this.error = ''; } },
+        mt: { deep: true, handler: function () { this.notice = ''; this.error = ''; } },
+        sk: { deep: true, handler: function () { this.notice = ''; this.error = ''; this.skTest = { running: false, ok: false, error: '' }; } }
       },
       methods: {
         load: function (s) {
@@ -431,8 +566,38 @@
           this.choice = this.current.theme;
           this.ar = arFrom(this.current.autoReset);
           this.nt = ntFrom(this.current.notify);
+          this.mt = mtFrom(this.current.mute);
+          // open the groups with a monitor left out, so it shows
+          var t = this.targets || { groups: [], monitors: [] }, mt = this.mt, open = this.mtOpen.slice(), known = {};
+          t.groups.forEach(function (g) { known[g.id] = true; });
+          t.monitors.forEach(function (m) {
+            var g = known[m.groupId] ? m.groupId : 0;
+            if (mt.monitors.indexOf(m.id) >= 0 && open.indexOf(g) < 0) open.push(g);
+          });
+          this.mtOpen = open;
+          this.sk = skFrom(this.current.slack);
+          this.lastSlack = this.current.slack.last || {};
         },
         revert: function () { this.load(this.current); },
+        toggleOpen: function (id) {
+          var i = this.mtOpen.indexOf(id);
+          if (i >= 0) this.mtOpen.splice(i, 1); else this.mtOpen.push(id);
+        },
+        // kind: 'groups' | 'monitors'
+        toggleMute: function (kind, id) {
+          var next = { groups: this.mt.groups.slice(), monitors: this.mt.monitors.slice() }, l = next[kind], i = l.indexOf(id);
+          if (i >= 0) l.splice(i, 1); else l.push(id);
+          this.mt = mtFrom(next);
+        },
+        // Sends a test message to the URL being entered (or the saved one), as the chosen level.
+        testSlack: function () {
+          var vm = this;
+          vm.skTest = { running: true, ok: false, error: '' };
+          vm.post('/service-monitor/settings/slack/test', { webhookUrl: vm.sk.webhookUrl, level: vm.sk.level })
+            .then(function (d) { vm.skTest.ok = true; vm.lastSlack = d.last || {}; })
+            .catch(function (err) { vm.skTest.error = err.message; })
+            .then(function () { vm.skTest.running = false; });
+        },
         post: function (url, body) {
           return fetch(url, {
             method: 'POST', credentials: 'same-origin',
@@ -524,7 +689,7 @@
           fetch('/service-monitor/settings', {
             method: 'POST', credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-            body: JSON.stringify({ theme: vm.choice, autoReset: vm.ar, notify: vm.nt })
+            body: JSON.stringify({ theme: vm.choice, autoReset: vm.ar, notify: vm.nt, slack: vm.sk, mute: vm.mt })
           }).then(function (r) { return r.json().then(function (d) { if (!r.ok || d.error) throw new Error(d.error || ('HTTP ' + r.status)); return d; }); })
             .then(function (d) {
               vm.load(d);

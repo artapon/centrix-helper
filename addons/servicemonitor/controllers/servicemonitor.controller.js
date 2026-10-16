@@ -33,7 +33,9 @@ exports.index = async function (req, res) {
 
 exports.data = async function (req, res) {
   try {
-    res.json(await model.dashboard());
+    const [d, s] = await Promise.all([model.dashboard(), settings.get()]);
+    // the monitors in Settings > Don't notify: the bell skips them
+    res.json(Object.assign({}, d, { muted: d.services.filter((m) => settings.isMuted(s.mute, m)).map((m) => m.id) }));
   } catch (err) { fail(res, err, 'reading of the services'); }
 };
 
@@ -166,20 +168,37 @@ exports.reset = async function (req, res) {
 const settingsView = (s) => {
   const next = settings.nextReset(s.autoReset);
   return {
-    theme: s.theme, notify: s.notify, updatedBy: s.updatedBy || '', updatedAt: s.updatedAt || '',
-    autoReset: Object.assign({}, s.autoReset, { nextAt: next ? next.toISOString() : null })
+    theme: s.theme, notify: s.notify, mute: s.mute, updatedBy: s.updatedBy || '', updatedAt: s.updatedAt || '',
+    autoReset: Object.assign({}, s.autoReset, { nextAt: next ? next.toISOString() : null }),
+    // the webhook URL is a secret: the page gets it masked, and sends a new one only to change it
+    slack: {
+      enabled: s.slack.enabled, level: s.slack.level, notifySlow: s.slack.notifySlow, showTargets: s.slack.showTargets,
+      webhookSet: !!s.slack.webhookUrl, webhookHint: slack.mask(s.slack.webhookUrl), last: slack.status()
+    }
   };
 };
+const slack = require('../models/slack.service');
 
 exports.settingsIndex = async function (req, res) {
-  const s = await settings.get();
-  return res.renderPage(view('settings'), { title: 'Service Monitor Settings', theme: s.theme, saved: settingsView(s), checkDays: model.CHECK_DAYS });
+  const [s, d] = await Promise.all([settings.get(), model.dashboard()]);
+  // what Don't notify can pick from
+  const targets = { groups: d.groups.map((g) => ({ id: g.id, name: g.name, color: g.color })), monitors: d.services.map((m) => ({ id: m.id, name: m.name, groupId: m.groupId || 0, enabled: m.enabled })) };
+  return res.renderPage(view('settings'), { title: 'Service Monitor Settings', theme: s.theme, saved: settingsView(s), targets, checkDays: model.CHECK_DAYS });
 };
 
 exports.settingsSave = async function (req, res) {
   try {
     res.json(settingsView(await settings.save(req.body, username(req))));
   } catch (err) { fail(res, err, 'saving of the settings'); }
+};
+
+// Settings > Slack > Send test: to the URL being entered, or the saved one.
+exports.slackTest = async function (req, res) {
+  try {
+    const b = req.body || {};
+    await slack.test(b.webhookUrl, b.level, username(req));
+    res.json({ ok: true, last: slack.status() });
+  } catch (err) { fail(res, err, 'Slack test'); }
 };
 
 // ---- Settings > Import from Uptime Kuma (administrators only) ----
@@ -314,7 +333,7 @@ exports.publicData = async function (req, res) {
       services: d.services.map((m) => Object.assign({
         ref: ref.get(m.id), group: known.has(m.groupId) ? m.groupId : 0, name: m.name, kind: kind(m), status: m.status,
         lastMs: m.lastMs, avgMs24: m.avgMs24, uptime24: m.uptime24, uptime7: m.uptime7, lastCheckedAt: m.lastCheckedAt, lastChangeAt: m.lastChangeAt,
-        spark: m.spark.map((c) => ({ s: c.s, ms: c.ms, at: c.at }))
+        quiet: settings.isMuted(s.mute, m), spark: m.spark.map((c) => ({ s: c.s, ms: c.ms, at: c.at }))
       }, share.showTargets ? { target: m.target, error: m.status === 'up' ? '' : m.lastError } : {})),
       events: d.events.slice(0, 20).map((e) => Object.assign({ ref: ref.get(e.serviceId) || 0, name: e.name, at: e.at, from: e.from, to: e.to },
         share.showTargets ? { message: e.message } : {}))

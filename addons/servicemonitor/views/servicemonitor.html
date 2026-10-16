@@ -144,8 +144,33 @@
       </section>
     </main>
     <div v-if="beatTip" class="smon-beat-tip" :style="{ left: beatTip.x + 'px', top: beatTip.y + 'px' }" role="tooltip">{{ beatTip.text }}</div>
+  </div>
 
-    <!-- Right rail: only while something is expiring (the groups take the full width otherwise) -->
+  <!-- Under the groups: Incidents, with Expiring soon on their right -->
+  <div v-if="data && (services.length || expiring.length)" class="smon-bottom">
+    <section v-if="services.length" class="smon-card is-flush smon-incidents">
+      <div class="smon-card-head is-pad"><h2>Incidents</h2><small>latest status changes</small></div>
+      <div v-if="!incidents.length" class="smon-empty is-small is-pad">No status changes yet.</div>
+      <div v-else class="smon-table-wrap">
+        <table class="smon-tbl">
+          <thead><tr><th>When</th><th>Monitor</th><th>Change</th><th>Cause</th><th>Duration</th></tr></thead>
+          <tbody>
+            <tr v-for="e in incidents" :key="e.id" class="smon-inc-row" tabindex="0" @click="openDetail(byId[e.serviceId])" @keydown.enter="openDetail(byId[e.serviceId])">
+              <td class="smon-mono smon-nowrap" :title="when(e.at)">{{ dayTime(e.at) }}</td>
+              <td><span class="smon-inc-mon"><span class="smon-dot" :class="'is-' + e.to"></span><b>{{ e.name }}</b></span></td>
+              <td class="smon-nowrap"><span class="smon-badge is-sm" :class="'is-' + e.to">{{ statusText(e.to) }}</span> <span class="smon-text-2">{{ e.change }}</span></td>
+              <td class="smon-text-2">{{ e.message || '—' }}</td>
+              <td class="smon-nowrap">
+                <span v-if="e.ongoing" class="smon-dur is-ongoing">Ongoing · {{ e.duration }}</span>
+                <span v-else-if="e.resolved" class="smon-resolved">{{ e.resolved }}</span>
+                <span v-else class="smon-muted">—</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+    <!-- Right of Incidents: only while something is expiring (Incidents take the full width otherwise) -->
     <aside v-if="expiring.length" class="smon-rail">
       <!-- Only while a certificate or domain is past its warning / critical days -->
       <section v-if="expiring.length" class="smon-card">
@@ -171,30 +196,6 @@
       </section>
     </aside>
   </div>
-
-  <!-- Incidents: full width under the groups -->
-  <section v-if="data && services.length" class="smon-card is-flush smon-incidents">
-    <div class="smon-card-head is-pad"><h2>Incidents</h2><small>latest status changes</small></div>
-    <div v-if="!incidents.length" class="smon-empty is-small is-pad">No status changes yet.</div>
-    <div v-else class="smon-table-wrap">
-      <table class="smon-tbl">
-        <thead><tr><th>When</th><th>Monitor</th><th>Change</th><th>Cause</th><th>Duration</th></tr></thead>
-        <tbody>
-          <tr v-for="e in incidents" :key="e.id" class="smon-inc-row" tabindex="0" @click="openDetail(byId[e.serviceId])" @keydown.enter="openDetail(byId[e.serviceId])">
-            <td class="smon-mono smon-nowrap" :title="when(e.at)">{{ dayTime(e.at) }}</td>
-            <td><span class="smon-inc-mon"><span class="smon-dot" :class="'is-' + e.to"></span><b>{{ e.name }}</b></span></td>
-            <td class="smon-nowrap"><span class="smon-badge is-sm" :class="'is-' + e.to">{{ statusText(e.to) }}</span> <span class="smon-text-2">{{ e.change }}</span></td>
-            <td class="smon-text-2">{{ e.message || '—' }}</td>
-            <td class="smon-nowrap">
-              <span v-if="e.ongoing" class="smon-dur is-ongoing">Ongoing · {{ e.duration }}</span>
-              <span v-else-if="e.resolved" class="smon-resolved">{{ e.resolved }}</span>
-              <span v-else class="smon-muted">—</span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
 
   <!-- Row / group actions menu -->
   <div v-if="menu" class="smon-menu" role="menu" :style="{ top: menu.y + 'px', left: menu.x + 'px' }" @click.stop>
@@ -763,8 +764,18 @@
   /* layout */
   .smon-layout { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
   .smon-main { flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .smon-bottom { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+  .smon-bottom > .smon-incidents { flex: 999 1 640px; min-width: 0; }
   .smon-rail { flex: 1 1 300px; max-width: 380px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
   @media (max-width: 1000px) { .smon-rail { max-width: none; } }
+  /* Side by side (640 + 16 + 300): Incidents take the height of Expiring soon and scroll inside it */
+  .smon-bottom { container-type: inline-size; }
+  @container (min-width: 956px) {
+    .smon-bottom > .smon-incidents:not(:only-child) { align-self: stretch; display: flex; flex-direction: column; }
+    .smon-bottom > .smon-incidents:not(:only-child) .smon-table-wrap { flex: 1 1 auto; height: 0; min-height: 200px; max-height: none; }
+    .smon-bottom > .smon-rail { align-self: stretch; }
+    .smon-rail > .smon-card:last-child { flex: 1 1 auto; }
+  }
 
   /* toolbar */
   .smon-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -1747,13 +1758,15 @@
           });
         },
         // Compares the monitors before and after a load: down, and back up from down, become notifications.
+        // Monitors in Settings > Don't notify (data.muted) are skipped.
         notifyChanges: function (before, after) {
           if (!this.notifyActive) return;
-          var vm = this, old = {};
+          var vm = this, old = {}, muted = {};
           before.forEach(function (s) { old[s.id] = s; });
+          (vm.data.muted || []).forEach(function (id) { muted[id] = true; });
           after.forEach(function (s) {
             var p = old[s.id];
-            if (!p || p.status === s.status) return;
+            if (!p || p.status === s.status || muted[s.id]) return;
             if (s.status === 'down') vm.notifyOne(s, 'Down: ' + s.name, (s.lastError || 'Not answering') + ' · ' + vm.dayTime(s.lastChangeAt || new Date().toISOString()), 'down');
             else if (p.status === 'down' && (s.status === 'up' || s.status === 'slow')) {
               vm.notifyOne(s, 'Back up: ' + s.name, (p.lastChangeAt ? 'Was down for ' + vm.span(Date.now() - new Date(p.lastChangeAt).getTime()) : 'Answering again') + (s.lastMs != null ? ' · ' + vm.fmtMs(s.lastMs) : ''), 'up');

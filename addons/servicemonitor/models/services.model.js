@@ -451,6 +451,8 @@ exports.record = async function (s, result, cert, domain) {
   if (settled !== s.settled && s.settled !== 'pending') {
     await run('INSERT INTO sm_events (service_id, at, from_status, to_status, message) VALUES (?, ?, ?, ?, ?)',
       [s.id, at, s.settled, settled, result.error || (result.code ? 'HTTP ' + result.code : '')]);
+    // Settings > Slack (it gathers the changes of a few seconds before posting)
+    require('./slack.service').changed({ id: s.id, name: s.name, groupId: s.group_id, target: s.target, from: s.settled, to: settled, message: result.error || '', at });
   }
   const sets = ['status = ?', 'settled = ?', 'fail_count = ?', 'last_checked_at = ?', 'last_ms = ?', 'last_code = ?', 'last_error = ?'];
   const params = [status, settled, fails, at, result.ms == null ? null : result.ms, result.code || null, error];

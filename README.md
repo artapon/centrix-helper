@@ -1,4 +1,4 @@
-# Centrix HIS Helper Tools
+# Centrix Suite
 
 ## Project structure (HMVC)
 

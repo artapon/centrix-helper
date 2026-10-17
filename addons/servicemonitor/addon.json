@@ -2,7 +2,7 @@
   "id": "servicemonitor",
   "name": "Service Monitor",
   "version": "1.0.0",
-  "author": "Centrix HIS Helper Tools",
+  "author": "Centrix Suite",
   "category": "Monitoring",
   "icon": "fas fa-heartbeat",
   "summary": "Uptime monitoring for the hospital's systems: HTTP(S), TCP, ping and DNS checks in groups, with certificate and domain expiry, incidents and a shareable status page.",
@@ -23,7 +23,7 @@
     "Pause or resume all monitors of an organization at once",
     "Light, dark or device theme, full-screen mode for wall displays",
     "Built for many monitors: hourly totals, cached reads and up to 32 checks at the same time",
-    "Role permissions: view, Manage services, Import from Uptime Kuma, Check now and Reset statistics; Settings, Backup & restore and Share for administrators"
+    "Role permissions: view only (organizations, services, their history and incidents), or with Manage services, Import from Uptime Kuma, Check now and Reset statistics; Settings, Backup & restore and Share for administrators"
   ],
   "requires": [
     "SQLite for the monitors and their check history (no MongoDB connection needed)",
@@ -50,7 +50,7 @@
           {
             "key": "manage",
             "text": "Manage services",
-            "description": "Create, edit, pause and delete services, groups and organizations; pause or resume all monitors of an organization"
+            "description": "Create, edit, pause and delete services, groups and organizations; pause or resume all monitors of an organization. Without it (and the actions below) the pages are view only."
           },
           {
             "key": "import",

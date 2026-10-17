@@ -1,0 +1,199 @@
+/* PM2 Manager pages: colour tokens for light and dark (PM2 Manager > Settings), the add-on's own building
+   blocks (pm-*), and the Bootstrap parts the pages use, recoloured inside the add-on's panel (.pm2m).
+   The dark palette is pm2-admin's. The rest of the app keeps its look. */
+.pm2m {
+  --pm-bg: transparent; --pm-surface: #FFFFFF; --pm-sunken: #F8FAFC; --pm-line: #E5E7EB; --pm-line-2: #EEF0F3; --pm-input: #D1D5DB;
+  --pm-text: #0F172A; --pm-text-2: #334155; --pm-muted: #64748B; --pm-hover: rgba(15, 23, 42, .03);
+  --pm-accent: #4F46E5; --pm-accent-soft: rgba(79, 70, 229, .12);
+  --pm-green: #16A34A; --pm-amber: #D97706; --pm-red: #DC2626; --pm-indigo: #4F46E5; --pm-cyan: #0891B2;
+  --pm-track: rgba(15, 23, 42, .08); --pm-shadow: 0 1px 2px rgba(16, 24, 40, .05);
+  --pm-log-bg: #0F172A; --pm-log-text: #E2E8F0;
+  --pm-mono: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  color: var(--pm-text);
+  transition: background-color .25s ease, color .25s ease;
+}
+.pm2m.is-dark {
+  color-scheme: dark;
+  --pm-bg: #0D0D14; --pm-surface: #13131F; --pm-sunken: #1A1A2E; --pm-line: rgba(255, 255, 255, .08); --pm-line-2: rgba(255, 255, 255, .05); --pm-input: rgba(255, 255, 255, .16);
+  --pm-text: #F1F5F9; --pm-text-2: #CBD5E1; --pm-muted: #94A3B8; --pm-hover: rgba(255, 255, 255, .025);
+  --pm-accent: #6366F1; --pm-accent-soft: rgba(99, 102, 241, .16);
+  --pm-green: #22C55E; --pm-amber: #F59E0B; --pm-red: #EF4444; --pm-indigo: #818CF8; --pm-cyan: #06B6D4;
+  --pm-track: rgba(255, 255, 255, .07); --pm-shadow: none;
+  --pm-log-bg: #0A0A10; --pm-log-text: #E2E8F0;
+  background: var(--pm-bg); padding-top: 18px; padding-bottom: 28px;
+  min-height: calc(100vh - var(--topbar-h, 56px) - 48px);
+}
+/* Full screen: the panel alone fills the screen and scrolls on its own (light uses the app's page grey) */
+.pm2m:fullscreen { background: var(--pm-fs-bg, #F4F6FA); padding: 24px 32px 40px; overflow-y: auto; min-height: 0; }
+.pm2m:-webkit-full-screen { background: var(--pm-fs-bg, #F4F6FA); padding: 24px 32px 40px; overflow-y: auto; min-height: 0; }
+.pm2m.is-dark { --pm-fs-bg: #0D0D14; }
+/* Bootstrap puts the modal backdrop on <body>, outside the full-screen panel: dim behind dialogs here instead */
+.pm2m.is-fullscreen .modal { background: rgba(0, 0, 0, .55); }
+
+/* headings follow the theme (the app's h1-h6 use its own, always-light text colour) */
+.pm2m h1, .pm2m h2, .pm2m h3, .pm2m h4, .pm2m h5, .pm2m h6 { color: var(--pm-text); }
+.pm2m .text-muted { color: var(--pm-muted) !important; }
+.pm2m .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.pm2m code { font-family: var(--pm-mono); background: var(--pm-sunken); color: var(--pm-text-2); border: 1px solid var(--pm-line-2); border-radius: 5px; padding: 1px 6px; font-size: .82em; word-break: break-all; }
+
+/* ── Page head ─────────────────────────────────────────────────────────── */
+.pm-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.pm-head h1 { font-size: 1.35rem; font-weight: 700; margin: 2px 0; letter-spacing: -.01em; }
+.pm-head p { margin: 0; color: var(--pm-muted); font-size: .85rem; word-break: break-all; }
+.pm-back { font-size: .78rem; color: var(--pm-muted) !important; text-decoration: none !important; transition: color .15s; }
+.pm-back:hover { color: var(--pm-accent) !important; }
+.pm-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* ── Cards ─────────────────────────────────────────────────────────────── */
+.pm-card { background: var(--pm-surface); border: 1px solid var(--pm-line); border-radius: 12px; box-shadow: var(--pm-shadow); transition: border-color .2s ease, background-color .25s ease, transform .2s ease; }
+.pm-card-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px 16px; border-bottom: 1px solid var(--pm-line); }
+.pm-card-title { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: .92rem; margin: 0; }
+.pm-card-title i { color: var(--pm-accent); font-size: .8rem; }
+.pm-count { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--pm-accent-soft); color: var(--pm-accent); font-size: .68rem; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; }
+.pm-grow { flex: 1 1 auto; }
+
+@keyframes pmFadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+.pm-fade { animation: pmFadeUp .3s ease-out both; }
+
+/* ── Info bar ──────────────────────────────────────────────────────────── */
+.pm-infobar { display: flex; align-items: center; gap: 6px 18px; flex-wrap: wrap; margin-bottom: 14px; font-size: .78rem; }
+.pm-info { display: inline-flex; align-items: center; gap: 6px; color: var(--pm-text); font-weight: 600; min-width: 0; }
+.pm-info::before { content: ''; width: 12px; height: 12px; border-radius: 3px; background: var(--pm-accent); flex: none; }
+.pm-info small { font-size: .66rem; letter-spacing: .07em; text-transform: uppercase; color: var(--pm-muted); font-weight: 700; }
+.pm-info .pm-sep { color: var(--pm-muted); font-weight: 400; }
+
+/* ── Stat cards ────────────────────────────────────────────────────────── */
+.pm-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.pm-stat { padding: 14px; display: flex; flex-direction: column; gap: 8px; min-height: 104px; }
+.pm-stat:hover { border-color: var(--pm-input); }
+.pm-stat-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.pm-stat-label { font-size: .64rem; letter-spacing: .07em; text-transform: uppercase; font-weight: 700; color: var(--pm-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pm-stat-value { font-size: 1.65rem; font-weight: 700; line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums; transition: color .3s ease; }
+.pm-sub { font-size: .66rem; color: var(--pm-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.is-green { color: var(--pm-green); } .is-amber { color: var(--pm-amber); } .is-red { color: var(--pm-red); }
+.is-indigo { color: var(--pm-indigo); } .is-cyan { color: var(--pm-cyan); } .is-muted { color: var(--pm-muted); }
+.pm-tint { width: 28px; height: 28px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; flex: none; font-size: .78rem; border: 1px solid; }
+.pm-tint.is-green { background: rgba(34, 197, 94, .12); border-color: rgba(34, 197, 94, .22); }
+.pm-tint.is-amber { background: rgba(245, 158, 11, .12); border-color: rgba(245, 158, 11, .22); }
+.pm-tint.is-red { background: rgba(239, 68, 68, .12); border-color: rgba(239, 68, 68, .22); }
+.pm-tint.is-indigo { background: rgba(99, 102, 241, .12); border-color: rgba(99, 102, 241, .22); }
+.pm-tint.is-cyan { background: rgba(6, 182, 212, .12); border-color: rgba(6, 182, 212, .22); }
+.pm-bar { height: 3px; border-radius: 3px; background: var(--pm-track); overflow: hidden; }
+.pm-bar > span { display: block; height: 100%; border-radius: 3px; background: var(--pm-accent); transition: width .6s cubic-bezier(.22, 1, .36, 1), background-color .3s ease; }
+.pm-bar > span.is-warn { background: var(--pm-amber); }
+.pm-bar > span.is-crit { background: var(--pm-red); }
+
+/* ── Buttons ───────────────────────────────────────────────────────────── */
+.pm-btn { height: 30px; padding: 0 11px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border-radius: 6px; border: 1px solid var(--pm-line); background: var(--pm-surface);
+  color: var(--pm-text-2); font-size: .78rem; font-weight: 600; white-space: nowrap; cursor: pointer; text-decoration: none !important; line-height: 1;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease, transform .1s ease, opacity .15s ease; }
+.pm-btn:hover:not(:disabled) { background: var(--pm-sunken); color: var(--pm-text); }
+.pm-btn:active:not(:disabled) { transform: translateY(1px); }
+.pm-btn:focus-visible { outline: 2px solid var(--pm-accent); outline-offset: 2px; }
+.pm-btn:disabled { opacity: .45; cursor: default; }
+.pm-btn i { font-size: .74rem; }
+.pm-btn.is-primary { background: var(--pm-accent); border-color: var(--pm-accent); color: #FFFFFF; }
+.pm-btn.is-primary:hover:not(:disabled) { background: #4F46E5; border-color: #4F46E5; color: #FFFFFF; }
+.pm-btn.is-icon { width: 30px; padding: 0; }
+/* tonal: tinted background, coloured text (Reload / Restart / Stop / Reset) */
+.pm-btn.is-green, .pm-btn.is-amber, .pm-btn.is-red, .pm-btn.is-indigo { border-color: transparent; }
+.pm-btn.is-green { background: rgba(34, 197, 94, .12); color: var(--pm-green); }
+.pm-btn.is-amber { background: rgba(245, 158, 11, .12); color: var(--pm-amber); }
+.pm-btn.is-red { background: rgba(239, 68, 68, .12); color: var(--pm-red); }
+.pm-btn.is-indigo { background: rgba(99, 102, 241, .14); color: var(--pm-indigo); }
+.pm-btn.is-green:hover:not(:disabled) { background: rgba(34, 197, 94, .22); color: var(--pm-green); }
+.pm-btn.is-amber:hover:not(:disabled) { background: rgba(245, 158, 11, .22); color: var(--pm-amber); }
+.pm-btn.is-red:hover:not(:disabled) { background: rgba(239, 68, 68, .22); color: var(--pm-red); }
+.pm-btn.is-indigo:hover:not(:disabled) { background: rgba(99, 102, 241, .24); color: var(--pm-indigo); }
+.pm-actions { display: flex; gap: 4px; justify-content: flex-end; flex-wrap: wrap; }
+
+/* segmented filter */
+.pm-seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: 8px; background: var(--pm-sunken); border: 1px solid var(--pm-line); }
+.pm-seg button { border: 0; background: transparent; color: var(--pm-muted); font-size: .76rem; font-weight: 600; padding: 4px 10px; border-radius: 6px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; transition: background-color .15s ease, color .15s ease; }
+.pm-seg button:hover { color: var(--pm-text); }
+.pm-seg button.is-on { background: var(--pm-surface); color: var(--pm-text); box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
+.pm-seg button b { font-weight: 600; font-size: .68rem; color: var(--pm-muted); }
+
+/* search */
+.pm-search { position: relative; width: 240px; max-width: 100%; }
+.pm-search i { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--pm-muted); font-size: .8rem; pointer-events: none; }
+.pm-search input { width: 100%; height: 36px; padding: 0 12px 0 32px; border-radius: 8px; border: 1px solid var(--pm-input); background: var(--pm-surface); color: var(--pm-text); font-size: .85rem; outline: 0; transition: border-color .15s ease, box-shadow .15s ease; }
+.pm-search input::placeholder { color: var(--pm-muted); }
+.pm-search input:focus { border-color: var(--pm-accent); box-shadow: 0 0 0 3px var(--pm-accent-soft); }
+
+/* status pill */
+.pm-pill { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px; border-radius: 999px; font-size: .68rem; font-weight: 600; background: var(--pm-track); color: var(--pm-muted); white-space: nowrap; }
+.pm-pill::before { content: ''; width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
+.pm-pill.is-online { background: rgba(34, 197, 94, .12); color: var(--pm-green); }
+.pm-pill.is-online::before { box-shadow: 0 0 0 0 rgba(34, 197, 94, .5); animation: pmPulse 2s ease-out infinite; }
+.pm-pill.is-stopped { background: rgba(245, 158, 11, .12); color: var(--pm-amber); }
+.pm-pill.is-errored { background: rgba(239, 68, 68, .12); color: var(--pm-red); }
+.pm-pill.is-launching, .pm-pill.is-stopping { background: rgba(6, 182, 212, .12); color: var(--pm-cyan); }
+@keyframes pmPulse { 0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, .5); } 70% { box-shadow: 0 0 0 5px rgba(34, 197, 94, 0); } 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); } }
+@media (prefers-reduced-motion: reduce) { .pm-fade, .pm-pill.is-online::before { animation: none; } .pm-bar > span { transition: none; } }
+
+/* table */
+.pm-table { width: 100%; border-collapse: collapse; font-size: .84rem; }
+.pm-table th { font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--pm-text); padding: 12px 16px; border-bottom: 1px solid var(--pm-line); text-align: left; white-space: nowrap; background: var(--pm-sunken); }
+.pm-table td { padding: 9px 16px; border-bottom: 1px solid var(--pm-line-2); vertical-align: middle; color: var(--pm-text); transition: background-color .15s ease; }
+.pm-table tbody tr:hover td { background: var(--pm-hover); }
+.pm-table tbody tr:last-child td { border-bottom: 0; }
+.pm-table .is-num { text-align: right; font-variant-numeric: tabular-nums; }
+.pm-app { font-weight: 600; color: var(--pm-text) !important; text-decoration: none !important; transition: color .15s; }
+.pm-app:hover { color: var(--pm-accent) !important; }
+.pm-empty { text-align: center; color: var(--pm-muted); padding: 32px 16px !important; }
+
+/* pagination */
+.pm-pager { display: flex; align-items: center; justify-content: flex-end; gap: 6px 18px; flex-wrap: wrap; padding: 10px 16px; border-top: 1px solid var(--pm-line); font-size: .82rem; color: var(--pm-text-2); }
+.pm-pager select { height: 34px; padding: 0 28px 0 10px; border-radius: 6px; border: 1px solid var(--pm-input); background: var(--pm-surface); color: var(--pm-text); font-size: .82rem; }
+.pm-pager .pm-btn { border-color: transparent; background: transparent; color: var(--pm-muted); }
+.pm-pager .pm-btn:hover:not(:disabled) { background: var(--pm-sunken); color: var(--pm-text); }
+
+/* ── The app's own styles, undone inside the panel ─────────────────────── */
+/* app.css gives every .table-responsive a white box (border, background, 72vh cap) */
+.pm2m .pm-card .table-responsive { background: transparent; border: 0; border-radius: 0; max-height: none; }
+/* app.css writes labels as small capitals in its own colours */
+.pm2m .custom-control-label, .pm2m .form-check-label { color: var(--pm-text); }
+.pm2m .pm-pager label { text-transform: none; letter-spacing: 0; font-size: .82rem; font-weight: 500; color: var(--pm-text-2); }
+.pm2m.is-dark label { color: var(--pm-text-2); }
+.pm2m.is-dark .custom-control-label { color: var(--pm-text); }
+
+/* ── Bootstrap, recoloured in dark ─────────────────────────────────────── */
+.pm2m.is-dark a:not(.btn):not(.pm-btn):not(.dropdown-item):not(.nav-link):not(.pm-app):not(.pm-back) { color: #A5B4FC; }
+.pm2m.is-dark .card, .pm2m.is-dark .modal-content { background: var(--pm-surface); border-color: var(--pm-line); color: var(--pm-text); }
+.pm2m.is-dark .card-header, .pm2m.is-dark .card-footer, .pm2m.is-dark .modal-header, .pm2m.is-dark .modal-footer { background: var(--pm-surface); border-color: var(--pm-line); color: var(--pm-text); }
+.pm2m.is-dark .close { color: var(--pm-text); text-shadow: none; opacity: .7; }
+.pm2m.is-dark .table { color: var(--pm-text); }
+.pm2m.is-dark .table th, .pm2m.is-dark .table td { border-color: var(--pm-line); }
+.pm2m.is-dark .form-control, .pm2m.is-dark .custom-select { background: var(--pm-sunken); border-color: var(--pm-input); color: var(--pm-text); }
+.pm2m.is-dark .form-control:focus { border-color: var(--pm-accent); box-shadow: 0 0 0 3px var(--pm-accent-soft); }
+.pm2m.is-dark .form-control::placeholder { color: var(--pm-muted); }
+.pm2m.is-dark .custom-control-label::before { background: var(--pm-sunken); border-color: var(--pm-input); }
+.pm2m .custom-control-input:checked ~ .custom-control-label::before { background: var(--pm-accent); border-color: var(--pm-accent); }
+.pm2m.is-dark .btn-light { background: var(--pm-sunken); border-color: var(--pm-line); color: var(--pm-text); }
+.pm2m.is-dark .btn-light:hover:not(:disabled) { background: rgba(255, 255, 255, .08); color: var(--pm-text); }
+.pm2m.is-dark .btn-secondary { background: rgba(255, 255, 255, .08); border-color: var(--pm-line); color: var(--pm-text); }
+.pm2m.is-dark .btn-outline-secondary { color: var(--pm-text-2); border-color: var(--pm-input); }
+.pm2m.is-dark .btn-outline-secondary:hover:not(:disabled) { background: rgba(255, 255, 255, .08); color: var(--pm-text); }
+.pm2m .btn-primary { background: var(--pm-accent); border-color: var(--pm-accent); }
+.pm2m.is-dark .badge-light { background: rgba(255, 255, 255, .12); color: var(--pm-text); }
+.pm2m.is-dark .dropdown-menu { background: var(--pm-sunken); border-color: var(--pm-line); box-shadow: 0 10px 30px rgba(0, 0, 0, .45); }
+.pm2m .dropdown-menu { border-radius: 10px; padding: 6px; font-size: .84rem; }
+.pm2m .dropdown-item { border-radius: 6px; padding: 6px 10px; transition: background-color .12s ease; }
+.pm2m.is-dark .dropdown-item { color: var(--pm-text); }
+.pm2m.is-dark .dropdown-item.text-danger { color: var(--pm-red) !important; }
+.pm2m.is-dark .dropdown-item:hover, .pm2m.is-dark .dropdown-item:focus { background: rgba(255, 255, 255, .06); color: var(--pm-text); }
+.pm2m .nav-tabs { border-color: var(--pm-line); }
+.pm2m .nav-tabs .nav-link { color: var(--pm-muted); border: 0; border-bottom: 2px solid transparent; font-size: .84rem; font-weight: 600; transition: color .15s ease, border-color .15s ease; }
+.pm2m .nav-tabs .nav-link:hover { color: var(--pm-text); }
+.pm2m .nav-tabs .nav-link.active { background: transparent; color: var(--pm-accent); border-bottom-color: var(--pm-accent); }
+.pm2m.is-dark .modal-content { border-radius: 14px; box-shadow: 0 24px 60px rgba(0, 0, 0, .55); }
+.pm2m .modal.fade .modal-dialog { transition: transform .22s ease-out, opacity .22s ease-out; }
+.pm2m.is-dark code { color: #C7D2FE; }
+.pm2m.is-dark .alert-success { background: rgba(34, 197, 94, .12); border-color: rgba(34, 197, 94, .3); color: var(--pm-green); }
+.pm2m.is-dark .alert-danger { background: rgba(239, 68, 68, .12); border-color: rgba(239, 68, 68, .3); color: var(--pm-red); }
+.pm2m.is-dark .alert-warning { background: rgba(245, 158, 11, .12); border-color: rgba(245, 158, 11, .3); color: var(--pm-amber); }
+.pm2m.is-dark .text-success { color: var(--pm-green) !important; }
+.pm2m.is-dark .text-danger { color: var(--pm-red) !important; }
+.pm2m.is-dark .text-warning { color: var(--pm-amber) !important; }
+.pm2m .alert { border-radius: 10px; }

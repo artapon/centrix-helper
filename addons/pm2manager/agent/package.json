@@ -1,0 +1,33 @@
+{
+  "name": "pm2-agent",
+  "version": "1.0.0",
+  "description": "PM2 + system metrics web service. Runs on a Windows or Linux server and is polled by pm2-admin.",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "start:dev": "node src/app.js"
+  },
+  "keywords": [
+    "pm2",
+    "agent",
+    "monitoring",
+    "windows",
+    "linux"
+  ],
+  "os": [
+    "win32",
+    "linux",
+    "darwin"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^8.2.0",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.3.1",
+    "helmet": "^8.1.0",
+    "systeminformation": "^5.33.8"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}

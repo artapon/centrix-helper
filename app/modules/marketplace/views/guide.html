@@ -394,7 +394,7 @@ exports.index = async function (req, res) {
             ? '- MongoDB (Centrix data): require the app\'s mongoose models, e.g. require(\'../../../app/modules/patients/models/patient.model\'); routes that use them go in routes.js (mounted only while a Centrix database is connected). Never write to Centrix collections unless the task says so.\n'
             : '';
           return [
-            'You are writing an add-on for "Centrix HIS Helper Tools", a Node.js / Express 4 web app (CommonJS, Node 18). Write the complete add-on and give every file in full.',
+            'You are writing an add-on for "Centrix Suite", a Node.js / Express 4 web app (CommonJS, Node 18). Write the complete add-on and give every file in full.',
             '',
             '## What to build',
             'Add-on id: ' + id + '   (folder addons/' + id + '/, the folder name must equal the id)',

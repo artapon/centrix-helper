@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Install · Centrix HIS Helper Tools</title>
+  <title>Install · Centrix Suite</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
@@ -11,62 +11,99 @@
   <link href="/lib/@fortawesome/fontawesome-free/css/all.min.css" rel="stylesheet">
   <link href="/css/app.css?v=${assetVersion}" rel="stylesheet">
 </head>
-<body class="auth-page">
-  <main class="auth-panel auth-panel-wide">
-    <div class="auth-brand">
-      <span class="sidebar-brand-mark"><i class="fas fa-heartbeat"></i></span>
-      <span class="auth-brand-text"><strong>Centrix</strong><small>HIS Helper Tools</small></span>
-    </div>
-
-    <div class="auth-card">
-      <div class="auth-step">Initial setup</div>
-      <h1>Create the administrator account</h1>
-      <p class="auth-sub">This account can sign in and manage other users. You only do this once.</p>
-
-      ${error ? `<div class="alert alert-danger" role="alert"><i class="fas fa-exclamation-triangle mr-2"></i>${error}</div>` : ''}
-
-      <form method="post" action="/install" class="auth-form">
-        <div class="form-group">
-          <label for="setup_code">Setup code</label>
-          <input type="text" class="form-control auth-code" id="setup_code" name="setup_code"
-                 autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="8" required autofocus>
-          <small class="form-text">Printed in the server console when the app starts (<code>pm2 logs</code>), and saved in <code>data/setup-code.txt</code>.</small>
+<body class="login-page">
+  <div class="login-shell">
+    <aside class="login-hero" aria-hidden="true">
+      <div class="login-hero-inner">
+        <div class="auth-brand login-hero-brand">
+          <span class="sidebar-brand-mark"><i class="fas fa-heartbeat"></i></span>
+          <span class="auth-brand-text"><strong>Centrix</strong><small>Suite</small></span>
         </div>
 
-        <div class="form-row">
-          <div class="form-group col-sm-6">
-            <label for="username">Username</label>
-            <input type="text" class="form-control" id="username" name="username" value="${username}"
-                   pattern="[a-zA-Z0-9._\\-]{3,32}" title="3–32 characters: letters, numbers, dot, dash or underscore"
-                   autocomplete="username" autocapitalize="off" spellcheck="false" required>
-          </div>
-          <div class="form-group col-sm-6">
-            <label for="name">Full name <span class="label-optional">optional</span></label>
-            <input type="text" class="form-control" id="name" name="name" value="${name}" autocomplete="name">
-          </div>
+        <div class="login-hero-copy">
+          <h2>Let's set up your workspace.</h2>
+          <p>Create the first administrator account. It takes a minute, and you only do it once.</p>
         </div>
 
-        <div class="form-row">
-          <div class="form-group col-sm-6">
-            <label for="password">Password</label>
-            <div class="password-field">
-              <input type="password" class="form-control" id="password" name="password" minlength="${minLength}" autocomplete="new-password" required>
-              <button type="button" class="password-toggle" data-password-toggle="password" aria-label="Show password"><i class="far fa-eye"></i></button>
+        <ol class="login-features login-steps">
+          <li><span>1</span>Enter the setup code from the server console</li>
+          <li><span>2</span>Choose the administrator's username and password</li>
+          <li><span>3</span>Sign in and invite the rest of your team</li>
+        </ol>
+
+        <p class="login-hero-foot">&copy; MEDINT · Centrix Suite v${version}</p>
+      </div>
+    </aside>
+
+    <main class="login-main">
+      <div class="login-form-wrap login-form-wrap-wide">
+        <div class="auth-brand login-mobile-brand">
+          <span class="sidebar-brand-mark"><i class="fas fa-heartbeat"></i></span>
+          <span class="auth-brand-text"><strong>Centrix</strong><small>Suite</small></span>
+        </div>
+
+        <div class="auth-step">Initial setup</div>
+        <h1>Create the administrator account</h1>
+        <p class="auth-sub">This account can sign in and manage other users. You only do this once.</p>
+
+        ${error ? `<div class="alert alert-danger" role="alert"><i class="fas fa-exclamation-triangle mr-2"></i>${error}</div>` : ''}
+
+        <form method="post" action="/install" class="auth-form">
+          <div class="form-group">
+            <label for="setup_code">Setup code</label>
+            <div class="login-input">
+              <i class="fas fa-key" aria-hidden="true"></i>
+              <input type="text" class="form-control auth-code" id="setup_code" name="setup_code" placeholder="XXXXXXXX"
+                     autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="8" required autofocus>
             </div>
-            <small class="form-text">At least ${minLength} characters.</small>
+            <small class="form-text">Printed in the server console when the app starts (<code>pm2 logs</code>), and saved in <code>data/setup-code.txt</code>.</small>
           </div>
-          <div class="form-group col-sm-6">
-            <label for="password_confirm">Confirm password</label>
-            <input type="password" class="form-control" id="password_confirm" name="password_confirm" minlength="${minLength}" autocomplete="new-password" required>
+
+          <div class="form-row">
+            <div class="form-group col-sm-6">
+              <label for="username">Username</label>
+              <div class="login-input">
+                <i class="fas fa-user" aria-hidden="true"></i>
+                <input type="text" class="form-control" id="username" name="username" value="${username}" placeholder="e.g. admin"
+                       pattern="[a-zA-Z0-9._\\-]{3,32}" title="3–32 characters: letters, numbers, dot, dash or underscore"
+                       autocomplete="username" autocapitalize="off" spellcheck="false" required>
+              </div>
+            </div>
+            <div class="form-group col-sm-6">
+              <label for="name">Full name <span class="label-optional">optional</span></label>
+              <div class="login-input">
+                <i class="fas fa-id-card" aria-hidden="true"></i>
+                <input type="text" class="form-control" id="name" name="name" value="${name}" placeholder="Your name" autocomplete="name">
+              </div>
+            </div>
           </div>
-        </div>
 
-        <button type="submit" class="btn btn-primary btn-block btn-lg"><i class="fas fa-user-shield mr-1"></i> Create administrator</button>
-      </form>
-    </div>
+          <div class="form-row">
+            <div class="form-group col-sm-6">
+              <label for="password">Password</label>
+              <div class="login-input password-field">
+                <i class="fas fa-lock" aria-hidden="true"></i>
+                <input type="password" class="form-control" id="password" name="password" minlength="${minLength}" autocomplete="new-password" required>
+                <button type="button" class="password-toggle" data-password-toggle="password" aria-label="Show password"><i class="far fa-eye"></i></button>
+              </div>
+              <small class="form-text">At least ${minLength} characters.</small>
+            </div>
+            <div class="form-group col-sm-6">
+              <label for="password_confirm">Confirm password</label>
+              <div class="login-input">
+                <i class="fas fa-lock" aria-hidden="true"></i>
+                <input type="password" class="form-control" id="password_confirm" name="password_confirm" minlength="${minLength}" autocomplete="new-password" required>
+              </div>
+            </div>
+          </div>
 
-    <p class="auth-foot">v${version}</p>
-  </main>
+          <button type="submit" class="btn btn-primary btn-block btn-lg login-submit"><i class="fas fa-user-shield mr-2"></i>Create administrator</button>
+        </form>
+
+        <p class="login-version">Centrix Suite v${version}</p>
+      </div>
+    </main>
+  </div>
   <script src="/js/auth.js?v=${assetVersion}"></script>
 </body>
 </html>

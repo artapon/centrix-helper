@@ -2,7 +2,7 @@
   "id": "jasperprintout",
   "name": "Jasper Designer",
   "version": "1.3.0",
-  "author": "Centrix HIS Helper Tools",
+  "author": "Centrix Suite",
   "category": "Reports",
   "icon": "fas fa-file-pdf",
   "summary": "Turn scanned or PDF forms into Jasper print-out reports, publish them to JasperServer and register them in Centrix HIS.",

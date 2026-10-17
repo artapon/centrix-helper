@@ -878,7 +878,7 @@
       ['leftMargin', d.page.margins.left], ['rightMargin', d.page.margins.right], ['topMargin', d.page.margins.top], ['bottomMargin', d.page.margins.bottom]
     ], (function () { var rest = {}; REPORT_ATTRS.forEach(function (k) { if (d.attrs[k] != null && ['language', 'columnCount', 'printOrder', 'columnDirection', 'whenNoDataType', 'sectionType', 'columnSpacing'].indexOf(k) < 0) rest[k] = d.attrs[k]; }); return rest; })());
     out.push('<?xml version="1.0" encoding="UTF-8"?>');
-    out.push('<!-- Created with Centrix HIS Helper Tools: Jasper Designer -->');
+    out.push('<!-- Created with Centrix Suite: Jasper Designer -->');
     out.push('<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ' +
       'xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd"' + top + ' uuid="' + (d.uuid || uuid()) + '">');
     var props = d.properties.slice();

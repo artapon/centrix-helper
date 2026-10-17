@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sign in · Centrix HIS Helper Tools</title>
+  <title>Sign in · Centrix Suite</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
@@ -11,40 +11,122 @@
   <link href="/lib/@fortawesome/fontawesome-free/css/all.min.css" rel="stylesheet">
   <link href="/css/app.css?v=${assetVersion}" rel="stylesheet">
 </head>
-<body class="auth-page">
-  <main class="auth-panel">
-    <div class="auth-brand">
-      <span class="sidebar-brand-mark"><i class="fas fa-heartbeat"></i></span>
-      <span class="auth-brand-text"><strong>Centrix</strong><small>HIS Helper Tools</small></span>
-    </div>
+<body class="signin-page">
+  <div class="signin-shell">
 
-    <div class="auth-card">
-      <h1>Sign in</h1>
-      <p class="auth-sub">Use your Centrix Helper Tools account.</p>
+    <!-- Form side -->
+    <main class="signin-main">
+      <div class="signin-brand">
+        <span class="signin-mark"><i class="fas fa-heartbeat" aria-hidden="true"></i></span>
+        <strong>Centrix Suite</strong>
+      </div>
 
-      ${notice ? `<div class="alert alert-success"><i class="fas fa-check-circle mr-2"></i>${notice}</div>` : ''}
-      ${error ? `<div class="alert alert-danger" role="alert"><i class="fas fa-exclamation-triangle mr-2"></i>${error}</div>` : ''}
+      <div class="signin-center">
+        <div class="signin-form-wrap">
+          <h1>Sign in</h1>
+          <p class="signin-sub">Welcome back. Enter your credentials to open your workspace.</p>
 
-      <form method="post" action="/login" class="auth-form">
-        <input type="hidden" name="next" value="${next}">
-        <div class="form-group">
-          <label for="username">Username</label>
-          <input type="text" class="form-control" id="username" name="username" value="${username}"
-                 autocomplete="username" autocapitalize="off" spellcheck="false" required ${username ? '' : 'autofocus'}>
-        </div>
-        <div class="form-group">
-          <label for="password">Password</label>
-          <div class="password-field">
-            <input type="password" class="form-control" id="password" name="password" autocomplete="current-password" required ${username ? 'autofocus' : ''}>
-            <button type="button" class="password-toggle" data-password-toggle="password" aria-label="Show password"><i class="far fa-eye"></i></button>
+          ${notice ? `<div class="alert alert-success"><i class="fas fa-check-circle mr-2"></i>${notice}</div>` : ''}
+          ${error ? `<div class="alert alert-danger" role="alert"><i class="fas fa-exclamation-triangle mr-2"></i>${error}</div>` : ''}
+
+          <form method="post" action="/login" class="auth-form signin-form">
+            <input type="hidden" name="next" value="${next}">
+            <div class="form-group">
+              <label for="username">Username</label>
+              <input type="text" class="form-control" id="username" name="username" value="${username}" placeholder="Enter your username"
+                     autocomplete="username" autocapitalize="off" spellcheck="false" required ${username ? '' : 'autofocus'}>
+            </div>
+            <div class="form-group">
+              <label for="password">Password</label>
+              <div class="password-field">
+                <input type="password" class="form-control" id="password" name="password" placeholder="Enter your password"
+                       autocomplete="current-password" required ${username ? 'autofocus' : ''}>
+                <button type="button" class="password-toggle" data-password-toggle="password" aria-label="Show password"><i class="far fa-eye"></i></button>
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block signin-submit">Sign in <i class="fas fa-arrow-right ml-2" aria-hidden="true"></i></button>
+          </form>
+
+          <div class="signin-help">
+            <i class="fas fa-info-circle" aria-hidden="true"></i>
+            <span>Forgot your password? Ask an administrator to reset it.</span>
           </div>
         </div>
-        <button type="submit" class="btn btn-primary btn-block btn-lg">Sign in</button>
-      </form>
-    </div>
+      </div>
 
-    <p class="auth-foot">Forgot your password? Ask an administrator to reset it. · v${version}</p>
-  </main>
+      <div class="signin-foot">
+        <span>&copy; MEDINT</span>
+        <span>Centrix Suite v${version}</span>
+      </div>
+    </main>
+
+    <!-- Graphic side: an illustration of the product, not live data -->
+    <aside class="signin-visual" aria-hidden="true">
+      <div class="signin-glow"></div>
+
+      <div class="signin-copy">
+        <span class="signin-eyebrow">Hospital IT operations</span>
+        <h2>Every hospital system, in one secure console.</h2>
+        <p>Watch services and databases, run reports, and manage billing, lab and pharmacy tools without leaving one place.</p>
+      </div>
+
+      <div class="signin-art">
+        <div class="sv-window">
+          <div class="sv-bar">
+            <span class="sv-dots"><i></i><i></i><i></i></span>
+            <b>Environments</b>
+            <span class="sv-muted">HIS Production</span>
+            <span class="sv-live"><i></i>Live</span>
+          </div>
+          <div class="sv-body">
+            <div class="sv-stats">
+              <div><small>Online</small><b class="is-green">24</b></div>
+              <div><small>Stopped</small><b class="is-amber">2</b></div>
+              <div><small>Errored</small><b class="is-red">0</b></div>
+              <div><small>CPU</small><b class="is-cyan">32%</b></div>
+            </div>
+            <div class="sv-chart">
+              <div class="sv-chart-head"><b>CPU · last hour</b><span>avg 28%</span></div>
+              <svg viewBox="0 0 600 110" preserveAspectRatio="none">
+                <defs><linearGradient id="svCpuFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b82f6" stop-opacity=".45"/><stop offset="1" stop-color="#3b82f6" stop-opacity="0"/></linearGradient></defs>
+                <path d="M0 27.5H600M0 55H600M0 82.5H600" stroke="rgba(148,163,184,.12)" stroke-width="1"/>
+                <path d="M0 78 L40 70 L80 74 L120 58 L160 64 L200 46 L240 52 L280 38 L320 49 L360 41 L400 56 L440 44 L480 30 L520 40 L560 34 L600 26 L600 110 L0 110 Z" fill="url(#svCpuFill)"/>
+                <path d="M0 78 L40 70 L80 74 L120 58 L160 64 L200 46 L240 52 L280 38 L320 49 L360 41 L400 56 L440 44 L480 30 L520 40 L560 34 L600 26" fill="none" stroke="#60a5fa" stroke-width="2" vector-effect="non-scaling-stroke"/>
+              </svg>
+            </div>
+            <div class="sv-table">
+              <div class="sv-row sv-head"><span>Process</span><span>Status</span><span>CPU</span><span>Memory</span></div>
+              <div class="sv-row"><span class="sv-mono">his-api:8080</span><span class="is-green">&#9679; online</span><span>4.1%</span><span>212 MB</span></div>
+              <div class="sv-row"><span class="sv-mono">lis-interface</span><span class="is-green">&#9679; online</span><span>1.8%</span><span>96 MB</span></div>
+              <div class="sv-row"><span class="sv-mono">jasper-report-svc</span><span class="is-green">&#9679; online</span><span>0.6%</span><span>318 MB</span></div>
+              <div class="sv-row"><span class="sv-mono">pharmacy-sync</span><span class="is-amber">&#9679; stopped</span><span>0%</span><span>0 MB</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sv-float sv-db">
+          <div class="sv-float-head">
+            <span class="sv-icon"><i class="fas fa-database"></i></span>
+            <div><b>Database</b><small>Replica set · 3 nodes</small></div>
+          </div>
+          <ul>
+            <li><i></i>Primary<span>12 ms</span></li>
+            <li><i></i>Secondary<span>14 ms</span></li>
+            <li><i></i>Secondary<span>15 ms</span></li>
+          </ul>
+        </div>
+
+        <div class="sv-float sv-toast">
+          <span class="sv-check"><i class="fas fa-check"></i></span>
+          <div><b>Lab results delivered</b><small>LIS interface · 2 seconds ago</small></div>
+        </div>
+      </div>
+
+      <div class="signin-chips">
+        <span>Monitoring</span><span>Billing</span><span>LIS</span><span>Pharmacy</span><span>Reports</span><span>PM2</span>
+      </div>
+    </aside>
+  </div>
   <script src="/js/auth.js?v=${assetVersion}"></script>
 </body>
 </html>

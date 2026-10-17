@@ -1,0 +1,581 @@
+<div class="col-12 pm2m" :class="{ 'is-dark': isDark, 'is-fullscreen': fullscreen }" ref="root">
+  <div v-if="flash.text" class="alert pm-fade" :class="flash.ok ? 'alert-success' : 'alert-danger'" role="alert">
+    <i class="fas mr-2" :class="flash.ok ? 'fa-check-circle' : 'fa-exclamation-triangle'"></i>{{ flash.text }}
+  </div>
+
+  <div class="pm-head">
+    <div class="pm-grow" style="min-width: 0">
+      <a href="/pm2" class="pm-back"><i class="fas fa-arrow-left"></i> Environments</a>
+      <h1><i class="fas" :class="env.id === 0 ? 'fa-desktop' : 'fa-server'" aria-hidden="true"></i> {{ env.name }}</h1>
+      <p v-if="env.id !== 0">{{ env.url }}<template v-if="env.description"> · {{ env.description }}</template></p>
+    </div>
+    <div class="pm-tools">
+      <div class="custom-control custom-switch">
+        <input type="checkbox" class="custom-control-input" id="pm_live" v-model="live">
+        <label class="custom-control-label small" for="pm_live">Live</label>
+      </div>
+      <button type="button" class="pm-btn" @click="refreshAll" :disabled="loading"><i class="fas fa-sync-alt" :class="{ 'fa-spin': loading }"></i> Refresh</button>
+      <button type="button" class="pm-btn" @click="toggleMetrics"><i class="far" :class="showMetrics ? 'fa-eye-slash' : 'fa-eye'"></i> {{ showMetrics ? 'Hide' : 'Show' }} Metrics</button>
+      <button type="button" class="pm-btn is-icon" @click="toggleFullscreen" :title="fullscreen ? 'Exit full screen' : 'Full screen'" :aria-label="fullscreen ? 'Exit full screen' : 'Full screen'"><i class="fas" :class="fullscreen ? 'fa-compress' : 'fa-expand'"></i></button>
+    </div>
+  </div>
+
+  <!-- Node / OS / host / IP / server clock -->
+  <div class="pm-infobar" v-if="system || node">
+    <span class="pm-info" v-if="(system && system.node) || (node && node.node)"><small>Node</small> {{ (system && system.node) || node.node }}</span>
+    <span class="pm-info" v-if="system && system.os">
+      <small>OS</small> {{ system.os }}
+      <template v-if="system.hostname"><span class="pm-sep">|</span> Hostname : {{ system.hostname }}</template>
+      <template v-if="system.ip"><span class="pm-sep">|</span> IP : {{ system.ip }}</template>
+    </span>
+    <span class="pm-info" v-if="clock"><small>Time</small> {{ clock }}</span>
+  </div>
+
+  <div v-if="error" class="alert alert-warning pm-fade"><i class="fas fa-plug mr-1"></i>{{ error }}</div>
+
+  <transition name="pm-collapse">
+    <div v-if="showMetrics">
+      <div class="pm-stats">
+        <div class="pm-card pm-stat pm-fade" style="animation-delay: .02s">
+          <div class="pm-stat-top"><span class="pm-stat-label">Online</span><span class="pm-tint is-green"><i class="far fa-check-circle is-green"></i></span></div>
+          <div class="pm-stat-value is-green">{{ counts.online }}</div>
+        </div>
+        <div class="pm-card pm-stat pm-fade" style="animation-delay: .05s">
+          <div class="pm-stat-top"><span class="pm-stat-label">Stopped</span><span class="pm-tint is-amber"><i class="far fa-dot-circle is-amber"></i></span></div>
+          <div class="pm-stat-value is-amber">{{ counts.stopped }}</div>
+        </div>
+        <div class="pm-card pm-stat pm-fade" style="animation-delay: .08s">
+          <div class="pm-stat-top"><span class="pm-stat-label">Errored</span><span class="pm-tint is-red"><i class="fas fa-exclamation-circle is-red"></i></span></div>
+          <div class="pm-stat-value is-red">{{ counts.errored }}</div>
+        </div>
+        <div class="pm-card pm-stat pm-fade" style="animation-delay: .11s">
+          <div class="pm-stat-top"><span class="pm-stat-label">Total apps</span><span class="pm-tint is-indigo"><i class="fas fa-th is-indigo"></i></span></div>
+          <div class="pm-stat-value is-indigo">{{ counts.total }}</div>
+        </div>
+        <div class="pm-card pm-stat pm-fade" style="animation-delay: .14s" v-if="monitor">
+          <div class="pm-stat-top"><span class="pm-stat-label">CPU</span><span class="pm-tint is-cyan"><i class="fas fa-microchip is-cyan"></i></span></div>
+          <div class="pm-stat-value is-cyan">{{ fixed2(monitor.cpu.usage) }}%</div>
+          <div class="pm-bar"><span :class="barClass(monitor.cpu.usage)" :style="{ width: pct(monitor.cpu.usage) }"></span></div>
+          <div class="pm-sub" :title="cpuText">{{ cpuText }}</div>
+        </div>
+        <div class="pm-card pm-stat pm-fade" style="animation-delay: .17s" v-if="monitor">
+          <div class="pm-stat-top"><span class="pm-stat-label">Memory</span><span class="pm-tint is-green"><i class="fas fa-memory is-green"></i></span></div>
+          <div class="pm-stat-value is-green">{{ fixed2(monitor.memory.percent) }}%</div>
+          <div class="pm-bar"><span :class="barClass(monitor.memory.percent)" :style="{ width: pct(monitor.memory.percent) }"></span></div>
+          <div class="pm-sub">{{ bytes(monitor.memory.used) }} / {{ bytes(monitor.memory.total) }}</div>
+        </div>
+        <div v-for="(d, i) in (system ? system.disks : [])" :key="d.mount" class="pm-card pm-stat pm-fade" :style="{ animationDelay: (.2 + i * .03) + 's' }">
+          <div class="pm-stat-top"><span class="pm-stat-label">Disk {{ d.mount }}</span><span class="pm-tint is-amber"><i class="far fa-hdd is-amber"></i></span></div>
+          <div class="pm-stat-value is-amber">{{ fixed2(d.percent) }}%</div>
+          <div class="pm-bar"><span :class="barClass(d.percent)" :style="{ width: pct(d.percent) }"></span></div>
+          <div class="pm-sub">{{ d.used }} / {{ d.total }}</div>
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <!-- Applications -->
+  <div class="pm-card pm-fade" style="animation-delay: .1s">
+    <div class="pm-card-head">
+      <h2 class="pm-card-title"><i class="fas fa-list"></i> Applications <span class="pm-count">{{ counts.total }}</span></h2>
+      <div class="pm-seg" role="group" aria-label="Status filter">
+        <button v-for="f in FILTERS" :key="f.key" type="button" :class="{ 'is-on': filter === f.key }" @click="filter = f.key">
+          {{ f.label }} <b>{{ f.key === 'all' ? counts.total : counts[f.key] }}</b>
+        </button>
+      </div>
+      <span class="pm-grow"></span>
+      <label class="pm-search mb-0"><i class="fas fa-search"></i><input type="search" v-model.trim="q" placeholder="Search…" aria-label="Search by name"></label>
+    </div>
+    <div class="table-responsive">
+      <table class="pm-table">
+        <thead>
+          <tr>
+            <th>Name</th><th>Status</th><th>CPU</th><th>Memory</th><th>Restarts</th><th>Uptime</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-if="!shown.length"><td colspan="7" class="pm-empty">{{ loading && !loaded ? 'Reading the processes…' : (q || filter !== 'all' ? 'No processes match' : 'No processes') }}</td></tr>
+          <tr v-for="a in paged" :key="a.pm_id + ':' + a.name">
+            <td>
+              <a href="#" class="pm-app" @click.prevent="openApp(a)">{{ a.name }}</a>
+              <div class="pm-sub" v-if="a.node_args && a.node_args.length">{{ joinArgs(a.node_args) }}</div>
+            </td>
+            <td><span class="pm-pill" :class="'is-' + a.status">{{ a.status }}</span></td>
+            <td>{{ a.cpu }}%</td>
+            <td>{{ a.memory }}</td>
+            <td>{{ a.restarts }}</td>
+            <td>{{ a.uptime || '—' }}</td>
+            <td>
+              <div class="pm-actions" v-if="can.manage">
+                <template v-if="can.manage">
+                  <button type="button" class="pm-btn is-green" @click="act(a, 'reload')" :disabled="!!busy[a.name] || a.status !== 'online'"><i class="fas fa-sync"></i> Reload</button>
+                  <button type="button" class="pm-btn is-amber" @click="act(a, 'restart')" :disabled="!!busy[a.name]">
+                    <i class="fas" :class="busy[a.name] === 'restart' ? 'fa-spinner fa-spin' : (a.status === 'online' ? 'fa-redo' : 'fa-play')"></i> {{ a.status === 'online' ? 'Restart' : 'Start' }}
+                  </button>
+                  <button v-if="a.status === 'online'" type="button" class="pm-btn is-red" @click="act(a, 'stop')" :disabled="!!busy[a.name]"><i class="fas fa-stop"></i> Stop</button>
+                  <button type="button" class="pm-btn is-indigo" @click="act(a, 'reset')" :disabled="!!busy[a.name]"><i class="fas fa-undo"></i> Reset</button>
+                </template>
+                <div class="btn-group">
+                  <button type="button" class="pm-btn is-icon" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" title="More" :disabled="!!busy[a.name]"><i class="fas fa-ellipsis-v"></i></button>
+                  <div class="dropdown-menu dropdown-menu-right">
+                    <a href="#" class="dropdown-item" @click.prevent="openApp(a)"><i class="fas fa-fw fa-file-alt mr-1"></i> Logs &amp; details</a>
+                    <template v-if="can.manage">
+                      <a href="#" class="dropdown-item" @click.prevent="act(a, 'flush')"><i class="fas fa-fw fa-broom mr-1"></i> Flush logs</a>
+                      <div class="dropdown-divider"></div>
+                      <a href="#" class="dropdown-item text-danger" @click.prevent="act(a, 'delete')"><i class="fas fa-fw fa-trash mr-1"></i> Delete</a>
+                    </template>
+                  </div>
+                </div>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pm-pager" v-if="shown.length">
+      <label class="mb-0">Items per page
+        <select v-model.number="perPage" class="ml-2">
+          <option v-for="n in PER_PAGE" :key="n" :value="n">{{ n === 0 ? 'All' : n }}</option>
+        </select>
+      </label>
+      <span>{{ rangeText }}</span>
+      <span>
+        <button type="button" class="pm-btn is-icon" @click="page = 1" :disabled="page <= 1" title="First page"><i class="fas fa-angle-double-left"></i></button>
+        <button type="button" class="pm-btn is-icon" @click="page--" :disabled="page <= 1" title="Previous page"><i class="fas fa-angle-left"></i></button>
+        <button type="button" class="pm-btn is-icon" @click="page++" :disabled="page >= pages" title="Next page"><i class="fas fa-angle-right"></i></button>
+        <button type="button" class="pm-btn is-icon" @click="page = pages" :disabled="page >= pages" title="Last page"><i class="fas fa-angle-double-right"></i></button>
+      </span>
+    </div>
+  </div>
+
+  <!-- PM2's own modules -->
+  <div v-if="modules.length" class="pm-card pm-fade mt-3" style="animation-delay: .14s">
+    <div class="pm-card-head"><h2 class="pm-card-title"><i class="fas fa-puzzle-piece"></i> PM2 modules <span class="pm-count">{{ modules.length }}</span></h2></div>
+    <div class="table-responsive">
+      <table class="pm-table">
+        <tbody>
+          <tr v-for="a in modules" :key="'m' + a.pm_id">
+            <td><span class="pm-app">{{ a.name }}</span></td>
+            <td><span class="pm-pill" :class="'is-' + a.status">{{ a.status }}</span></td>
+            <td>{{ a.cpu }}%</td><td>{{ a.memory }}</td><td>{{ a.uptime || '—' }}</td>
+            <td>
+              <div class="pm-actions" v-if="can.manage">
+                <button type="button" class="pm-btn is-amber" @click="act(a, 'restart')" :disabled="!!busy[a.name]"><i class="fas fa-redo"></i> Restart</button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- One process: logs, describe, .env -->
+  <div class="modal fade" id="pm2AppModal" tabindex="-1" aria-labelledby="pm2AppTitle">
+    <div class="modal-dialog modal-xl">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="pm2AppTitle">
+            {{ app.name }} <span v-if="app.status" class="pm-pill ml-2" :class="'is-' + app.status">{{ app.status }}</span>
+          </h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        </div>
+        <div class="modal-body">
+          <div class="pm-detail-head">
+            <div v-if="detail" class="pm-facts">
+              <span><small>CPU</small>{{ detail.cpu }}%</span>
+              <span><small>Memory</small>{{ bytes(detail.memory) }}</span>
+              <span><small>Uptime</small>{{ detail.uptime || '—' }}</span>
+              <span><small>Restarts</small>{{ detail.restarts }}</span>
+              <span v-if="detail.node_version"><small>Node.js</small>{{ detail.node_version }}</span>
+              <span v-if="detail.exec_mode"><small>Mode</small>{{ detail.exec_mode }}</span>
+              <span v-if="can.manage && detail.project_path" class="is-wide"><small>Folder</small><code>{{ detail.project_path }}</code></span>
+            </div>
+            <div class="pm-actions pm-detail-actions" v-if="can.manage">
+              <button type="button" class="pm-btn is-green" @click="act(app, 'reload')" :disabled="!!busy[app.name] || app.status !== 'online'"><i class="fas fa-sync"></i> Reload</button>
+              <button type="button" class="pm-btn is-amber" @click="act(app, 'restart')" :disabled="!!busy[app.name]"><i class="fas" :class="app.status === 'online' ? 'fa-redo' : 'fa-play'"></i> {{ app.status === 'online' ? 'Restart' : 'Start' }}</button>
+              <button v-if="app.status === 'online'" type="button" class="pm-btn is-red" @click="act(app, 'stop')" :disabled="!!busy[app.name]"><i class="fas fa-stop"></i> Stop</button>
+              <button type="button" class="pm-btn is-indigo" @click="act(app, 'reset')" :disabled="!!busy[app.name]"><i class="fas fa-undo"></i> Reset</button>
+              <button type="button" class="pm-btn" @click="act(app, 'flush')" :disabled="!!busy[app.name]"><i class="fas fa-broom"></i> Flush logs</button>
+              <button type="button" class="pm-btn is-red" @click="act(app, 'delete')" :disabled="!!busy[app.name]"><i class="fas fa-trash"></i> Delete</button>
+            </div>
+          </div>
+
+          <ul class="nav nav-tabs mt-3">
+            <li class="nav-item" v-for="t in tabs" :key="t.key">
+              <a href="#" class="nav-link" :class="{ active: tab === t.key }" @click.prevent="setTab(t.key)"><i class="fas mr-1" :class="t.icon"></i> {{ t.label }}</a>
+            </li>
+          </ul>
+
+          <!-- Logs -->
+          <div v-if="tab === 'stdout' || tab === 'stderr'">
+            <div class="pm-log-tools">
+              <button type="button" class="pm-btn" @click="olderLogs" :disabled="logs.nextKey < 0 || logs.loading"><i class="fas fa-arrow-up"></i> Older</button>
+              <button type="button" class="pm-btn" @click="loadLogs(true)" :disabled="logs.loading"><i class="fas fa-sync-alt" :class="{ 'fa-spin': logs.loading }"></i> Reload</button>
+              <div class="custom-control custom-switch ml-2">
+                <input type="checkbox" class="custom-control-input" id="pm_tail" v-model="logs.tail">
+                <label class="custom-control-label small" for="pm_tail">Live tail</label>
+              </div>
+              <span class="pm-grow"></span>
+              <label class="pm-search mb-0"><i class="fas fa-filter"></i><input type="search" v-model="logs.filter" placeholder="Filter lines" aria-label="Filter lines"></label>
+            </div>
+            <div v-if="logs.error" class="alert alert-warning small">{{ logs.error }}</div>
+            <pre class="pm-logs" ref="logBox"><span v-for="(l, i) in visibleLines" :key="i" :class="lineClass(l)">{{ l }}
+</span><span v-if="!logs.lines.length && !logs.loading" class="pm-faint">No log lines.</span></pre>
+          </div>
+
+          <!-- Describe -->
+          <div v-if="tab === 'describe'" class="pt-3">
+            <div v-if="describe.loading" class="p-3 text-muted"><i class="fas fa-spinner fa-spin"></i> Reading…</div>
+            <div v-if="describe.error" class="alert alert-warning small">{{ describe.error }}</div>
+            <pre v-if="describe.output" class="pm-logs">{{ describe.output }}</pre>
+          </div>
+
+          <!-- .env -->
+          <div v-if="tab === 'env'" class="pt-3">
+            <div v-if="envf.loading" class="p-3 text-muted"><i class="fas fa-spinner fa-spin"></i> Reading…</div>
+            <div v-if="envf.error" class="alert alert-warning small">{{ envf.error }}</div>
+            <template v-if="envf.loaded">
+              <div class="d-flex align-items-center flex-wrap mb-2" style="gap: 8px">
+                <code class="small">{{ envf.path || 'No .env location' }}</code>
+                <span v-if="envf.raw === null" class="pm-pill is-stopped">file not found</span>
+                <span class="ml-auto"></span>
+                <template v-if="!envf.editing">
+                  <button type="button" class="pm-btn" @click="envf.reveal = !envf.reveal"><i class="far" :class="envf.reveal ? 'fa-eye-slash' : 'fa-eye'"></i> {{ envf.reveal ? 'Hide values' : 'Show values' }}</button>
+                  <button v-if="envf.backup !== null" type="button" class="pm-btn" @click="envf.showBackup = !envf.showBackup"><i class="fas fa-history"></i> {{ envf.showBackup ? 'Hide backup' : 'Backup' }}</button>
+                  <button type="button" class="pm-btn is-primary" @click="editEnv" :disabled="!envf.path"><i class="fas fa-pen"></i> Edit</button>
+                </template>
+                <template v-else>
+                  <button type="button" class="pm-btn" @click="envf.editing = false">Cancel</button>
+                  <button type="button" class="pm-btn is-primary" @click="saveEnv" :disabled="envf.saving || !envf.draft"><i class="fas fa-save"></i> Save</button>
+                </template>
+              </div>
+              <textarea v-if="envf.editing" class="form-control pm-mono" rows="16" v-model="envf.draft" spellcheck="false"></textarea>
+              <div v-else class="pm-card" style="overflow: hidden">
+                <table class="pm-table pm-env">
+                  <tbody>
+                    <tr v-if="!envRows.length"><td class="pm-empty">Empty</td></tr>
+                    <tr v-for="(r, i) in envRows" :key="i">
+                      <template v-if="r.comment"><td colspan="2" class="pm-faint"><i>{{ r.line }}</i></td></template>
+                      <template v-else><th>{{ r.key }}</th><td class="pm-mono">{{ envf.reveal ? r.value : mask(r.value) }}</td></template>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div v-if="envf.showBackup && !envf.editing">
+                <h6 class="mt-3">.env.backup <small class="text-muted">the version before the last save</small></h6>
+                <pre class="pm-logs">{{ envf.reveal ? envf.backup : '(Show values to see the backup)' }}</pre>
+              </div>
+              <p class="small text-muted mb-0 mt-2"><i class="fas fa-info-circle"></i> Saving keeps the current file as .env.backup. The process reads the new values after a restart.</p>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm stop / flush / delete -->
+  <div class="modal fade" id="pm2ConfirmModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title">{{ confirm.title }}</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button></div>
+        <div class="modal-body">{{ confirm.text }}</div>
+        <div class="modal-footer">
+          <button type="button" class="pm-btn" data-dismiss="modal">Cancel</button>
+          <button type="button" class="pm-btn is-red" @click="confirmed">{{ confirm.button }}</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>@import url('/pm2/assets/theme.css');</style>
+<style>
+  .pm-collapse-enter-active, .pm-collapse-leave-active { transition: opacity .25s ease, transform .25s ease; }
+  .pm-collapse-enter, .pm-collapse-leave-to { opacity: 0; transform: translateY(-6px); }
+  /* the facts on the left, the process's actions next to them (below on narrow screens) */
+  .pm-detail-head { display: flex; align-items: flex-start; gap: 12px 24px; flex-wrap: wrap; }
+  .pm-detail-head .pm-facts { flex: 1 1 420px; min-width: 0; }
+  .pm-detail-actions { flex: 0 1 auto; max-width: 100%; }
+  .pm-facts { display: flex; flex-wrap: wrap; gap: 10px 26px; }
+  .pm-facts span { display: flex; flex-direction: column; font-weight: 600; font-size: .9rem; color: var(--pm-text); }
+  .pm-facts small { font-weight: 700; color: var(--pm-muted); font-size: .64rem; letter-spacing: .07em; text-transform: uppercase; }
+  .pm-facts .is-wide { flex-basis: 100%; }
+  .pm-log-tools { display: flex; align-items: center; gap: 6px; padding: 12px 0 10px; flex-wrap: wrap; }
+  .pm-logs { background: var(--pm-log-bg); color: var(--pm-log-text); font-family: var(--pm-mono); font-size: 12px; line-height: 1.5; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--pm-line); max-height: 60vh; min-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-word; margin: 0; scroll-behavior: smooth; }
+  .pm-logs .is-error { color: #FCA5A5; }
+  .pm-logs .is-warn { color: #FCD34D; }
+  .pm-logs .pm-faint, .pm-faint { color: var(--pm-muted); }
+  .pm-mono { font-family: var(--pm-mono); font-size: 12px; }
+  .pm-env th { width: 30%; text-transform: none; letter-spacing: 0; font-size: .82rem; font-weight: 600; word-break: break-all; background: transparent; }
+  .pm-env td { word-break: break-all; }
+</style>
+
+<script src="/pm2/assets/theme.js"></script>
+<script>
+  Page.setup({
+    data: function () {
+      var show = true;
+      try { show = localStorage.getItem('pm2m.metrics') !== 'hide'; } catch (e) { /* private mode */ }
+      return {
+        FILTERS: [{ key: 'all', label: 'All' }, { key: 'online', label: 'Online' }, { key: 'stopped', label: 'Stopped' }, { key: 'errored', label: 'Errored' }],
+        PER_PAGE: [10, 25, 50, 0],
+        CONFIRM: {
+          stop: { label: 'Stop', text: function (n) { return 'Stop "' + n + '"? It stays stopped until it is started again.'; } },
+          flush: { label: 'Flush logs', text: function (n) { return 'Empty the log files of "' + n + '"?'; } },
+          delete: { label: 'Delete', text: function (n) { return 'Remove "' + n + '" from PM2? The process stops and leaves the list; its files stay on disk.'; } }
+        },
+        apps: [], counts: { total: 0, online: 0, stopped: 0, errored: 0 }, monitor: null, node: null,
+        system: null, systemAt: 0, now: Date.now(), showMetrics: show,
+        loading: false, loaded: false, error: '', live: true, timer: null,
+        filter: 'all', q: '', page: 1, perPage: 10, busy: {},
+        flash: { text: '', ok: true },
+        app: {}, detail: null, tab: 'stdout',
+        logs: { lines: [], nextKey: -1, loading: false, tail: true, error: '', filter: '', older: false },
+        describe: { output: '', loading: false, error: '' },
+        envf: { loaded: false, loading: false, error: '', path: '', raw: null, backup: null, reveal: false, showBackup: false, editing: false, draft: '', saving: false },
+        confirm: { title: '', text: '', button: '', run: null }
+      };
+    },
+    computed: {
+      base: function () { return '/pm2/env/' + this.env.id; },
+      shown: function () {
+        var self = this, q = this.q.toLowerCase();
+        return this.apps.filter(function (a) {
+          return !self.isModule(a) && (self.filter === 'all' || a.status === self.filter) && (!q || a.name.toLowerCase().indexOf(q) >= 0);
+        });
+      },
+      pages: function () { return this.perPage ? Math.max(1, Math.ceil(this.shown.length / this.perPage)) : 1; },
+      paged: function () {
+        if (!this.perPage) return this.shown;
+        var from = (Math.min(this.page, this.pages) - 1) * this.perPage;
+        return this.shown.slice(from, from + this.perPage);
+      },
+      rangeText: function () {
+        var n = this.shown.length;
+        if (!n) return '0 of 0';
+        if (!this.perPage) return '1-' + n + ' of ' + n;
+        var from = (Math.min(this.page, this.pages) - 1) * this.perPage;
+        return (from + 1) + '-' + Math.min(n, from + this.perPage) + ' of ' + n;
+      },
+      modules: function () { var self = this; return this.apps.filter(function (a) { return self.isModule(a); }); },
+      cpuText: function () { return (this.system && this.system.cpu) || (this.monitor && this.monitor.cpu ? (this.monitor.cpu.model + ' · ' + this.monitor.cpu.cores + ' cores') : ''); },
+      // The server's clock, ticking here between reads: shown in the server's own time zone.
+      clock: function () {
+        var s = this.system;
+        if (!s || !s.time) return '';
+        var ms = s.time + (this.now - this.systemAt);
+        var off = s.offsetMin == null ? -new Date().getTimezoneOffset() : s.offsetMin;
+        var d = new Date(ms + off * 60000);
+        var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+        var sign = off >= 0 ? '+' : '-', a = Math.abs(off);
+        return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()) + ' ' + pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) + ':' + pad(d.getUTCSeconds()) +
+          ' GMT' + sign + pad(Math.floor(a / 60)) + ':' + pad(a % 60) + (s.timezone ? ' ' + s.timezone : '');
+      },
+      tabs: function () {
+        var t = [{ key: 'stdout', label: 'Output log', icon: 'fa-terminal' }, { key: 'stderr', label: 'Error log', icon: 'fa-exclamation-circle' }];
+        if (this.can.manage) t.push({ key: 'describe', label: 'Describe', icon: 'fa-info-circle' }, { key: 'env', label: '.env', icon: 'fa-key' });
+        return t;
+      },
+      visibleLines: function () {
+        var f = this.logs.filter.toLowerCase();
+        return f ? this.logs.lines.filter(function (l) { return l.toLowerCase().indexOf(f) >= 0; }) : this.logs.lines;
+      },
+      envRows: function () {
+        return String(this.envf.raw || '').split(/\r?\n/).filter(function (l) { return l.trim() !== ''; }).map(function (line) {
+          if (/^\s*#/.test(line) || line.indexOf('=') < 0) return { comment: true, line: line };
+          var at = line.indexOf('=');
+          return { key: line.slice(0, at).trim(), value: line.slice(at + 1) };
+        });
+      }
+    },
+    watch: {
+      live: function (on) { if (on) this.load(); },
+      filter: function () { this.page = 1; },
+      q: function () { this.page = 1; },
+      perPage: function () { this.page = 1; }
+    },
+    methods: {
+      request: function (url, body) {
+        var opts = { credentials: 'same-origin', headers: { Accept: 'application/json' } };
+        if (body !== undefined) {
+          opts.method = 'POST';
+          opts.headers['Content-Type'] = 'application/json';
+          opts.body = JSON.stringify(body);
+        }
+        return fetch(url, opts).then(function (r) {
+          return r.json().catch(function () { return { error: 'The server answered ' + r.status + '.' }; })
+            .then(function (d) { if (!r.ok || d.error) throw new Error(d.error || ('HTTP ' + r.status)); return d; });
+        });
+      },
+      isModule: function (a) { return /^pm2-/.test(a.name); },
+      appUrl: function (name) { return this.base + '/apps/' + encodeURIComponent(name); },
+      notify: function (text, ok) {
+        var self = this;
+        this.flash = { text: text, ok: ok !== false };
+        clearTimeout(this._flashTimer);
+        this._flashTimer = setTimeout(function () { self.flash = { text: '', ok: true }; }, 5000);
+      },
+      fixed2: function (v) { return (Number(v) || 0).toFixed(2); },
+      pct: function (v) { return Math.max(0, Math.min(100, Number(v) || 0)) + '%'; },
+      barClass: function (v) { return v >= 90 ? 'is-crit' : v >= 75 ? 'is-warn' : ''; },
+      bytes: function (b) {
+        b = Number(b) || 0;
+        var u = ['B', 'KB', 'MB', 'GB', 'TB'], i = 0;
+        while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
+        return b.toFixed(i ? 2 : 0) + ' ' + u[i];
+      },
+      joinArgs: function (a) { return Array.isArray(a) ? a.join(' ') : String(a); },
+      mask: function (v) { return v ? '••••••••' : ''; },
+      lineClass: function (l) { return /\b(error|exception|fatal|fail(ed)?)\b/i.test(l) ? 'is-error' : /\bwarn(ing)?\b/i.test(l) ? 'is-warn' : ''; },
+      toggleMetrics: function () {
+        this.showMetrics = !this.showMetrics;
+        try { localStorage.setItem('pm2m.metrics', this.showMetrics ? 'show' : 'hide'); } catch (e) { /* private mode */ }
+      },
+      load: function () {
+        var self = this;
+        if (this.loading) return;
+        this.loading = true;
+        return this.request(this.base + '/apps').then(function (d) {
+          self.apps = d.apps; self.counts = d.counts; self.monitor = d.monitor; self.node = d.node; self.error = '';
+        }).catch(function (err) { self.error = err.message; })
+          .then(function () { self.loading = false; self.loaded = true; });
+      },
+      loadSystem: function () {
+        var self = this;
+        return this.request(this.base + '/system').then(function (d) { self.system = d; self.systemAt = Date.now(); })
+          .catch(function () { /* the info bar and disks stay as they were */ });
+      },
+      refreshAll: function () { this.load(); this.loadSystem(); },
+      act: function (a, verb) {
+        var self = this, c = this.CONFIRM[verb];
+        if (c) {
+          this.confirm = { title: c.label + ' ' + a.name, text: c.text(a.name), button: c.label, run: function () { self.runAction(a, verb); } };
+          $('#pm2ConfirmModal').modal('show');
+          return;
+        }
+        this.runAction(a, verb);
+      },
+      confirmed: function () {
+        $('#pm2ConfirmModal').modal('hide');
+        if (this.confirm.run) this.confirm.run();
+      },
+      runAction: function (a, verb) {
+        var self = this;
+        this.$set(this.busy, a.name, verb);
+        this.request(this.appUrl(a.name) + '/' + verb, {}).then(function () {
+          self.notify(a.name + ': ' + verb + ' done.');
+          if (verb === 'delete') $('#pm2AppModal').modal('hide');
+          if (verb === 'flush' && self.app.name === a.name) self.loadLogs(true);
+          return self.load();
+        }).then(function () {
+          if (self.app.name === a.name && verb !== 'delete') self.loadDetail();
+        }).catch(function (err) { self.notify(a.name + ': ' + err.message, false); })
+          .then(function () { self.$set(self.busy, a.name, false); });
+      },
+      openApp: function (a) {
+        this.app = { name: a.name, status: a.status };
+        this.detail = null;
+        this.describe = { output: '', loading: false, error: '' };
+        this.envf = { loaded: false, loading: false, error: '', path: '', raw: null, backup: null, reveal: false, showBackup: false, editing: false, draft: '', saving: false };
+        this.logs.filter = '';
+        this.tab = 'stdout';
+        this.loadDetail();
+        this.loadLogs(true);
+        $('#pm2AppModal').modal('show');
+      },
+      loadDetail: function () {
+        var self = this, name = this.app.name;
+        this.request(this.appUrl(name)).then(function (d) {
+          if (self.app.name !== name) return;
+          self.detail = d.app;
+          self.app = { name: name, status: d.app.status };
+        }).catch(function () { /* the logs tab shows the error */ });
+      },
+      setTab: function (t) {
+        this.tab = t;
+        if (t === 'stdout' || t === 'stderr') this.loadLogs(true);
+        if (t === 'describe' && !this.describe.output) this.loadDescribe();
+        if (t === 'env' && !this.envf.loaded) this.loadEnv();
+      },
+      // fresh: the newest lines; older: lines before what is shown, put in front of it
+      loadLogs: function (fresh, older) {
+        var self = this, name = this.app.name, type = this.tab;
+        if (type !== 'stdout' && type !== 'stderr') return;
+        if (this.logs.loading) return;
+        this.logs.loading = true;
+        var url = this.appUrl(name) + '/logs/' + type + (older ? '?nextKey=' + this.logs.nextKey : '');
+        var box = this.$refs.logBox;
+        var atBottom = !box || box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+        var oldHeight = box ? box.scrollHeight : 0;
+        this.request(url).then(function (d) {
+          if (self.app.name !== name || self.tab !== type) return;
+          var lines = String(d.logs.lines || '').split('\n').filter(function (l, i, all) { return l !== '' || i < all.length - 1; });
+          if (older) {
+            self.logs.lines = lines.concat(self.logs.lines);
+            self.logs.nextKey = d.logs.nextKey;
+            self.logs.older = true;
+          } else {
+            self.logs.lines = lines;
+            if (fresh) { self.logs.nextKey = d.logs.nextKey; self.logs.older = false; }
+          }
+          self.logs.error = '';
+          self.$nextTick(function () {
+            var b = self.$refs.logBox;
+            if (!b) return;
+            b.style.scrollBehavior = 'auto';
+            if (older) b.scrollTop = b.scrollHeight - oldHeight;
+            else if (fresh || atBottom) b.scrollTop = b.scrollHeight;
+            b.style.scrollBehavior = '';
+          });
+        }).catch(function (err) { self.logs.error = err.message; })
+          .then(function () { self.logs.loading = false; });
+      },
+      olderLogs: function () { if (this.logs.nextKey > 0) this.loadLogs(false, true); },
+      loadDescribe: function () {
+        var self = this;
+        this.describe = { output: '', loading: true, error: '' };
+        this.request(this.appUrl(this.app.name) + '/describe').then(function (d) { self.describe.output = d.output; })
+          .catch(function (err) { self.describe.error = err.message; })
+          .then(function () { self.describe.loading = false; });
+      },
+      loadEnv: function () {
+        var self = this;
+        this.envf.loading = true; this.envf.error = '';
+        this.request(this.appUrl(this.app.name) + '/env').then(function (d) {
+          Object.assign(self.envf, { loaded: true, path: d.env_file_path, raw: d.env_file_raw, backup: d.env_file_raw_backup });
+        }).catch(function (err) { self.envf.error = err.message; })
+          .then(function () { self.envf.loading = false; });
+      },
+      editEnv: function () {
+        this.envf.draft = this.envf.raw || '';
+        this.envf.editing = true;
+      },
+      saveEnv: function () {
+        var self = this;
+        this.envf.saving = true;
+        this.request(this.appUrl(this.app.name) + '/env', { content: this.envf.draft }).then(function (d) {
+          self.notify(d.message || 'Saved.');
+          self.envf.editing = false;
+          self.loadEnv();
+        }).catch(function (err) { self.envf.error = err.message; })
+          .then(function () { self.envf.saving = false; });
+      },
+      tick: function () {
+        if (document.hidden) return;
+        if (this.live) this.load();
+        var open = $('#pm2AppModal').hasClass('show');
+        if (open && this.logs.tail && !this.logs.older && (this.tab === 'stdout' || this.tab === 'stderr')) this.loadLogs(false);
+      }
+    },
+    mounted: function () {
+      var self = this;
+      this.load();
+      this.loadSystem();
+      this.timer = setInterval(function () { self.tick(); }, 5000);
+      // the info bar's clock ticks every second; disks and host every 30 s
+      setInterval(function () { self.now = Date.now(); }, 1000);
+      setInterval(function () { if (!document.hidden && self.live) self.loadSystem(); }, 30000);
+    }
+  });
+</script>

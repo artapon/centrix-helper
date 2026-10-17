@@ -1,0 +1,145 @@
+<div class="col-12 pm2m" :class="{ 'is-dark': isDark, 'is-fullscreen': fullscreen }" ref="root">
+
+  <header class="pms-head">
+    <div class="pms-eyebrow">PM2 Manager</div>
+    <h1>Settings</h1>
+    <p>Options for everyone who uses the PM2 Manager pages. Only administrators can change them.</p>
+  </header>
+
+  <form class="pms-form" @submit.prevent="save">
+    <div v-if="error" class="alert alert-danger" role="alert"><i class="fas fa-exclamation-triangle mr-2"></i>{{ error }}</div>
+    <div v-if="notice" class="alert alert-success" role="status"><i class="fas fa-check-circle mr-2"></i>{{ notice }}</div>
+
+    <!-- Appearance -->
+    <section class="pms-card">
+      <div class="pms-card-head">
+        <h2>Appearance</h2>
+        <p>The colour theme of Environments, each environment's processes and this page. The rest of the app keeps its own look.</p>
+      </div>
+      <fieldset class="pms-themes">
+        <legend class="sr-only">Theme</legend>
+        <label v-for="t in THEMES" :key="t.key" class="pms-theme" :class="{ 'is-on': choice === t.key }">
+          <input type="radio" name="theme" :value="t.key" v-model="choice" class="sr-only">
+          <span class="pms-preview" :class="'is-' + t.key" aria-hidden="true">
+            <span v-for="side in (t.key === 'system' ? ['light', 'dark'] : [t.key])" :key="side" class="pms-pv" :class="['is-' + side, { 'is-half': t.key === 'system' }]">
+              <span class="pms-pv-bar"></span>
+              <span class="pms-pv-tiles"><em class="is-up"></em><em class="is-up"></em><em class="is-down"></em></span>
+              <span class="pms-pv-row"><i class="is-up"></i><b></b></span>
+              <span class="pms-pv-row"><i class="is-up"></i><b></b></span>
+              <span class="pms-pv-row"><i class="is-down"></i><b></b></span>
+            </span>
+          </span>
+          <span class="pms-theme-text">
+            <span class="pms-radio" aria-hidden="true"></span>
+            <span><b><i :class="t.icon" aria-hidden="true"></i> {{ t.label }}</b><small>{{ t.note }}</small></span>
+          </span>
+        </label>
+      </fieldset>
+      <p v-if="choice === 'system'" class="pms-hint"><i class="fas fa-info-circle"></i> This device is set to <b>{{ sysDark ? 'dark' : 'light' }}</b>, so the pages show {{ sysDark ? 'dark' : 'light' }} here. Each user sees their own device's setting.</p>
+    </section>
+
+    <div class="pms-actions">
+      <span v-if="current.updatedAt" class="text-muted small">Last changed by {{ current.updatedBy || '—' }}, {{ when(current.updatedAt) }}</span>
+      <button type="button" class="pm-btn" @click="choice = current.theme" :disabled="!dirty || saving">Undo</button>
+      <button type="submit" class="pm-btn is-primary" :disabled="!dirty || saving">
+        <i class="fas" :class="saving ? 'fa-spinner fa-spin' : 'fa-save'"></i> Save
+      </button>
+    </div>
+  </form>
+</div>
+
+<style>@import url('/pm2/assets/theme.css');</style>
+<style>
+  .pm2m .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .pms-head { margin-bottom: 16px; }
+  .pms-eyebrow { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--pm-muted); }
+  .pms-head h1 { margin: 0; font-size: 24px; line-height: 32px; font-weight: 700; }
+  .pms-head p { margin: 2px 0 0; font-size: 14px; color: var(--pm-text-2); }
+  .pms-form { display: flex; flex-direction: column; gap: 16px; }
+  .pms-card { background: var(--pm-surface); border: 1px solid var(--pm-line); border-radius: 12px; }
+  .pms-card-head { padding: 18px 20px 0; }
+  .pms-card-head h2 { margin: 0; font-size: 16px; font-weight: 600; }
+  .pms-card-head p { margin: 2px 0 0; font-size: 13px; color: var(--pm-muted); }
+
+  .pms-themes { border: 0; margin: 0; padding: 16px 20px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; min-width: 0; }
+  @media (max-width: 760px) { .pms-themes { grid-template-columns: 1fr; } }
+  .pms-theme { display: flex; flex-direction: column; border: 1px solid var(--pm-line); border-radius: 10px; overflow: hidden; cursor: pointer; margin: 0; background: var(--pm-surface); }
+  /* the cards are <label>s: app.css writes labels as small capitals */
+  .pm2m .pms-theme { text-transform: none; letter-spacing: 0; font-size: inherit; font-weight: 400; color: var(--pm-text); }
+  .pms-theme:hover { border-color: var(--pm-muted); }
+  .pms-theme.is-on { border: 2px solid var(--pm-accent); box-shadow: 0 0 0 3px var(--pm-accent-soft); }
+  .pms-theme:focus-within { outline: 2px solid var(--pm-accent); outline-offset: 2px; }
+  .pms-preview { height: 120px; display: flex; background: var(--pm-sunken); border-bottom: 1px solid var(--pm-line); padding: 14px 14px 0; }
+  .pms-pv { flex: 1; border-radius: 8px 8px 0 0; padding: 10px; display: flex; flex-direction: column; gap: 6px; border: 1px solid; border-bottom: 0; }
+  .pms-pv.is-light { background: #FFFFFF; border-color: #E4E7EC; }
+  .pms-pv.is-dark { background: #13131F; border-color: #2A2A3A; }
+  .pms-pv.is-half.is-light { border-radius: 8px 0 0 0; border-right: 0; }
+  .pms-pv.is-half.is-dark { border-radius: 0 8px 0 0; border-left: 0; }
+  .pms-pv-bar { height: 8px; width: 45%; border-radius: 4px; }
+  .pms-pv.is-light .pms-pv-bar { background: #101828; } .pms-pv.is-dark .pms-pv-bar { background: #F5F5F6; }
+  .pms-pv-tiles { display: flex; gap: 4px; height: 16px; }
+  .pms-pv-tiles em { flex: 1; border-radius: 3px; border-top: 3px solid #12B76A; }
+  .pms-pv-tiles em.is-down { border-top-color: #F04438; }
+  .pms-pv.is-light .pms-pv-tiles em { background: #F2F4F7; } .pms-pv.is-dark .pms-pv-tiles em { background: #1A1A2E; }
+  .pms-pv-row { display: flex; align-items: center; gap: 6px; }
+  .pms-pv-row i { width: 18px; height: 7px; border-radius: 4px; }
+  .pms-pv-row i.is-up { background: #12B76A; } .pms-pv-row i.is-down { background: #F04438; }
+  .pms-pv-row b { height: 6px; flex: 1; border-radius: 3px; }
+  .pms-pv.is-light .pms-pv-row b { background: #EAECF0; } .pms-pv.is-dark .pms-pv-row b { background: #2A2A3A; }
+  .pms-theme-text { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; }
+  .pms-theme-text b { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; }
+  .pms-theme-text b i { color: var(--pm-muted); font-size: 13px; }
+  .pms-theme-text small { display: block; font-size: 12px; color: var(--pm-muted); margin-top: 2px; }
+  .pms-radio { width: 18px; height: 18px; flex: none; margin-top: 1px; border-radius: 999px; border: 1px solid var(--pm-input); background: var(--pm-surface); position: relative; }
+  .pms-theme.is-on .pms-radio { border-color: var(--pm-accent); background: var(--pm-accent); }
+  .pms-theme.is-on .pms-radio::after { content: ''; position: absolute; inset: 5px; border-radius: 999px; background: #FFFFFF; }
+  .pms-hint { margin: 0 20px 16px; font-size: 13px; color: var(--pm-text-2); display: flex; gap: 8px; align-items: baseline; }
+  .pms-hint i { color: var(--pm-accent); }
+  .pms-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; flex-wrap: wrap; }
+</style>
+
+<script src="/pm2/assets/theme.js"></script>
+<script>
+  Page.setup({
+    data: function () {
+      return {
+        THEMES: [
+          { key: 'light', label: 'Light', icon: 'fas fa-sun', note: 'Light pages, as the rest of the app.' },
+          { key: 'dark', label: 'Dark', icon: 'fas fa-moon', note: 'Dark pages, easier on the eyes in a server room or at night.' },
+          { key: 'system', label: 'Match system', icon: 'fas fa-desktop', note: 'Follows each user\'s device setting, light or dark.' }
+        ],
+        current: { theme: 'light', updatedBy: '', updatedAt: '' }, choice: 'light', saving: false, error: '', notice: ''
+      };
+    },
+    // The saved settings come with the page (Page.data.saved), readable once the page's data exists.
+    created: function () {
+      this.current = Object.assign({}, this.saved);
+      this.choice = this.current.theme || 'light';
+    },
+    computed: {
+      // the page previews the theme being chosen (public/theme.js reads themeChoice)
+      themeChoice: function () { return this.choice; },
+      dirty: function () { return this.choice !== this.current.theme; }
+    },
+    methods: {
+      when: function (iso) { return iso ? new Date(iso).toLocaleString() : ''; },
+      save: function () {
+        var vm = this;
+        this.saving = true; this.error = ''; this.notice = '';
+        fetch('/pm2/settings', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ theme: this.choice })
+        }).then(function (r) {
+          return r.json().catch(function () { return { error: 'The server answered ' + r.status + '.' }; })
+            .then(function (d) { if (!r.ok || d.error) throw new Error(d.error || ('HTTP ' + r.status)); return d; });
+        }).then(function (d) {
+          vm.current = d;
+          vm.choice = d.theme;
+          vm.notice = 'Saved. The PM2 Manager pages now use this theme.';
+        }).catch(function (err) { vm.error = err.message; })
+          .then(function () { vm.saving = false; });
+      }
+    }
+  });
+</script>

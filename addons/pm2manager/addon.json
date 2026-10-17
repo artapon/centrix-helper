@@ -1,0 +1,57 @@
+{
+  "id": "pm2manager",
+  "name": "PM2 Manager",
+  "version": "1.2.0",
+  "author": "Centrix Suite",
+  "category": "Monitoring",
+  "icon": "fas fa-server",
+  "summary": "Track PM2 processes on this server and on remote servers through pm2-agent, control them, and read their logs and .env files.",
+  "description": "One place for the Node.js services the hospital runs under PM2. Local (this server's processes) is read with the PM2 command line; other servers are added as environments, each pointing at a pm2-agent (from the pm2-admin project) with its token. Every environment shows its processes with status, CPU, memory, uptime and restarts, refreshed live, and each process opens its logs (stdout / stderr), its pm2 describe output and its .env file. Processes can be reloaded, restarted, stopped, reset, flushed or deleted. Environments and their tokens (encrypted) are stored in SQLite, so no Centrix database connection is needed.",
+  "features": [
+    "Overview: this server and every environment with online / stopped / errored counts, CPU and memory, refreshed live",
+    "Environments: add, edit and disable remote pm2-agent servers (URL, token, self-signed TLS), with a connection test before saving",
+    "Download pm2-agent (bundled with the add-on) as a .zip, ready to install on a new server: the standard build (Node.js 16+) or the Node.js 12 build (12.12+)",
+    "Processes: status, CPU, memory, uptime, restarts and Node.js arguments of every PM2 process, with search and status filters; PM2 modules (pm2-*) listed apart",
+    "Process actions: reload, restart, stop, reset counters, flush logs and delete, on this server or a remote one",
+    "Logs: stdout and stderr of a process, newest first, with live tail and loading of older lines",
+    ".env: view (values hidden until shown), edit and save a process's .env file, with the previous version kept as .env.backup",
+    "pm2 describe output of a process",
+    "Agent tokens are stored encrypted (AES-256-GCM) and never sent back to the browser",
+    "Light, dark or device theme for the add-on's pages (Settings, administrators)",
+    "Role permissions: view only (environments, processes and logs) or Manage PM2 (every action, .env and describe); Settings for administrators"
+  ],
+  "requires": [
+    "PM2 installed on this server (npm install -g pm2) for the Local environment",
+    "pm2-agent running on each remote server (pm2-admin project), reachable from this server"
+  ],
+  "packages": [],
+  "defaultActive": true,
+  "paths": [
+    "/pm2"
+  ],
+  "menu": {
+    "header": "PM2 Manager",
+    "icon": "fas fa-server",
+    "after": "Dashboard",
+    "items": [
+      {
+        "text": "Environments",
+        "icon": "fas fa-network-wired",
+        "link": "/pm2",
+        "actions": [
+          {
+            "key": "manage",
+            "text": "Manage PM2",
+            "description": "Add, edit and disable environments; reload, restart, stop, reset, flush and delete processes; view and edit .env files and pm2 describe. Without it the pages are view only."
+          }
+        ]
+      },
+      {
+        "text": "Settings",
+        "icon": "fas fa-sliders-h",
+        "link": "/pm2/settings",
+        "adminOnly": true
+      }
+    ]
+  }
+}

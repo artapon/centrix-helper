@@ -48,7 +48,7 @@ exports.index = async function (req, res) {
   }
 
   return res.renderPage(view('xrayresult'), {
-    title:  'Centrix HIS Helper Tools',
+    title:  'Centrix Suite',
     message: hl7
   });
 };

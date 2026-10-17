@@ -267,7 +267,7 @@ exports.remove = async (id) => { await schema(); await run('DELETE FROM ${table}
     { name: `${id}/README.md`, data:
 `# ${name}
 
-A starter add-on for Centrix HIS Helper Tools, made from Marketplace > Developer guide.
+A starter add-on for Centrix Suite, made from Marketplace > Developer guide.
 
 - \`addon.json\`: the manifest (name, menu, paths, permissions). The folder name must equal \`id\` (\`${id}\`).
 - \`routes.public.js\`: pages and APIs for signed-in users (no MongoDB needed). Use \`routes.js\` for routes that need

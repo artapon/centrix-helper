@@ -1,0 +1,304 @@
+<div class="col-12 pm2m" :class="{ 'is-dark': isDark, 'is-fullscreen': fullscreen }" ref="root">
+  <div v-if="flash.text" class="alert pm-fade" :class="flash.ok ? 'alert-success' : 'alert-danger'" role="alert">
+    <i class="fas mr-2" :class="flash.ok ? 'fa-check-circle' : 'fa-exclamation-triangle'"></i>{{ flash.text }}
+  </div>
+
+  <div class="pm-head">
+    <div>
+      <h1><i class="fas fa-network-wired" aria-hidden="true"></i> PM2 Environments</h1>
+      <p>Local (the server this app runs on) and the remote servers read through pm2-agent. Open one to see and control its processes.</p>
+    </div>
+    <div class="pm-tools">
+      <span class="text-muted small" v-if="loadedAt">Updated {{ loadedAt }}</span>
+      <button type="button" class="pm-btn" @click="load()" :disabled="loading"><i class="fas fa-sync-alt" :class="{ 'fa-spin': loading }"></i> Refresh</button>
+      <div v-if="can.manage" class="dropdown">
+        <button type="button" class="pm-btn dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" title="pm2-agent, to install on a server before adding it">
+          <i class="fas fa-download"></i> Download pm2-agent
+        </button>
+        <div class="dropdown-menu dropdown-menu-right pm2m-agent-menu">
+          <a href="/pm2/agent/download/standard" class="dropdown-item" download>
+            <b><i class="fab fa-fw fa-node-js mr-1"></i> Standard</b>
+            <small>Node.js 16 or newer</small>
+          </a>
+          <a href="/pm2/agent/download/node12" class="dropdown-item" download>
+            <b><i class="fas fa-fw fa-history mr-1"></i> Node.js 12 build</b>
+            <small>Node.js 12.12 or newer, for servers that cannot be upgraded</small>
+          </a>
+        </div>
+      </div>
+      <button v-if="can.manage" type="button" class="pm-btn is-primary" @click="openCreate()"><i class="fas fa-plus"></i> Add environment</button>
+      <button type="button" class="pm-btn is-icon" @click="toggleFullscreen" :title="fullscreen ? 'Exit full screen' : 'Full screen'" :aria-label="fullscreen ? 'Exit full screen' : 'Full screen'"><i class="fas" :class="fullscreen ? 'fa-compress' : 'fa-expand'"></i></button>
+    </div>
+  </div>
+
+  <div v-if="!tiles.length && loading" class="text-muted p-4 text-center"><i class="fas fa-spinner fa-spin"></i> Reading the environments…</div>
+
+  <!-- one full-width row per environment -->
+  <div class="pm2m-list">
+    <div v-for="(e, i) in tiles" :key="e.id" class="pm-card pm-fade pm2m-row" :class="{ 'is-offline': !e.online }" :style="{ animationDelay: (i * .04) + 's' }"
+         tabindex="0" role="link" :aria-label="'Open the processes of ' + e.name"
+         @click="openEnv(e, $event)" @auxclick="openEnv(e, $event)" @keydown.enter.self="openEnv(e, $event)">
+      <div class="pm2m-id">
+        <div class="pm2m-row-top">
+          <span class="pm-tint" :class="e.online ? 'is-indigo' : 'is-red'"><i class="fas" :class="[e.local ? 'fa-desktop' : 'fa-server', e.online ? 'is-indigo' : 'is-red']"></i></span>
+          <a :href="'/pm2/env/' + e.id" class="pm-app pm2m-row-name">{{ e.name }}</a>
+          <span class="pm-pill" :class="e.online ? 'is-online' : 'is-errored'">{{ e.online ? 'online' : 'unreachable' }}</span>
+        </div>
+        <div class="pm-sub pm2m-row-url">{{ e.local ? 'The server this app runs on' : e.url }}<template v-if="e.description && !e.local"> · {{ e.description }}</template></div>
+        <div v-if="e.online" class="pm2m-host">
+          <span v-if="e.host"><i class="fab" :class="e.host.isWindows ? 'fa-windows' : 'fa-linux'"></i> {{ e.host.hostname }}<template v-if="e.host.ip"> · {{ e.host.ip }}</template></span>
+          <span v-if="e.node && e.node.node"><i class="fab fa-node-js"></i> {{ e.node.node }}</span>
+          <span v-if="e.agent && e.agent.version">agent {{ e.agent.version }}</span>
+        </div>
+      </div>
+
+      <template v-if="e.online">
+        <div class="pm2m-counts">
+          <div><small>Online</small><b class="is-green">{{ e.counts.online }}</b></div>
+          <div><small>Stopped</small><b class="is-amber">{{ e.counts.stopped }}</b></div>
+          <div><small>Errored</small><b class="is-red">{{ e.counts.errored }}</b></div>
+          <div><small>Total</small><b class="is-indigo">{{ e.counts.total }}</b></div>
+        </div>
+        <div class="pm2m-meters">
+          <div class="pm2m-meter" v-if="e.cpu">
+            <small>CPU</small><b class="is-cyan">{{ fixed(e.cpu.usage) }}%</b>
+            <div class="pm-bar"><span :class="barClass(e.cpu.usage)" :style="{ width: pct(e.cpu.usage) }"></span></div>
+          </div>
+          <div class="pm2m-meter" v-if="e.memory">
+            <small>Memory</small><b class="is-green">{{ fixed(e.memory.percent) }}%</b>
+            <div class="pm-bar"><span :class="barClass(e.memory.percent)" :style="{ width: pct(e.memory.percent) }"></span></div>
+          </div>
+        </div>
+      </template>
+      <div v-else class="pm2m-offline alert alert-warning small mb-0"><i class="fas fa-plug mr-1"></i>{{ e.error }}</div>
+
+      <div class="pm-actions pm2m-row-actions">
+        <a :href="'/pm2/env/' + e.id" class="pm-btn is-indigo"><i class="fas fa-list"></i> Processes</a>
+        <template v-if="can.manage && !e.local">
+          <button type="button" class="pm-btn is-icon" title="Edit" @click="openEdit(e)"><i class="fas fa-pen"></i></button>
+          <button type="button" class="pm-btn is-icon" title="Disable" @click="setEnabled(e, false)"><i class="fas fa-pause"></i></button>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <div v-if="disabled.length" class="pm-card pm-fade mt-3">
+    <div class="pm-card-head"><h2 class="pm-card-title"><i class="fas fa-pause-circle"></i> Disabled environments <span class="pm-count">{{ disabled.length }}</span></h2></div>
+    <table class="pm-table">
+      <tbody>
+        <tr v-for="e in disabled" :key="e.id">
+          <td><span class="pm-app">{{ e.name }}</span><div class="pm-sub">{{ e.url }}</div></td>
+          <td class="text-muted small">{{ e.description }}</td>
+          <td>
+            <div class="pm-actions" v-if="can.manage">
+              <button type="button" class="pm-btn is-green" @click="setEnabled(e, true)"><i class="fas fa-play"></i> Enable</button>
+              <button type="button" class="pm-btn is-icon" title="Edit" @click="openEdit(e)"><i class="fas fa-pen"></i></button>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div v-if="can.manage && tiles.length === 1 && !disabled.length && !loading" class="pm-card pm-fade mt-3">
+    <div class="p-3 text-muted small">
+      <i class="fas fa-info-circle mr-1"></i> To add another server, download pm2-agent
+      (<a href="/pm2/agent/download/standard" download>Node.js 16+</a> or <a href="/pm2/agent/download/node12" download>Node.js 12 build</a>), unzip it there and run
+      <code>install.bat</code> (Windows) or <code>install.sh</code> (Linux). Note the agent's URL and the <code>AGENT_TOKEN</code> the installer prints, then choose <b>Add environment</b>. Allow this server's IP in <code>AGENT_ALLOWED_IPS</code> if the agent limits callers.
+    </div>
+  </div>
+
+  <!-- Add / edit environment -->
+  <div class="modal fade" id="pm2EnvModal" tabindex="-1" aria-labelledby="pm2EnvModalTitle">
+    <div class="modal-dialog modal-dialog-centered">
+      <form class="modal-content" @submit.prevent="save">
+        <div class="modal-header">
+          <h5 class="modal-title" id="pm2EnvModalTitle">{{ form.id ? 'Edit environment' : 'Add environment' }}</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        </div>
+        <div class="modal-body">
+          <div v-if="formError" class="alert alert-danger small"><i class="fas fa-exclamation-triangle mr-1"></i>{{ formError }}</div>
+          <div class="form-group">
+            <label for="pe_name">Name</label>
+            <input id="pe_name" class="form-control" v-model.trim="form.name" maxlength="64" required placeholder="e.g. HIS Production">
+          </div>
+          <div class="form-group">
+            <label for="pe_url">Agent URL</label>
+            <input id="pe_url" class="form-control" v-model.trim="form.url" type="url" required placeholder="http://10.0.0.12:7003" spellcheck="false">
+          </div>
+          <div class="form-group">
+            <label for="pe_token">Agent token</label>
+            <input id="pe_token" class="form-control" v-model="form.token" type="password" autocomplete="new-password" spellcheck="false"
+                   :required="!form.id" :placeholder="form.id ? 'Leave blank to keep the saved token' : 'AGENT_TOKEN of the agent (16+ characters)'">
+            <small class="form-text text-muted">Stored encrypted and never shown again.</small>
+          </div>
+          <div class="form-group">
+            <label for="pe_desc">Description <small class="text-muted">optional</small></label>
+            <input id="pe_desc" class="form-control" v-model.trim="form.description" maxlength="256">
+          </div>
+          <div class="custom-control custom-checkbox">
+            <input type="checkbox" class="custom-control-input" id="pe_tls" v-model="form.allowInsecureTls">
+            <label class="custom-control-label" for="pe_tls">Allow self-signed TLS <small class="text-muted">(https agents with their own certificate)</small></label>
+          </div>
+          <div class="custom-control custom-checkbox">
+            <input type="checkbox" class="custom-control-input" id="pe_enabled" v-model="form.enabled">
+            <label class="custom-control-label" for="pe_enabled">Enabled <small class="text-muted">(read on the overview and in the menu)</small></label>
+          </div>
+
+          <div class="pm2m-test mt-3">
+            <button type="button" class="pm-btn is-indigo" @click="test" :disabled="testing || !form.url">
+              <i class="fas" :class="testing ? 'fa-spinner fa-spin' : 'fa-plug'"></i> Test connection
+            </button>
+            <span v-if="testResult && testResult.reachable" class="text-success small ml-2">
+              <i class="fas fa-check-circle"></i> Connected in {{ testResult.latencyMs }} ms
+              <template v-if="testResult.host"> · {{ testResult.host.hostname }}</template>
+              <template v-if="testResult.agent"> · agent {{ testResult.agent.version }}</template>
+              <template v-if="testResult.pm2 === false"> · <span class="text-warning">PM2 not available there</span></template>
+            </span>
+            <span v-else-if="testResult" class="text-danger small ml-2"><i class="fas fa-times-circle"></i> {{ testResult.error }}</span>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="pm-btn" data-dismiss="modal">Cancel</button>
+          <button type="submit" class="pm-btn is-primary" :disabled="saving"><i class="fas fa-save"></i> Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+</div>
+
+<style>@import url('/pm2/assets/theme.css');</style>
+<style>
+  /* one full-width row per environment: who | apps | load | actions (stacks on narrow screens) */
+  .pm2m-list { display: flex; flex-direction: column; gap: 12px; }
+  .pm2m-row { display: flex; align-items: center; flex-wrap: wrap; gap: 16px 32px; padding: 16px 18px; border-left: 3px solid var(--pm-green); }
+  .pm2m-row { cursor: pointer; }
+  .pm2m-row:hover { border-color: var(--pm-input); border-left-color: var(--pm-green); transform: translateY(-1px); }
+  .pm2m-row:focus-visible { outline: 2px solid var(--pm-indigo); outline-offset: 2px; }
+  .pm2m-row.is-offline, .pm2m-row.is-offline:hover { border-left-color: var(--pm-red); }
+  .pm2m-id { flex: 1 1 280px; min-width: 0; }
+  .pm2m-row-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .pm2m-row-name { font-size: 1rem; }
+  .pm2m-row-url { margin-top: 6px; white-space: normal; word-break: break-all; }
+  .pm2m-host { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 4px; font-size: .74rem; color: var(--pm-text-2); }
+  .pm2m-host i { color: var(--pm-muted); margin-right: 3px; }
+  .pm2m-counts { flex: 0 1 340px; display: grid; grid-template-columns: repeat(4, minmax(64px, 1fr)); gap: 8px; }
+  .pm2m-counts div { background: var(--pm-sunken); border: 1px solid var(--pm-line-2); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+  .pm2m-counts small, .pm2m-meter small { font-size: .62rem; letter-spacing: .07em; text-transform: uppercase; font-weight: 700; color: var(--pm-muted); }
+  .pm2m-counts b { font-size: 1.35rem; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+  .pm2m-meters { flex: 0 1 240px; min-width: 190px; display: flex; flex-direction: column; gap: 10px; }
+  .pm2m-meter { display: grid; grid-template-columns: 1fr auto; align-items: baseline; row-gap: 5px; }
+  .pm2m-meter b { font-size: .9rem; font-variant-numeric: tabular-nums; }
+  .pm2m-meter .pm-bar { grid-column: 1 / -1; }
+  .pm2m-offline { flex: 1 1 360px; }
+  .pm2m-row-actions { margin-left: auto; }
+  .pm2m-agent-menu { min-width: 260px; }
+  .pm2m-agent-menu .dropdown-item { display: flex; flex-direction: column; gap: 2px; white-space: normal; }
+  .pm2m-agent-menu .dropdown-item b { font-weight: 600; }
+  .pm2m-agent-menu .dropdown-item small { color: var(--pm-muted); padding-left: 1.65em; }
+  @media (max-width: 991px) {
+    .pm2m-counts, .pm2m-meters { flex: 1 1 100%; }
+    .pm2m-row-actions { margin-left: 0; justify-content: flex-start; }
+  }
+</style>
+
+<script src="/pm2/assets/theme.js"></script>
+<script>
+  Page.setup({
+    data: function () {
+      return {
+        tiles: [], disabled: [], loading: false, loadedAt: '', timer: null,
+        flash: { text: '', ok: true },
+        form: {}, formError: '', saving: false, testing: false, testResult: null
+      };
+    },
+    methods: {
+      request: function (url, body) {
+        var opts = { credentials: 'same-origin', headers: { Accept: 'application/json' } };
+        if (body !== undefined) {
+          opts.method = 'POST';
+          opts.headers['Content-Type'] = 'application/json';
+          opts.body = JSON.stringify(body);
+        }
+        return fetch(url, opts).then(function (r) {
+          return r.json().catch(function () { return { error: 'The server answered ' + r.status + '.' }; })
+            .then(function (d) { if (!r.ok || d.error) throw new Error(d.error || ('HTTP ' + r.status)); return d; });
+        });
+      },
+      notify: function (text, ok) {
+        var self = this;
+        this.flash = { text: text, ok: ok !== false };
+        clearTimeout(this._flashTimer);
+        this._flashTimer = setTimeout(function () { self.flash = { text: '', ok: true }; }, 5000);
+      },
+      load: function () {
+        var self = this;
+        if (this.loading) return;
+        this.loading = true;
+        return this.request('/pm2/overview').then(function (d) {
+          self.tiles = d.environments;
+          self.disabled = d.disabled;
+          self.loadedAt = new Date().toLocaleTimeString();
+        }).catch(function (err) { self.notify(err.message, false); })
+          .then(function () { self.loading = false; });
+      },
+      // A click anywhere on an environment row opens its processes; its own links and buttons keep
+      // their action, a text selection is not a click, and ctrl / shift / middle click open a new tab.
+      openEnv: function (e, ev) {
+        if (ev.target.closest('a, button, input, select, textarea, label')) return;
+        if (ev.type !== 'keydown' && String(window.getSelection() || '')) return;
+        if (ev.type === 'auxclick' && ev.button !== 1) return;
+        var url = '/pm2/env/' + e.id;
+        if (ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.button === 1) window.open(url, '_blank');
+        else window.location.href = url;
+      },
+      pct: function (v) { return Math.max(0, Math.min(100, Number(v) || 0)) + '%'; },
+      fixed: function (v) { return (Number(v) || 0).toFixed(0); },
+      barClass: function (v) { return v >= 90 ? 'is-crit' : v >= 75 ? 'is-warn' : ''; },
+      openCreate: function () {
+        this.form = { id: null, name: '', url: '', token: '', description: '', allowInsecureTls: false, enabled: true };
+        this.formError = ''; this.testResult = null;
+        $('#pm2EnvModal').modal('show');
+      },
+      openEdit: function (e) {
+        this.form = { id: e.id, name: e.name, url: e.url, token: '', description: e.description || '', allowInsecureTls: !!e.allowInsecureTls, enabled: e.enabled !== false };
+        this.formError = ''; this.testResult = null;
+        $('#pm2EnvModal').modal('show');
+      },
+      test: function () {
+        var self = this;
+        this.testing = true; this.testResult = null;
+        var url = this.form.id ? '/pm2/environments/' + this.form.id + '/test' : '/pm2/environments/test';
+        this.request(url, { url: this.form.url, token: this.form.token, allowInsecureTls: this.form.allowInsecureTls })
+          .then(function (d) { self.testResult = d; })
+          .catch(function (err) { self.testResult = { reachable: false, error: err.message }; })
+          .then(function () { self.testing = false; });
+      },
+      save: function () {
+        var self = this;
+        this.saving = true; this.formError = '';
+        var url = this.form.id ? '/pm2/environments/' + this.form.id : '/pm2/environments';
+        this.request(url, this.form).then(function (d) {
+          $('#pm2EnvModal').modal('hide');
+          self.notify('Saved "' + d.environment.name + '".');
+          self.load();
+        }).catch(function (err) { self.formError = err.message; })
+          .then(function () { self.saving = false; });
+      },
+      setEnabled: function (e, on) {
+        var self = this;
+        this.request('/pm2/environments/' + e.id + '/enabled', { enabled: on }).then(function () {
+          self.notify('"' + e.name + '" ' + (on ? 'enabled' : 'disabled') + '.');
+          self.load();
+        }).catch(function (err) { self.notify(err.message, false); });
+      }
+    },
+    mounted: function () {
+      var self = this;
+      this.load();
+      // live while the tab is visible
+      this.timer = setInterval(function () { if (!document.hidden) self.load(); }, 15000);
+    }
+  });
+</script>

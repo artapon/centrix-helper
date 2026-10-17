@@ -2,7 +2,7 @@
   "id": "elearning",
   "name": "E-Learning",
   "version": "1.2.0",
-  "author": "Centrix HIS Helper Tools",
+  "author": "Centrix Suite",
   "category": "Training",
   "icon": "fas fa-graduation-cap",
   "summary": "Courses for staff training: a course catalogue, a curriculum of sections and lessons, text lessons, videos from YouTube, Google Drive or a shared network folder, quizzes and graded assignments, with each learner's progress; courses can be shared by link and password.",

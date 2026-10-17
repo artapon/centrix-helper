@@ -8,7 +8,7 @@ const view = require('../../../core/view')('tools');
 
 exports.encryptDecrypt = function (req, res) {
   return res.renderPage(view('encrypt_decrypt'), {
-    title: 'Centrix HIS Helper Tools',
+    title: 'Centrix Suite',
     text: ""
   });
 };
@@ -24,7 +24,7 @@ exports.centrixEncrypt = function(req, res) {
     text = encryption.centrixEncrypt(value);
 
   return res.renderPage(view('encrypt_decrypt'), {
-      title:  'Centrix HIS Helper Tools',
+      title:  'Centrix Suite',
       text: value + " => " + text
     });
 };
@@ -34,7 +34,7 @@ exports.centrixDecrypt = function(req, res) {
   if(value)
     text = encryption.centrixDecrypt(value);
   return res.renderPage(view('encrypt_decrypt'), {
-      title:  'Centrix HIS Helper Tools',
+      title:  'Centrix Suite',
       text: value + " : " + text
     });
 };
@@ -45,7 +45,7 @@ exports.medintEncrypt = function(req, res) {
     text = encryption.medintEncrypt(value);
 
   return res.renderPage(view('encrypt_decrypt'), {
-      title:  'Centrix HIS Helper Tools',
+      title:  'Centrix Suite',
       text: value + " => " + text
     });
 };
@@ -55,7 +55,7 @@ exports.medintDecrypt = function(req, res) {
   if(value)
     text = encryption.medintDecrypt(value);
   return res.renderPage(view('encrypt_decrypt'), {
-      title:  'Centrix HIS Helper Tools',
+      title:  'Centrix Suite',
       text: value + " : " + text
     });
 };

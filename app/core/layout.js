@@ -126,8 +126,8 @@ exports.build = function (req, title) {
     canConnect: !connected && !!account && permissions.canAccessPath(account, '/database/connect/last'),
     lastSite: !connected ? escapeHtml((global.sessionData && global.sessionData.site_name) || '') : '',
     here: escapeHtml(req.originalUrl || '/'),
-    title: title || 'Centrix HIS Helper Tools',
-    docTitle: escapeHtml(String(title || 'Centrix HIS Helper Tools').replace(/<[^>]*>/g, '')),
+    title: title || 'Centrix Suite',
+    docTitle: escapeHtml(String(title || 'Centrix Suite').replace(/<[^>]*>/g, '')),
     user: account && {
       username: escapeHtml(account.username),
       name: escapeHtml(account.name || account.username),

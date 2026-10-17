@@ -2,7 +2,7 @@
   "id": "querystudio",
   "name": "Query Studio",
   "version": "1.1.0",
-  "author": "Centrix HIS Helper Tools",
+  "author": "Centrix Suite",
   "category": "Data tools",
   "icon": "fas fa-terminal",
   "summary": "Run MongoDB shell queries against the connected site, with an audit trail of every query.",

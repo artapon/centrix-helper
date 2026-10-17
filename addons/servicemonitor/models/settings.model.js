@@ -10,7 +10,8 @@ const KEY = 'servicemonitor.settings';
 const THEMES = ['light', 'dark', 'system'];
 const AT_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 const DEFAULT_RESET = { enabled: false, everyDays: 30, at: '00:00', checks: true, events: true, since: null, lastRunAt: null, lastResult: null };
-// Public status page (/status/<token>): view only, no sign-in. showTargets: show URLs / hosts and error texts.
+// Public status pages (/status/<token>), one per organization (shares: { <orgId>: share }), each showing only
+// that organization's monitors: view only, no sign-in. showTargets: show URLs / hosts and error texts.
 // expandGroups: groups start open (true) or collapsed to their header and heartbeat bar (false).
 const DEFAULT_SHARE = { enabled: false, token: '', title: 'Service Status', showTargets: false, expandGroups: true, updatedBy: '', updatedAt: null };
 // Browser notifications (a monitor down / back up), offered on Service Health and on the public status page.
@@ -22,7 +23,7 @@ const DEFAULT_SLACK = { enabled: false, webhookUrl: '', level: 'monitor', notify
 // Don't notify: groups (0 = Ungrouped) and monitors left out of Slack and browser notifications, by id.
 // A muted group covers all of its monitors, also ones added to it later.
 const DEFAULT_MUTE = { groups: [], monitors: [] };
-const DEFAULTS = { theme: 'light', autoReset: DEFAULT_RESET, share: DEFAULT_SHARE, notify: DEFAULT_NOTIFY, slack: DEFAULT_SLACK, mute: DEFAULT_MUTE };
+const DEFAULTS = { theme: 'light', autoReset: DEFAULT_RESET, shares: {}, notify: DEFAULT_NOTIFY, slack: DEFAULT_SLACK, mute: DEFAULT_MUTE };
 
 let cache = null;
 
@@ -46,6 +47,10 @@ exports.isMuted = function (mute, m) {
   return mute.monitors.includes(m.id) || mute.groups.includes(m.groupId || 0);
 };
 
+// { <orgId>: share } with every share complete.
+const sharesFrom = (list) => Object.fromEntries(Object.entries(list && typeof list === 'object' ? list : {})
+  .filter(([k]) => parseInt(k, 10) > 0).map(([k, v]) => [String(parseInt(k, 10)), Object.assign({}, DEFAULT_SHARE, v || {})]));
+
 exports.get = async function () {
   if (cache) return cache;
   const row = await get('SELECT value FROM app_meta WHERE key = ?', [KEY]);
@@ -53,7 +58,7 @@ exports.get = async function () {
   try { stored = row ? JSON.parse(row.value) : {}; } catch (e) { stored = {}; }
   cache = Object.assign({}, DEFAULTS, stored, {
     autoReset: Object.assign({}, DEFAULT_RESET, stored.autoReset || {}),
-    share: Object.assign({}, DEFAULT_SHARE, stored.share || {}),
+    shares: sharesFrom(stored.shares),
     notify: Object.assign({}, DEFAULT_NOTIFY, stored.notify || {}),
     slack: Object.assign({}, DEFAULT_SLACK, stored.slack || {}),
     mute: muteFrom(stored.mute)
@@ -108,34 +113,55 @@ exports.save = async function (body, username) {
   return write(Object.assign({}, cur, { theme, autoReset, notify, slack, mute, updatedBy: username || '', updatedAt: new Date().toISOString() }));
 };
 
-/** Records an automatic reset that ran. */
+/** An organization's public status page (a default, turned off, while it has none). */
+exports.shareOf = async function (orgId) {
+  return (await exports.get()).shares[String(orgId)] || Object.assign({}, DEFAULT_SHARE);
+};
+
 /**
- * The public status page: { enabled, title, showTargets, regenerate }. A token is made the first time it is
- * turned on; regenerate makes a new one (the old link stops working).
+ * An organization's public status page: { enabled, title, showTargets, expandGroups, regenerate }. A token is
+ * made the first time it is saved; regenerate makes a new one (the old link stops working).
  */
-exports.saveShare = async function (body, username) {
+exports.saveShare = async function (orgId, body, username) {
   const b = body || {};
   const cur = await exports.get();
-  const title = String(b.title == null ? cur.share.title : b.title).trim().slice(0, 80) || DEFAULT_SHARE.title;
-  const enabled = b.enabled == null ? cur.share.enabled : !!b.enabled;
-  let token = cur.share.token;
+  const old = await exports.shareOf(orgId);
+  const title = String(b.title == null ? old.title : b.title).trim().slice(0, 80) || DEFAULT_SHARE.title;
+  let token = old.token;
   if (!token || b.regenerate) token = require('crypto').randomBytes(18).toString('base64url');
   const share = {
-    enabled, token, title,
-    showTargets: b.showTargets == null ? cur.share.showTargets : !!b.showTargets,
-    expandGroups: b.expandGroups == null ? cur.share.expandGroups !== false : !!b.expandGroups,
+    enabled: b.enabled == null ? old.enabled : !!b.enabled, token, title,
+    showTargets: b.showTargets == null ? old.showTargets : !!b.showTargets,
+    expandGroups: b.expandGroups == null ? old.expandGroups !== false : !!b.expandGroups,
     updatedBy: username || '', updatedAt: new Date().toISOString()
   };
-  return write(Object.assign({}, cur, { share }));
+  const shares = Object.assign({}, cur.shares, { [String(orgId)]: share });
+  await write(Object.assign({}, cur, { shares }));
+  return share;
 };
 
-/** The share settings when `token` is the live public link, else null. */
+/** An organization's share dropped (the organization was deleted). */
+exports.removeShare = async function (orgId) {
+  const cur = await exports.get();
+  if (!cur.shares[String(orgId)]) return;
+  const shares = Object.assign({}, cur.shares);
+  delete shares[String(orgId)];
+  await write(Object.assign({}, cur, { shares }));
+};
+
+/** The share (with its orgId) whose token is `token` and which is turned on, else null. */
 exports.shareFor = async function (token) {
-  const s = (await exports.get()).share;
-  if (!s.enabled || !s.token || typeof token !== 'string' || token.length !== s.token.length) return null;
-  return require('crypto').timingSafeEqual(Buffer.from(token), Buffer.from(s.token)) ? s : null;
+  if (typeof token !== 'string') return null;
+  const crypto = require('crypto');
+  for (const [orgId, s] of Object.entries((await exports.get()).shares)) {
+    if (s.enabled && s.token && token.length === s.token.length && crypto.timingSafeEqual(Buffer.from(token), Buffer.from(s.token))) {
+      return Object.assign({ orgId: parseInt(orgId, 10) }, s);
+    }
+  }
+  return null;
 };
 
+/** Records an automatic reset that ran. */
 exports.recordAutoReset = async function (result) {
   const cur = await exports.get();
   return write(Object.assign({}, cur, { autoReset: Object.assign({}, cur.autoReset, { lastRunAt: new Date().toISOString(), lastResult: result }) }));

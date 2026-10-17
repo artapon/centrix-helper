@@ -102,7 +102,9 @@
               <td class="text-center">
                 <a v-if="item.paymentdetails > 0" :href="`/billing/payment-items/${item.sequencenumber}`">{{ item.paymentdetails }}</a><span v-else style="color:#cbd5e1;">—</span>
               </td>
-              <td class="text-center"><a :href="`/billing/bill-df-items/${item.sequencenumber}`">View</a></td>
+              <td class="text-center">
+                <a v-if="item.dfitems > 0" :href="`/billing/bill-df-items/${item.sequencenumber}`">{{ item.dfitems }}</a><span v-else style="color:#cbd5e1;">—</span>
+              </td>
               <td class="text-right"><strong>{{ item.totalbillamount }}</strong></td>
               <td>{{ item.user || '' }}</td>
               <td>{{ item.canceldate || '' }}</td>

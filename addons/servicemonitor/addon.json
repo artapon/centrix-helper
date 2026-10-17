@@ -9,19 +9,21 @@
   "description": "Watch the services the hospital depends on (HIS web and APIs, JasperServer, HL7 listeners, PACS, databases, DNS) from one place. Each monitor is checked in the background on its own interval, with retries before it is marked down, and shows up, slow or down with its response time, uptime and a heartbeat bar of its latest checks. HTTPS and TLS certificates and public domain registrations are read too, with warnings before they expire. Status changes are kept as incidents. A view-only status page can be shared by link, without sign-in. Everything is stored in SQLite, so no Centrix database connection is needed.",
   "features": [
     "Monitor types: HTTP(S) (status codes, keyword, redirects), TCP port, ping (ICMP) and DNS (record type, server, expected answer)",
+    "Organizations above groups and monitors: an overview of every organization, and each its own Service Health page, listed under Service Health in the menu",
     "Groups with their own colour and order; groups collapse to a combined heartbeat bar",
     "Heartbeat interval, retries and retry interval before a monitor is marked down, request timeout and a slow threshold",
     "Service Health: overall status, key numbers, search and status filters, a heartbeat bar per monitor, uptime 24 h / 7 d and response times",
     "Monitor detail: response-time chart (1 hour to 7 days), uptime, p95, incidents and the latest checks",
     "Certificate expiry (HTTPS and TLS ports) and domain name expiry (RDAP), each with its own warning and critical days",
     "Incidents: every status change with its duration, ongoing or resolved",
-    "Share: a public, view-only status page by link, with or without targets and error texts, groups expanded or collapsed",
+    "Share: a public, view-only status page per organization by link, with or without targets and error texts, groups expanded or collapsed",
     "Reset statistics now or on a schedule (every N days at a set time), for all monitors, a group or one monitor",
-    "Backup and restore of monitors, groups and settings as a .json file (add to, or replace, the current monitors)",
-    "Import monitors and groups from an Uptime Kuma 1.x backup",
+    "Backup and restore of organizations, monitors, groups and settings as a .json file (into the backup's organizations or one chosen organization; add to, or replace, its monitors)",
+    "Import monitors and groups from an Uptime Kuma 1.x backup into an organization, from its Actions menu",
+    "Pause or resume all monitors of an organization at once",
     "Light, dark or device theme, full-screen mode for wall displays",
     "Built for many monitors: hourly totals, cached reads and up to 32 checks at the same time",
-    "Role permissions: view, Manage services, Check now and Reset statistics; Settings and Share for administrators"
+    "Role permissions: view, Manage services, Import from Uptime Kuma, Check now and Reset statistics; Settings, Backup & restore and Share for administrators"
   ],
   "requires": [
     "SQLite for the monitors and their check history (no MongoDB connection needed)",
@@ -48,7 +50,12 @@
           {
             "key": "manage",
             "text": "Manage services",
-            "description": "Create, edit, pause and delete services and groups"
+            "description": "Create, edit, pause and delete services, groups and organizations; pause or resume all monitors of an organization"
+          },
+          {
+            "key": "import",
+            "text": "Import from Uptime Kuma",
+            "description": "Import monitors and groups from an Uptime Kuma backup into an organization"
           },
           {
             "key": "check",

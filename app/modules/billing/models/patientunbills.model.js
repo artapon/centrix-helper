@@ -299,7 +299,8 @@ exports.getPatientUnBillData = async function (unbilluid, orguid) {
                 modifiedby : "$modifiedby.name",
                 modifiedat : { $dateToString: { date : "$modifiedat", format : "%d/%m/%Y %H:%M", timezone : "Asia/Bangkok" }},
                 modifiedatforsort :  "$modifiedat",
-                chargecodes : { $size: "$chargecodes" }
+                chargecodes : { $size: "$chargecodes" },
+                allocationinitialized : "$allocationinitialized"
             }
         }
       ],

@@ -1,5 +1,61 @@
 <div class="col-sm-12">
 
+  <!-- ── Bill Details (same fields as /billing/bills) ─────────────── -->
+  <div v-if="bill" class="card mb-3">
+    <div class="card-header" style="display:flex;align-items:center;gap:8px;">
+      <i class="fas fa-file-invoice-dollar" style="color:#2563eb;"></i>
+      <span>Bill {{ bill.sequencenumber }}</span>
+      <span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;">
+        <span v-if="bill.iscancelled" class="badge badge-danger">Cancelled</span>
+        <span v-if="bill.isrefund" class="badge badge-success">Refund</span>
+        <span v-if="bill.isipdbill" class="badge badge-primary">IPD Bill</span>
+        <span v-if="bill.isinterim" class="badge badge-primary">Interim</span>
+        <span v-if="bill.isreceivable" class="badge badge-success">Receivable</span>
+      </span>
+    </div>
+    <div class="card-body">
+      <div class="bill-details">
+        <div><label>VN :</label><a target="_blank" :href="`/patients/summary?vn=${bill.visitid}`">{{ bill.visitid }}</a></div>
+        <div><label>HN :</label><a target="_blank" :href="`/patients/summary?hn=${bill.mrn}`">{{ bill.mrn }}</a></div>
+        <div><label>Bill Date :</label>{{ bill.billdate || '—' }}</div>
+        <div><label>User :</label>{{ bill.user || '—' }}</div>
+        <div class="wide"><label>Visit Status :</label>
+          <span :class="bill.visitstatus == 'Financial Discharge' ? 'status-inactive' : 'status-active'">{{ bill.visitstatus || '' }}</span>
+        </div>
+        <div class="wide"><label>Items / Payments / DF :</label>
+          {{ bill.patientbilleditems }} /
+          <a v-if="bill.paymentdetails > 0" target="_blank" :href="`/billing/payment-items/${bill.sequencenumber}`">{{ bill.paymentdetails }}</a><template v-else>0</template> /
+          <a v-if="bill.dfitems > 0" target="_blank" :href="`/billing/bill-df-items/${bill.sequencenumber}`">{{ bill.dfitems }}</a><template v-else>0</template>
+        </div>
+        <div class="wide"><label>Payor :</label>{{ bill.payor || '—' }}</div>
+        <div class="wide"><label>Agreement :</label>{{ bill.payoragreements || '—' }}</div>
+        <div class="wide"><label>Created :</label>{{ bill.createdby || '' }} · {{ bill.createdat || '' }}</div>
+        <div class="wide"><label>Modified :</label>{{ bill.modifiedby || '' }} · {{ bill.modifiedat || '' }}</div>
+        <div v-if="bill.isinterim" class="wide"><label>Interim :</label>{{ bill.interimfromdate || '' }} – {{ bill.interimtodate || '' }}</div>
+        <div v-if="bill.iscancelled || bill.isrefund"><label>Cancel Date :</label>{{ bill.canceldate || '—' }}</div>
+        <div v-if="bill.iscancelled || bill.isrefund"><label>Cancel By :</label>{{ bill.cancelrefundbyuser || '—' }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Summary Totals ────────────────────────────────────────────── -->
+  <div class="card mb-3">
+    <div class="card-body" style="display:flex;flex-wrap:wrap;gap:12px;">
+      <div style="flex:1;min-width:180px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px 16px;">
+        <div style="font-size:.7rem;font-weight:700;color:#16a34a;text-transform:uppercase;letter-spacing:.05em;">Net Amount</div>
+        <div style="font-size:1.4rem;font-weight:700;color:#15803d;">{{ totalnetamount || 0 }}</div>
+      </div>
+      <div style="flex:1;min-width:180px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 16px;">
+        <div style="font-size:.7rem;font-weight:700;color:#2563eb;text-transform:uppercase;letter-spacing:.05em;">Total Price</div>
+        <div style="font-size:1.4rem;font-weight:700;color:#1d4ed8;">{{ totalprice || 0 }}</div>
+      </div>
+      <div style="flex:1;min-width:180px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px 16px;">
+        <div style="font-size:.7rem;font-weight:700;color:#ea580c;text-transform:uppercase;letter-spacing:.05em;">Total Discount</div>
+        <div style="font-size:1.4rem;font-weight:700;color:#c2410c;">{{ totaldiscount || 0 }}</div>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Toolbar Card ─────────────────────────────────────────────── -->
   <div class="card mb-3">
     <div class="card-body" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
@@ -26,24 +82,6 @@
         <span id="findCounter" style="font-size:.72rem;color:#94a3b8;white-space:nowrap;min-width:36px;">0 / 0</span>
         <button id="findPrev" class="btn btn-sm" style="padding:1px 6px;color:#64748b;" title="Previous (Shift+Enter)"><i class="fas fa-chevron-up"></i></button>
         <button id="findNext" class="btn btn-sm" style="padding:1px 6px;color:#64748b;" title="Next (Enter)"><i class="fas fa-chevron-down"></i></button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── Summary Totals ────────────────────────────────────────────── -->
-  <div class="card mb-3">
-    <div class="card-body" style="display:flex;flex-wrap:wrap;gap:12px;">
-      <div style="flex:1;min-width:180px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px 16px;">
-        <div style="font-size:.7rem;font-weight:700;color:#16a34a;text-transform:uppercase;letter-spacing:.05em;">Net Amount</div>
-        <div style="font-size:1.4rem;font-weight:700;color:#15803d;">{{ totalnetamount || 0 }}</div>
-      </div>
-      <div style="flex:1;min-width:180px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 16px;">
-        <div style="font-size:.7rem;font-weight:700;color:#2563eb;text-transform:uppercase;letter-spacing:.05em;">Total Price</div>
-        <div style="font-size:1.4rem;font-weight:700;color:#1d4ed8;">{{ totalprice || 0 }}</div>
-      </div>
-      <div style="flex:1;min-width:180px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px 16px;">
-        <div style="font-size:.7rem;font-weight:700;color:#ea580c;text-transform:uppercase;letter-spacing:.05em;">Total Discount</div>
-        <div style="font-size:1.4rem;font-weight:700;color:#c2410c;">{{ totaldiscount || 0 }}</div>
       </div>
     </div>
   </div>
@@ -179,6 +217,30 @@
     border-radius: 2px;
   }
   #findInput:focus { border-color:#2563eb; }
+  .bill-details {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-auto-flow: row dense;
+    gap: 10px 24px;
+    font-size: .83rem;
+  }
+  .bill-details > div { min-width: 0; overflow-wrap: anywhere; }
+  .bill-details > .wide { grid-column: span 2; }
+  .bill-details label {
+    display: inline;
+    margin: 0 6px 0 0;
+    font-weight: 600;
+    color: #64748b;
+  }
+  .bill-details .status-active,
+  .bill-details .status-inactive { white-space: normal; max-width: 100%; }
+  @media (max-width: 991px) {
+    .bill-details { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 575px) {
+    .bill-details { grid-template-columns: minmax(0, 1fr); }
+    .bill-details > .wide { grid-column: auto; }
+  }
 </style>
 
 <script>

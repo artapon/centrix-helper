@@ -84,7 +84,10 @@
         var groupMatches = $group.find('.nav-group-toggle span').text().toLowerCase().indexOf(q) >= 0;
         var visibleItems = 0;
         $group.find('.nav-group-items li').each(function () {
-          var show = !q || groupMatches || $(this).text().toLowerCase().indexOf(q) >= 0;
+          // a sub-item (.nav-sub-items) also shows when its parent item matches
+          var $parent = $(this).parent('.nav-sub-items').closest('li');
+          var show = !q || groupMatches || $(this).text().toLowerCase().indexOf(q) >= 0 ||
+            ($parent.length > 0 && $parent.children('a').text().toLowerCase().indexOf(q) >= 0);
           $(this).toggle(show);
           if (show) visibleItems++;
         });

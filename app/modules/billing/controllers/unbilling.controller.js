@@ -86,6 +86,7 @@ exports.patientBillsItems = async function (req, res) {
 
   return res.renderPage(view('unbilltems'), {
     title:   'HN : ' + '<a target="_blank" href="/patients/summary?vn='+unbill[0].mrn+'">' +unbill[0].mrn+ '</a>' + ' VN : ' + '<a target="_blank" href="/patients/summary?vn='+unbill[0].visitid+'">' +unbill[0].visitid+ '</a>'  + ' Chargecodes Items (' + summary.total +')',
+    chargecode: unbill[0] || null,   // same fields as the /billing/charge-codes row, for the details card
     ...itemsPageData(summary, rows, `/billing/unbill-items/${encodeURIComponent(unbilluid)}/rows`)
   });
 }
@@ -110,6 +111,7 @@ exports.patientBillsItemsByHN = async function (req, res) {
 
   return res.renderPage(view('unbilltems'), {
     title:  'HN : ' + hn + ' Chargecodes items (' + summary.total + ')',
+    chargecode: null,
     ...itemsPageData(summary, rows, `/billing/unbill-items-by-hn/${encodeURIComponent(hn)}/rows`)
   });
 }

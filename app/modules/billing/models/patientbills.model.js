@@ -554,6 +554,60 @@ exports.getPatientBillDFItems = async function (billuid, orguid) {
 }
 
 
+// Number of rows /billing/bill-df-items shows per bill (DF items + DF items inside packages),
+// counted with only the stages that decide which rows it keeps. Returns { "<billuid>": n }.
+exports.countPatientBillsDFItems = async function (billuids, orguid) {
+  const ids = (billuids || []).filter(Boolean).map(function (id) { return mongoose.Types.ObjectId(id); });
+  const counts = {};
+  if (!ids.length) return counts;
+  const match = {
+    _id : { $in: ids },
+    orguid : mongoose.Types.ObjectId(orguid),
+    statusflag : "A"
+  };
+  const count = function (pipeline) {
+    return mongoose.connection.db
+      .collection("patientbills")
+      .aggregate(pipeline.concat([{ $group: { _id: "$_id", n: { $sum: 1 } } }]), { allowDiskUse: true })
+      .toArray()
+      .catch(function (err) { console.log(err); return []; });
+  };
+
+  const results = await Promise.all([
+    count([
+      { $match : match },
+      { $unwind: "$patientbilleditems" },
+      { $lookup: { from: "orderitems", localField: "patientbilleditems.orderitemuid", foreignField: "_id", as: "orderitem" } },
+      { $unwind: { path: "$orderitem", preserveNullAndEmptyArrays: true } },
+      { $lookup: { from: "ordercategories", foreignField: "_id", localField: "orderitem.ordercatuid", as: "ordercatuid" } },
+      { $unwind: { path: '$ordercatuid', preserveNullAndEmptyArrays: true } },
+      { $match: { $or: [ { "ordercatuid.ordercattype": "DOCTORFEE" }, { "orderitem.isdoctorshareitem": true } ] } }
+    ]),
+    count([
+      { $match : match },
+      { $unwind: "$patientbilleditems" },
+      { $match: { "patientbilleditems.chargecodetype": "PATIENTPACKAGE" } },
+      { $lookup: { from: "patientpackages", foreignField: "_id", localField: "patientbilleditems.patientorderuid", as: "patientpackage" } },
+      { $unwind: { path: '$patientpackage', preserveNullAndEmptyArrays: true } },
+      { $unwind: { path: '$patientpackage.orderitems', preserveNullAndEmptyArrays: true } },
+      { $lookup: { from: "orderitems", foreignField: "_id", localField: "patientpackage.orderitems.orderitemuid", as: "orderitem" } },
+      { $unwind: { path: '$orderitem', preserveNullAndEmptyArrays: true } },
+      { $lookup: { from: "ordercategories", foreignField: "_id", localField: "orderitem.ordercatuid", as: "ordercatuid" } },
+      { $unwind: { path: '$ordercatuid', preserveNullAndEmptyArrays: true } },
+      { $match: { $or: [ { "ordercatuid.ordercattype": "DOCTORFEE" }, { "orderitem.isdoctorshareitem": true } ] } }
+    ])
+  ]);
+  results.forEach(function (rows) {
+    rows.forEach(function (r) { counts[String(r._id)] = (counts[String(r._id)] || 0) + r.n; });
+  });
+  return counts;
+}
+
+exports.countPatientBillDFItems = async function (billuid, orguid) {
+  const counts = await exports.countPatientBillsDFItems([billuid], orguid);
+  return counts[String(billuid)] || 0;
+}
+
 exports.getPatientBillData = async function (sequencenumber, orguid) {
   let data = await mongoose.connection.db
   .collection("patientbills")

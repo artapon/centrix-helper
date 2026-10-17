@@ -1,4 +1,4 @@
-// Service Monitor > Settings > Import from Uptime Kuma: turns the monitors of an Uptime Kuma backup
+// Service Monitor > organization Actions > Import from Uptime Kuma: turns the monitors of an Uptime Kuma backup
 // (1.x: Settings > Backup > Export, a JSON file with "monitorList") into Service Monitor monitors and groups.
 //   http, keyword, json-query -> HTTP(S)   (json-query: the JSON query itself is not checked)
 //   port -> TCP host:port   ping -> Ping   dns -> DNS   group -> a group (its children go in it)
@@ -82,13 +82,16 @@ function convert(m) {
 }
 
 /**
- * What an import would do: { groups: [{ name, exists }], rows: [{ kumaId, name, type, target, group, action, reason, notes }] }.
- * action: 'import' | 'exists' (same type and target already monitored) | 'skip'.
+ * What an import into one organization would do (target: { orgId } or { newOrg: name }, see services.importOrg()):
+ * { org: { id, name, isNew }, groups: [{ name, exists }], rows: [{ kumaId, name, type, target, group, action, reason, notes }] }.
+ * action: 'import' | 'exists' (same type and target already monitored in that organization) | 'skip'.
  */
-exports.plan = async function (backup) {
+exports.plan = async function (backup, target) {
   const list = monitorsOf(backup);
-  const existing = (await services.dashboard()).services;
-  const existingGroups = await services.groups();
+  // Everything goes into one organization: "exists" and group names are of that organization only.
+  const org = await services.importOrg(target);
+  const existing = org.id ? (await services.dashboard()).services.filter((s) => s.orgId === org.id) : [];
+  const existingGroups = org.id ? await services.groups(org.id) : [];
   const seen = new Set(existing.map((s) => s.type + '|' + s.target.toLowerCase()));
   const inBackup = new Map();                         // key -> name of the first monitor of the backup with it
   const kumaGroups = new Map(list.filter((m) => m.type === 'group').map((m) => [m.id, str(m.name) || 'Group']));
@@ -113,25 +116,30 @@ exports.plan = async function (backup) {
     return Object.assign(row, { action: 'import', fields: c.fields });
   });
   return {
+    org: { id: org.id, name: org.name, isNew: !!org.isNew },
     groups: groupNames.map((name) => ({ name, exists: existingGroups.some((g) => g.name.toLowerCase() === name.toLowerCase()) })),
     rows
   };
 };
 
-/** Imports the plan's 'import' rows (and, with includeExisting, the 'exists' ones too). Returns the counts. */
-exports.run = async function (backup, { includeExisting = false } = {}, username) {
-  const p = await exports.plan(backup);
-  const groups = await services.groups();
+/**
+ * Imports the plan's 'import' rows (and, with includeExisting, the 'exists' ones too) into the organization
+ * (target as for plan(); a new one is made only when something is imported). Returns the counts and the organization.
+ */
+exports.run = async function (backup, { orgId, newOrg, includeExisting = false } = {}, username) {
+  const p = await exports.plan(backup, { orgId, newOrg });
+  const todo = p.rows.filter((r) => r.action === 'import' || (includeExisting && r.action === 'exists'));
+  const org = await services.importOrg({ orgId, newOrg }, todo.length > 0);
+  const groups = org.id ? await services.groups(org.id) : [];
   const groupId = new Map(groups.map((g) => [g.name.toLowerCase(), g.id]));
   let createdGroups = 0, imported = 0, order = groups.length;
   const list = monitorsOf(backup);
-  for (const r of p.rows) {
-    if (!(r.action === 'import' || (includeExisting && r.action === 'exists'))) continue;
-    const fields = r.fields || convert(list.find((m) => m.id === r.kumaId)).fields;
+  for (const r of todo) {
+    const fields = Object.assign({}, r.fields || convert(list.find((m) => m.id === r.kumaId)).fields, { orgId: org.id });
     if (r.group) {
       const key = r.group.toLowerCase();
       if (!groupId.has(key)) {
-        const g = await services.saveGroup(null, { name: r.group, color: COLORS[order % COLORS.length], sortOrder: order });
+        const g = await services.saveGroup(null, { orgId: org.id, name: r.group, color: COLORS[order % COLORS.length], sortOrder: order });
         groupId.set(key, g.id); order++; createdGroups++;
       }
       fields.groupId = groupId.get(key);
@@ -139,5 +147,5 @@ exports.run = async function (backup, { includeExisting = false } = {}, username
     await services.create(services.normalize(fields), username);
     imported++;
   }
-  return { imported, createdGroups, skipped: p.rows.filter((r) => r.action === 'skip').length, existing: includeExisting ? 0 : p.rows.filter((r) => r.action === 'exists').length };
+  return { org: { id: org.id, name: org.name }, imported, createdGroups, skipped: p.rows.filter((r) => r.action === 'skip').length, existing: includeExisting ? 0 : p.rows.filter((r) => r.action === 'exists').length };
 };

@@ -1,5 +1,6 @@
-// Service Monitor: the groups, the services and their check history, in SQLite.
-//   sm_groups    a named, coloured group of services (a service without one is "Ungrouped")
+// Service Monitor: the organizations, groups, services and their check history, in SQLite.
+//   sm_orgs      an organization: the top level, each with its own Service Health page (there is always one)
+//   sm_groups    a named, coloured group of services within an organization (a service without one is "Ungrouped")
 //   sm_services  what to check and how, plus its latest result, certificate and domain registration
 //   sm_checks    one row per check (kept CHECK_DAYS days) for uptime and response-time history
 //   sm_events    a row each time a service's settled status changes (incidents, kept EVENT_DAYS days)
@@ -20,11 +21,21 @@ const METHODS = ['GET', 'HEAD', 'POST'];
 const COLOR_RE = /^#[0-9a-f]{6}$/i;
 const OK = "('up', 'slow', 'retry')";       // statuses that count as answered (uptime)
 const DASHBOARD_TTL_MS = 3000;          // every open Service Health page shares one read for this long
+const DEFAULT_ORG = 'Main organization';
 
 let ready = null;
 function schema() {
   if (!ready) {
     ready = (async () => {
+      await run(`
+        CREATE TABLE IF NOT EXISTS sm_orgs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          color TEXT NOT NULL DEFAULT '#2563eb',
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL
+        )`);
       await run(`
         CREATE TABLE IF NOT EXISTS sm_groups (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -104,6 +115,12 @@ function schema() {
       if (!cols.has('domain_crit_days')) await run('ALTER TABLE sm_services ADD COLUMN domain_crit_days INTEGER NOT NULL DEFAULT 7');
       // HTTP: redirects to follow before judging the page (0 = judge the redirect itself by the accepted codes)
       if (!cols.has('max_redirects')) await run('ALTER TABLE sm_services ADD COLUMN max_redirects INTEGER NOT NULL DEFAULT 0');
+      // Organizations: groups and monitors belong to one (those from before go to the first one).
+      if (!cols.has('org_id')) await run('ALTER TABLE sm_services ADD COLUMN org_id INTEGER');
+      const gcols = new Set((await all('PRAGMA table_info(sm_groups)')).map((c) => c.name));
+      if (!gcols.has('org_id')) await run('ALTER TABLE sm_groups ADD COLUMN org_id INTEGER');
+      await run('CREATE INDEX IF NOT EXISTS idx_sm_services_org ON sm_services (org_id)');
+      await adoptOrphans();
       // Hourly totals per monitor (hour = 'YYYY-MM-DDTHH', UTC), kept up to date by record(): uptime and average
       // response read these instead of scanning every check. Filled from sm_checks once, when it is created.
       const hourlyExists = await get("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'sm_hourly'");
@@ -130,6 +147,22 @@ function schema() {
     })().catch((err) => { ready = null; throw err; });
   }
   return ready;
+}
+
+// Every group and monitor in an organization: those without one (from before organizations, or whose
+// organization is gone) go to their group's, else to the first organization, made when there is none.
+async function adoptOrphans() {
+  if (!(await get('SELECT 1 FROM sm_orgs LIMIT 1'))) {
+    await run('INSERT INTO sm_orgs (name, description, color, sort_order, created_at) VALUES (?, ?, ?, 0, ?)', [DEFAULT_ORG, '', '#2563eb', now()]);
+  }
+  const first = (await get('SELECT id FROM sm_orgs ORDER BY sort_order, name COLLATE NOCASE, id LIMIT 1')).id;
+  await run('UPDATE sm_groups SET org_id = ? WHERE org_id IS NULL OR org_id NOT IN (SELECT id FROM sm_orgs)', [first]);
+  await run(`UPDATE sm_services SET org_id = COALESCE((SELECT g.org_id FROM sm_groups g WHERE g.id = sm_services.group_id), ?)
+             WHERE org_id IS NULL OR org_id NOT IN (SELECT id FROM sm_orgs)`, [first]);
+  // a monitor is always in its group's organization
+  await run(`UPDATE sm_services SET org_id = (SELECT g.org_id FROM sm_groups g WHERE g.id = sm_services.group_id)
+             WHERE group_id IN (SELECT id FROM sm_groups) AND org_id != (SELECT g.org_id FROM sm_groups g WHERE g.id = sm_services.group_id)`);
+  await loadOrgs();
 }
 
 const now = () => new Date().toISOString();
@@ -242,6 +275,7 @@ exports.normalize = function (body) {
   const [domainWarn, domainCrit] = thresholds('Domain name expiry', b.domainWarnDays, b.domainCritDays);
   const retryEvery = int(b.retryIntervalSec, 0, 0, 86400);
   return {
+    org_id: b.orgId ? int(b.orgId, null, 1, Number.MAX_SAFE_INTEGER) : null,     // null: the group's, else the first
     group_id: b.groupId ? int(b.groupId, null, 1, Number.MAX_SAFE_INTEGER) : null,
     name,
     type,
@@ -300,7 +334,7 @@ const view = (r) => {
   const cert = hasCert(r) ? parse(r.cert, null) : null;
   const domain = r.check_domain ? parse(r.domain, null) : null;
   return {
-    id: r.id, groupId: r.group_id, name: r.name, type: r.type, target: r.target, method: r.method,
+    id: r.id, orgId: r.org_id, groupId: r.group_id, name: r.name, type: r.type, target: r.target, method: r.method,
     expectedStatus: r.expected_status, keyword: r.keyword, maxRedirects: r.max_redirects || 0, dnsType: r.dns_type, dnsServer: r.dns_server, timeoutMs: r.timeout_ms, intervalSec: r.interval_sec,
     retries: r.retries, retryIntervalSec: r.retry_interval_sec, failCount: r.fail_count,
     slowMs: r.slow_ms, checkCert: !!r.check_cert, checkDomain: !!r.check_domain, certWarnDays: r.cert_warn_days, certCritDays: r.cert_crit_days,
@@ -323,13 +357,125 @@ const view = (r) => {
 };
 exports.view = view;
 
-const groupView = (g) => g && ({ id: g.id, name: g.name, description: g.description, color: g.color, sortOrder: g.sort_order });
+const groupView = (g) => g && ({ id: g.id, orgId: g.org_id, name: g.name, description: g.description, color: g.color, sortOrder: g.sort_order });
+const orgView = (o) => o && ({ id: o.id, name: o.name, description: o.description, color: o.color, sortOrder: o.sort_order });
+
+// ---- organizations ----
+// Kept in memory too (orgList), for the sidebar's sub-menu, which is drawn without waiting on SQLite.
+
+let orgList = [];
+async function loadOrgs() {
+  orgList = Object.freeze((await all('SELECT * FROM sm_orgs ORDER BY sort_order, name COLLATE NOCASE, id')).map(orgView));
+  return orgList;
+}
+
+exports.orgs = async function () {
+  await schema();
+  return orgList;
+};
+
+/** The sidebar's sub-items of Service Health: one per organization (see core/layout.js submenu()). */
+exports.orgMenu = function () {
+  schema().catch(() => {});
+  return orgList.map((o) => ({ text: o.name, link: `/service-monitor/org/${o.id}`, color: o.color }));
+};
+
+exports.getOrg = async function (id) {
+  await schema();
+  return orgList.find((o) => o.id === id) || null;
+};
+
+/** The organization a monitor or group goes in: the one given (it must exist), else the first. */
+async function orgFor(orgId) {
+  await schema();
+  if (orgId) {
+    if (!orgList.some((o) => o.id === orgId)) throw invalid('That organization no longer exists.');
+    return orgId;
+  }
+  return orgList[0].id;
+}
+exports.orgFor = orgFor;
+
+exports.saveOrg = async function (id, body) {
+  await schema();
+  const name = text(body && body.name, 80);
+  if (!name) throw invalid('The organization needs a name.');
+  const dup = await get('SELECT id FROM sm_orgs WHERE name = ? COLLATE NOCASE AND id != ?', [name, id || 0]);
+  if (dup) throw invalid(`There already is an organization named "${name}".`);
+  const color = COLOR_RE.test(String(body.color || '')) ? body.color : '#2563eb';
+  const description = text(body.description, 300);
+  const order = int(body.sortOrder, 0, -9999, 9999);
+  if (id) {
+    const r = await run('UPDATE sm_orgs SET name = ?, description = ?, color = ?, sort_order = ? WHERE id = ?', [name, description, color, order, id]);
+    if (!r.changes) throw Object.assign(new Error('Organization not found.'), { status: 404, expose: true });
+  } else {
+    id = (await run('INSERT INTO sm_orgs (name, description, color, sort_order, created_at) VALUES (?, ?, ?, ?, ?)', [name, description, color, order, now()])).lastID;
+  }
+  await loadOrgs();
+  changed();
+  return orgList.find((o) => o.id === id);
+};
+
+const ORG_COLORS = ['#2563eb', '#0e7490', '#16a34a', '#ca8a04', '#ea580c', '#dc2626', '#7c3aed', '#db2777', '#475569'];
+
+/**
+ * The organization an import goes into: { orgId } an existing one (0: the first), or { newOrg: name }, which is
+ * made (create true) unless one by that name exists. Without create, a new one is { id: 0, name, isNew: true }.
+ */
+exports.importOrg = async function ({ orgId, newOrg } = {}, create = false, extra = {}) {
+  await schema();
+  if (newOrg) {
+    const same = orgList.find((o) => o.name.toLowerCase() === String(newOrg).toLowerCase());
+    if (same) return same;
+    if (!create) return { id: 0, name: String(newOrg), isNew: true };
+    const given = Object.fromEntries(Object.entries(extra).filter(([, v]) => v != null));
+    return exports.saveOrg(null, Object.assign({ color: ORG_COLORS[orgList.length % ORG_COLORS.length], sortOrder: orgList.length }, given, { name: newOrg }));
+  }
+  const org = orgId ? orgList.find((o) => o.id === orgId) : orgList[0];
+  if (!org) throw invalid('That organization no longer exists.');
+  return org;
+};
+
+/** What deleting an organization takes with it: { groups, monitors }. */
+exports.orgContents = async function (id) {
+  await schema();
+  const [g, m] = await Promise.all([
+    get('SELECT COUNT(*) AS n FROM sm_groups WHERE org_id = ?', [id]),
+    get('SELECT COUNT(*) AS n FROM sm_services WHERE org_id = ?', [id])
+  ]);
+  return { groups: g.n, monitors: m.n };
+};
+
+/** Deletes an organization with its groups and monitors (and their history). The last one stays. */
+exports.removeOrg = async function (id) {
+  await schema();
+  if (!orgList.some((o) => o.id === id)) return false;
+  if (orgList.length < 2) throw invalid('The last organization cannot be deleted.');
+  for (const s of await all('SELECT id FROM sm_services WHERE org_id = ?', [id])) await exports.remove(s.id);
+  await run('DELETE FROM sm_groups WHERE org_id = ?', [id]);
+  await run('DELETE FROM sm_orgs WHERE id = ?', [id]);
+  await loadOrgs();
+  changed();
+  return true;
+};
 
 // ---- groups ----
 
-exports.groups = async function () {
+/** The groups of one organization, or of all (by organization, then their own order). */
+exports.groups = async function (orgId) {
   await schema();
-  return (await all('SELECT * FROM sm_groups ORDER BY sort_order, name COLLATE NOCASE')).map(groupView);
+  const rows = orgId
+    ? await all('SELECT * FROM sm_groups WHERE org_id = ? ORDER BY sort_order, name COLLATE NOCASE', [orgId])
+    : await all(`SELECT g.* FROM sm_groups g LEFT JOIN sm_orgs o ON o.id = g.org_id
+                 ORDER BY o.sort_order, o.name COLLATE NOCASE, g.sort_order, g.name COLLATE NOCASE`);
+  return rows.map(groupView);
+};
+
+/** Group id -> its name, with its organization's in front ("Org › Group") while there is more than one. */
+exports.groupLabels = async function () {
+  const groups = await exports.groups();
+  const org = new Map(orgList.map((o) => [o.id, o.name]));
+  return new Map(groups.map((g) => [g.id, orgList.length > 1 ? `${org.get(g.orgId) || ''} › ${g.name}` : g.name]));
 };
 
 exports.saveGroup = async function (id, body) {
@@ -339,13 +485,16 @@ exports.saveGroup = async function (id, body) {
   const color = COLOR_RE.test(String(body.color || '')) ? body.color : '#2563eb';
   const description = text(body.description, 300);
   const order = int(body.sortOrder, 0, -9999, 9999);
+  const orgId = await orgFor(body.orgId ? int(body.orgId, null, 1, Number.MAX_SAFE_INTEGER) : null);
   if (id) {
-    const r = await run('UPDATE sm_groups SET name = ?, description = ?, color = ?, sort_order = ? WHERE id = ?', [name, description, color, order, id]);
+    const r = await run('UPDATE sm_groups SET name = ?, description = ?, color = ?, sort_order = ?, org_id = ? WHERE id = ?', [name, description, color, order, orgId, id]);
     if (!r.changes) throw Object.assign(new Error('Group not found.'), { status: 404, expose: true });
+    // a group moved to another organization takes its monitors along
+    await run('UPDATE sm_services SET org_id = ? WHERE group_id = ?', [orgId, id]);
     changed();
     return groupView(await get('SELECT * FROM sm_groups WHERE id = ?', [id]));
   }
-  const r = await run('INSERT INTO sm_groups (name, description, color, sort_order, created_at) VALUES (?, ?, ?, ?, ?)', [name, description, color, order, now()]);
+  const r = await run('INSERT INTO sm_groups (name, description, color, sort_order, created_at, org_id) VALUES (?, ?, ?, ?, ?, ?)', [name, description, color, order, now(), orgId]);
   changed();
   return groupView(await get('SELECT * FROM sm_groups WHERE id = ?', [r.lastID]));
 };
@@ -361,8 +510,16 @@ exports.removeGroup = async function (id) {
 
 // ---- services ----
 
-async function checkGroup(groupId) {
-  if (groupId && !(await get('SELECT 1 FROM sm_groups WHERE id = ?', [groupId]))) throw invalid('That group no longer exists.');
+// Settles fields.org_id: the group's organization (one given must match it), else the one given, else the first.
+async function checkGroup(fields) {
+  if (fields.group_id) {
+    const g = await get('SELECT org_id FROM sm_groups WHERE id = ?', [fields.group_id]);
+    if (!g) throw invalid('That group no longer exists.');
+    if (fields.org_id && fields.org_id !== g.org_id) throw invalid('That group belongs to another organization.');
+    fields.org_id = g.org_id;
+  } else {
+    fields.org_id = await orgFor(fields.org_id);
+  }
 }
 
 exports.raw = async function (id) {
@@ -374,7 +531,7 @@ exports.get = async (id) => view(await exports.raw(id));
 
 exports.create = async function (fields, username) {
   await schema();
-  await checkGroup(fields.group_id);
+  await checkGroup(fields);
   const cols = Object.keys(fields);
   const at = now();
   const r = await run(
@@ -389,7 +546,7 @@ exports.update = async function (id, fields, username) {
   await schema();
   const before = await exports.raw(id);
   if (!before) return null;
-  await checkGroup(fields.group_id);
+  await checkGroup(fields);
   const cols = Object.keys(fields);
   // A new target or certificate setting: the stored certificate belongs to the old one.
   const resetCert = before.target !== fields.target || before.type !== fields.type || before.check_cert !== fields.check_cert;
@@ -407,6 +564,26 @@ exports.setEnabled = async function (id, enabled, username) {
   const r = await run('UPDATE sm_services SET enabled = ?, updated_by = ?, updated_at = ? WHERE id = ?', [enabled ? 1 : 0, username, now(), id]);
   changed();
   return r.changes ? exports.raw(id) : null;
+};
+
+// Pause / resume every monitor of one organization; returns how many changed.
+exports.setOrgEnabled = async function (orgId, enabled, username) {
+  await schema();
+  const r = await run('UPDATE sm_services SET enabled = ?, updated_by = ?, updated_at = ? WHERE org_id = ? AND enabled = ?',
+    [enabled ? 1 : 0, username, now(), orgId, enabled ? 0 : 1]);
+  changed();
+  return r.changes;
+};
+
+// Pause / resume the given monitors (a group's, Ungrouped included); returns how many changed.
+exports.setManyEnabled = async function (ids, enabled, username) {
+  await schema();
+  ids = [...new Set((ids || []).map((x) => parseInt(x, 10)).filter((x) => x > 0))];
+  if (!ids.length) return 0;
+  const r = await run(`UPDATE sm_services SET enabled = ?, updated_by = ?, updated_at = ? WHERE enabled = ? AND id IN (${ids.map(() => '?').join(',')})`,
+    [enabled ? 1 : 0, username, now(), enabled ? 0 : 1].concat(ids));
+  changed();
+  return r.changes;
 };
 
 exports.remove = async function (id) {
@@ -486,7 +663,7 @@ async function readDashboard() {
     all('SELECT service_id, SUM(n) AS n, SUM(ok) AS ok, SUM(ms_sum) AS ms_sum, SUM(ms_n) AS ms_n FROM sm_hourly WHERE hour >= ? GROUP BY service_id', [hourOf(ago(23 * 3600000))]),
     all('SELECT service_id, SUM(n) AS n, SUM(ok) AS ok FROM sm_hourly WHERE hour >= ? GROUP BY service_id', [hourOf(ago(167 * 3600000))]),
     sparks(),
-    all(`SELECT e.*, s.name FROM sm_events e JOIN sm_services s ON s.id = e.service_id ORDER BY e.id DESC LIMIT 30`)
+    all(`SELECT e.*, s.name, s.org_id FROM sm_events e JOIN sm_services s ON s.id = e.service_id ORDER BY e.id DESC LIMIT 200`)
   ]);
   const by = (list) => new Map(list.map((x) => [x.service_id, x]));
   const u24 = by(up24), u7 = by(up7);
@@ -500,9 +677,10 @@ async function readDashboard() {
     });
   });
   return {
+    orgs: orgList,
     groups,
     services,
-    events: events.map((e) => ({ id: e.id, serviceId: e.service_id, name: e.name, at: e.at, from: e.from_status, to: e.to_status, message: e.message })),
+    events: events.map((e) => ({ id: e.id, serviceId: e.service_id, orgId: e.org_id, name: e.name, at: e.at, from: e.from_status, to: e.to_status, message: e.message })),
     now: now()
   };
 }
@@ -535,19 +713,21 @@ exports.prune = async function () {
 // ---- reset statistics ----
 
 /**
- * The monitor ids a reset covers: scope 'all' -> null (every row, also of deleted monitors),
+ * The monitor ids a reset covers: scope 'all' -> null (every row, also of deleted monitors), 'org' -> that organization's,
  * 'group' -> that group's monitors (groupId 0: the ungrouped ones), 'service' -> [serviceId].
  */
-exports.resetIds = async function ({ scope, groupId, serviceId }) {
+exports.resetIds = async function ({ scope, orgId, groupId, serviceId }) {
   await schema();
+  if (scope === 'org') return (await all('SELECT id FROM sm_services WHERE org_id = ?', [orgId])).map((r) => r.id);
   if (scope === 'service') {
     if (!(await get('SELECT 1 FROM sm_services WHERE id = ?', [serviceId]))) throw Object.assign(new Error('Monitor not found.'), { status: 404, expose: true });
     return [serviceId];
   }
   if (scope === 'group') {
+    // Ungrouped (groupId 0): of one organization when orgId is given
     const rows = groupId
       ? await all('SELECT id FROM sm_services WHERE group_id = ?', [groupId])
-      : await all('SELECT id FROM sm_services WHERE group_id IS NULL OR group_id NOT IN (SELECT id FROM sm_groups)');
+      : await all(`SELECT id FROM sm_services WHERE (group_id IS NULL OR group_id NOT IN (SELECT id FROM sm_groups))${orgId ? ' AND org_id = ?' : ''}`, orgId ? [orgId] : []);
     return rows.map((r) => r.id);
   }
   return null;
@@ -594,3 +774,4 @@ exports.reset = async function ({ ids, before, checks, events }) {
 
 exports.CHECK_DAYS = CHECK_DAYS;
 exports.DNS_TYPES = DNS_TYPES;
+exports.DEFAULT_ORG = DEFAULT_ORG;

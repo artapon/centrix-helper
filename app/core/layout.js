@@ -29,7 +29,28 @@ const visibleMenu = (menu, user) => menu
   .map((section) => ({ ...section, items: section.items.filter((item) => item.active && permissions.canAccessItem(user, item)) }))
   .filter((section) => section.items.length);
 
-function renderSidebar(menu, active) {
+// Sub-items an add-on lists under one of its menu items at run time (Service Monitor: its organizations):
+// submenu(link, provider), provider() -> [{ text, link, icon?, color? }] with links under the item's own,
+// so they share its permission. The provider is called on every page, so it answers from memory.
+const submenus = new Map();
+exports.submenu = (link, provider) => { submenus.set(permissions.linkPath(link), provider); };
+
+const pathUnder = (path, link) => path === link || path.startsWith(link + '/');
+
+function subItems(item, path) {
+  const provider = submenus.get(permissions.linkPath(item.link));
+  if (!provider) return [];
+  let list;
+  try { list = provider() || []; } catch (err) { console.error(`Sub-menu of ${item.link} failed:`, err); return []; }
+  const own = permissions.linkPath(item.link) + '/';
+  const subs = list.filter((s) => s && s.text && String(s.link || '').startsWith(own));
+  // the longest link the path is under is the active one
+  const active = subs.filter((s) => pathUnder(path, permissions.linkPath(s.link)))
+    .sort((a, b) => b.link.length - a.link.length)[0];
+  return subs.map((s) => ({ ...s, active: s === active }));
+}
+
+function renderSidebar(menu, active, path) {
   return menu.map((section) => {
     const items = section.items;
     const isOpen = !!active && active.section.header === section.header;
@@ -43,13 +64,27 @@ function renderSidebar(menu, active) {
         </button>
         <ul class="nav-group-items">
           ${items.map((item) => {
-            const isActive = !!active && active.item === item;
+            const subs = subItems(item, path || '');
+            // with a sub-item active, the item itself is its parent, not the current page
+            const subActive = subs.some((s) => s.active);
+            const isActive = !!active && active.item === item && !subActive;
             return `
-            <li>
-              <a href="${escapeHtml(item.link)}" class="nav-item-link${isActive ? ' is-active' : ''}"${isActive ? ' aria-current="page"' : ''} title="${escapeHtml(item.text)}">
+            <li${subs.length ? ' class="has-sub"' : ''}>
+              <a href="${escapeHtml(item.link)}" class="nav-item-link${isActive ? ' is-active' : ''}${subActive ? ' is-parent' : ''}"${isActive ? ' aria-current="page"' : ''} title="${escapeHtml(item.text)}">
                 <i class="nav-item-icon ${escapeHtml(item.icon)}"></i>
                 <span class="nav-item-text">${escapeHtml(item.text)}</span>
-              </a>
+              </a>${subs.length ? `
+              <ul class="nav-sub-items">
+                ${subs.map((s) => `
+                <li>
+                  <a href="${escapeHtml(s.link)}" class="nav-item-link is-sub${s.active ? ' is-active' : ''}"${s.active ? ' aria-current="page"' : ''} title="${escapeHtml(s.text)}">
+                    ${/^#[0-9a-f]{6}$/i.test(s.color || '')
+                      ? `<span class="nav-sub-dot" style="background:${s.color}" aria-hidden="true"></span>`
+                      : `<i class="nav-item-icon ${escapeHtml(s.icon || 'fas fa-angle-right')}"></i>`}
+                    <span class="nav-item-text">${escapeHtml(s.text)}</span>
+                  </a>
+                </li>`).join('')}
+              </ul>` : ''}
             </li>`;
           }).join('')}
         </ul>
@@ -81,7 +116,7 @@ exports.build = function (req, title) {
   const active = permissions.findMenuItem(req.path);
   const connected = !!(req.session && req.session.dbconnected);
   return {
-    sidebar: renderSidebar(menu, active),
+    sidebar: renderSidebar(menu, active, req.path),
     section: active ? escapeHtml(displayName(active.section.header)) : '',
     siteName: connected ? escapeHtml(req.session.site_name || '') : '',
     siteColor: connected && /^#[0-9a-f]{6}$/i.test(req.session.site_color || '') ? req.session.site_color : '',

@@ -87,7 +87,7 @@ async function flush() {
 // ---- monitor level ----
 
 async function monitorMessages(changes, s) {
-  const groups = new Map((await model.groups()).map((g) => [g.id, g.name]));
+  const groups = await model.groupLabels();
   const notable = changes.filter((c) => severity(c.from, s.notifySlow) !== severity(c.to, s.notifySlow));
   const one = async (c) => {
     const sev = severity(c.to, s.notifySlow);
@@ -127,8 +127,7 @@ const STATE = {
 };
 
 async function groupMessages(changes, s, heard) {
-  const [groups, rows] = await Promise.all([model.groups(), model.enabled()]);
-  const names = new Map(groups.map((g) => [g.id, g.name]));
+  const [names, rows] = await Promise.all([model.groupLabels(), model.enabled()]);
   const key = (gid) => (gid && names.has(gid) ? gid : 0);
   // The status of each changed monitor before this batch (its first change's "from").
   const before = new Map();

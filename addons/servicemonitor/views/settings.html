@@ -188,17 +188,30 @@
         <div v-if="rst.error" class="sms-msg is-error" role="alert"><i class="fas fa-exclamation-triangle"></i> {{ rst.error }}</div>
         <div v-if="rst.result" class="sms-msg is-ok" role="status"><i class="fas fa-check-circle"></i>
           <span><template v-if="rst.result.mode === 'replace'">Deleted {{ rst.result.removed.monitors }} monitors and {{ rst.result.removed.groups }} groups, then restored</template><template v-else>Restored</template>
-            {{ rst.result.imported }} monitor{{ rst.result.imported === 1 ? '' : 's' }}<template v-if="rst.result.createdGroups"> and {{ rst.result.createdGroups }} group{{ rst.result.createdGroups === 1 ? '' : 's' }}</template><template v-if="rst.result.settings">, and the settings (reload this page to see them)</template>. <a href="/service-monitor">Open Service Health</a></span>
+            {{ rst.result.imported }} monitor{{ rst.result.imported === 1 ? '' : 's' }}<template v-if="rst.result.createdGroups"> and {{ rst.result.createdGroups }} group{{ rst.result.createdGroups === 1 ? '' : 's' }}</template><template v-if="rst.result.createdOrgs"> ({{ rst.result.createdOrgs }} new organization{{ rst.result.createdOrgs === 1 ? '' : 's' }})</template> into {{ rst.result.into }}<template v-if="rst.result.settings">, and the settings (reload this page to see them)</template>. <a href="/service-monitor">Open Service Health</a></span>
         </div>
 
         <template v-if="rst.plan && !rst.result">
           <p class="sms-meta">Backup made {{ rst.plan.exportedAt ? when(rst.plan.exportedAt) : 'at an unknown time' }}<template v-if="rst.plan.exportedBy"> by {{ rst.plan.exportedBy }}</template> · {{ rst.plan.rows.length }} monitors, {{ rst.plan.groups.length }} groups.</p>
+          <div class="sms-dest">
+            <label class="sms-field">Restore into
+              <select class="sms-input" v-model="rst.dest" @change="previewRestore">
+                <option value="backup">The backup's organizations{{ rst.backupOrgs.length ? ' (' + rst.backupOrgs.join(', ') + ')' : '' }}</option>
+                <option v-for="o in orgs" :key="o.id" :value="o.id">All into {{ o.name }}</option>
+                <option value="new">All into a new organization…</option>
+              </select>
+              <small v-if="rst.dest === 'backup'">Organizations are matched by name; missing ones are made.</small>
+            </label>
+            <label v-if="rst.dest === 'new'" class="sms-field">Name of the new organization
+              <input class="sms-input" type="text" v-model.trim="rst.newOrg" maxlength="80" placeholder="e.g. Branch Clinic" @change="previewRestore">
+            </label>
+          </div>
           <fieldset class="sms-modes">
             <legend class="sms-field">How to restore</legend>
             <label class="sms-mode" :class="{ 'is-on': rst.mode === 'add' }"><input type="radio" value="add" v-model="rst.mode" @change="previewRestore">
-              <span><b>Add to the current monitors</b><small>Keeps everything here; monitors already here (same type and target) are skipped.</small></span></label>
+              <span><b>Add to the current monitors</b><small>Keeps everything here; monitors already in their organization (same type and target) are skipped.</small></span></label>
             <label class="sms-mode is-danger" :class="{ 'is-on': rst.mode === 'replace' }"><input type="radio" value="replace" v-model="rst.mode" @change="previewRestore">
-              <span><b>Replace all monitors</b><small>Deletes the {{ rst.plan.current.monitors }} monitors and {{ rst.plan.current.groups }} groups here, with their check history and incidents, then restores the backup.</small></span></label>
+              <span><b>Replace {{ rst.plan.asBackup ? 'all monitors' : 'the monitors of ' + rst.plan.into }}</b><small>Deletes the {{ rst.plan.current.monitors }} monitors and {{ rst.plan.current.groups }} groups {{ rst.plan.asBackup ? 'here' : 'of ' + rst.plan.into }}, with their check history and incidents, then restores the backup.</small></span></label>
           </fieldset>
 
           <div class="sms-kuma-sum">
@@ -208,14 +221,14 @@
           </div>
           <div class="sms-table-wrap">
             <table class="sms-table">
-              <thead><tr><th>Status</th><th>Monitor</th><th>Type</th><th>Target</th><th>Group</th><th>Notes</th></tr></thead>
+              <thead><tr><th>Status</th><th>Monitor</th><th>Type</th><th>Target</th><th>{{ rst.plan.asBackup ? 'Organization › Group' : 'Group' }}</th><th>Notes</th></tr></thead>
               <tbody>
                 <tr v-for="r in rst.plan.rows" :key="r.i" :class="'is-' + r.action">
                   <td><span class="sms-pill" :class="'is-' + r.action">{{ r.action === 'import' ? 'Restore' : r.action === 'exists' ? 'Exists' : 'Skip' }}</span></td>
                   <td><b>{{ r.name }}</b><small v-if="!r.enabled" class="sms-sub">paused</small></td>
                   <td class="sms-nowrap">{{ TYPE_AS[r.type] || r.type }}</td>
                   <td class="sms-mono sms-target" :title="r.target">{{ r.target || '—' }}</td>
-                  <td>{{ r.group || '—' }}</td>
+                  <td><template v-if="rst.plan.asBackup">{{ r.organization }} › </template>{{ r.group || '—' }}</td>
                   <td class="sms-notes">{{ r.reason || '—' }}</td>
                 </tr>
               </tbody>
@@ -223,66 +236,12 @@
           </div>
           <label v-if="rst.mode === 'add' && rstCount.exists" class="sms-check"><input type="checkbox" v-model="rst.includeExisting"> <span>Also restore the {{ rstCount.exists }} already here <small>(adds duplicates)</small></span></label>
           <label v-if="rst.plan.settings" class="sms-check"><input type="checkbox" v-model="rst.settings"> <span>Also restore the settings <small>(theme {{ rst.plan.settings.theme }}, auto reset {{ rst.plan.settings.autoReset ? 'on' : 'off' }})</small></span></label>
-          <label v-if="rst.mode === 'replace'" class="sms-check is-danger"><input type="checkbox" v-model="rst.confirm"> <span><b>I understand the current monitors, groups and their history will be deleted.</b></span></label>
+          <label v-if="rst.mode === 'replace'" class="sms-check is-danger"><input type="checkbox" v-model="rst.confirm"> <span><b>I understand the current monitors, groups and their history {{ rst.plan.asBackup ? '' : 'of ' + rst.plan.into + ' ' }}will be deleted.</b></span></label>
           <div class="sms-row is-center">
             <button type="button" class="sms-btn" :class="rst.mode === 'replace' ? 'is-danger' : 'is-primary'" @click="runRestore"
-                    :disabled="rst.running || !rstToRestore || (rst.mode === 'replace' && !rst.confirm)">
+                    :disabled="rst.running || rst.loading || !rstToRestore || (rst.mode === 'replace' && !rst.confirm) || (rst.dest === 'new' && !rst.newOrg)">
               <i class="fas" :class="rst.running ? 'fa-spinner fa-spin' : rst.mode === 'replace' ? 'fa-exclamation-triangle' : 'fa-upload'"></i>
               {{ rst.mode === 'replace' ? 'Replace with ' + rstToRestore + ' monitors' : 'Restore ' + rstToRestore + ' monitor' + (rstToRestore === 1 ? '' : 's') }}
-            </button>
-          </div>
-        </template>
-      </div>
-    </section>
-
-    <!-- Import from Uptime Kuma (its own action, not part of Save) -->
-    <section class="sms-card">
-      <div class="sms-card-head">
-        <h2>Import from Uptime Kuma</h2>
-        <p>Adds the monitors and groups of an Uptime Kuma 1.x backup (Settings › Backup › Export JSON). Nothing that already exists here is changed. Notifications and history are not imported.</p>
-      </div>
-      <div class="sms-card-body">
-        <div class="sms-row is-center">
-          <label class="sms-btn sms-file">
-            <input type="file" accept=".json,application/json" @change="pickKuma" ref="kumaFile" class="sr-only">
-            <i class="fas fa-file-upload" aria-hidden="true"></i> Choose backup file…
-          </label>
-          <span v-if="kuma.file" class="sms-file-name"><i class="far fa-file-code" aria-hidden="true"></i> {{ kuma.file }}</span>
-          <span v-if="kuma.loading" class="sms-meta"><i class="fas fa-spinner fa-spin"></i> Reading…</span>
-          <button v-if="kuma.plan || kuma.error" type="button" class="sms-link" @click="clearKuma">Clear</button>
-        </div>
-
-        <div v-if="kuma.error" class="sms-msg is-error" role="alert"><i class="fas fa-exclamation-triangle"></i> {{ kuma.error }}</div>
-        <div v-if="kuma.result" class="sms-msg is-ok" role="status"><i class="fas fa-check-circle"></i>
-          <span>Imported {{ kuma.result.imported }} monitor{{ kuma.result.imported === 1 ? '' : 's' }}<template v-if="kuma.result.createdGroups"> and {{ kuma.result.createdGroups }} new group{{ kuma.result.createdGroups === 1 ? '' : 's' }}</template>. They are checked within a minute. <a href="/service-monitor">Open Service Health</a></span>
-        </div>
-
-        <template v-if="kuma.plan && !kuma.result">
-          <div class="sms-kuma-sum">
-            <span class="sms-pill is-import"><b>{{ kumaCount.import }}</b> to import</span>
-            <span class="sms-pill is-exists"><b>{{ kumaCount.exists }}</b> already monitored</span>
-            <span class="sms-pill is-skip"><b>{{ kumaCount.skip }}</b> skipped</span>
-            <span v-if="kuma.plan.groups.length" class="sms-meta">Groups: <template v-for="(g, i) in kuma.plan.groups">{{ i ? ', ' : '' }}{{ g.name }}{{ g.exists ? ' (exists)' : ' (new)' }}</template></span>
-          </div>
-          <div class="sms-table-wrap">
-            <table class="sms-table">
-              <thead><tr><th>Status</th><th>Monitor</th><th>Type</th><th>Target</th><th>Group</th><th>Notes</th></tr></thead>
-              <tbody>
-                <tr v-for="r in kuma.plan.rows" :key="r.kumaId" :class="'is-' + r.action">
-                  <td><span class="sms-pill" :class="'is-' + r.action">{{ r.action === 'import' ? 'Import' : r.action === 'exists' ? 'Exists' : 'Skip' }}</span></td>
-                  <td><b>{{ r.name }}</b><small v-if="r.action !== 'skip' && r.enabled === false" class="sms-sub">paused</small></td>
-                  <td class="sms-nowrap">{{ r.type }}<template v-if="r.as"> → {{ TYPE_AS[r.as] }}</template></td>
-                  <td class="sms-mono sms-target" :title="r.target">{{ r.target || '—' }}</td>
-                  <td>{{ r.group || '—' }}</td>
-                  <td class="sms-notes">{{ [r.reason].concat(r.notes || []).filter(Boolean).join(' · ') || '—' }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <label v-if="kumaCount.exists" class="sms-check"><input type="checkbox" v-model="kuma.includeExisting"> <span>Also import the {{ kumaCount.exists }} already monitored <small>(adds duplicates)</small></span></label>
-          <div class="sms-row is-center">
-            <button type="button" class="sms-btn is-primary" @click="importKuma" :disabled="kuma.importing || !kumaToImport">
-              <i class="fas" :class="kuma.importing ? 'fa-spinner fa-spin' : 'fa-file-import'"></i> Import {{ kumaToImport }} monitor{{ kumaToImport === 1 ? '' : 's' }}
             </button>
           </div>
         </template>
@@ -426,6 +385,7 @@
   .sms-file-name { font-size: 13px; color: var(--sm-text-2); display: inline-flex; gap: 6px; align-items: center; }
   .sms-link { border: 0; background: none; color: var(--sm-accent); font-size: 13px; font-weight: 600; cursor: pointer; padding: 0; }
   .sms-kuma-sum { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .sms-dest { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 12px 16px; max-width: 760px; }
   .sms-pill { display: inline-flex; gap: 4px; align-items: center; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 2px 10px; white-space: nowrap; background: var(--sm-sunken); color: var(--sm-text-2); border: 1px solid var(--sm-line); }
   .sms-pill.is-import { background: var(--up-soft); color: var(--up-text); border-color: var(--up-ring); }
   .sms-pill.is-skip { background: var(--down-soft); color: var(--down-text); border-color: var(--down-ring); }
@@ -464,9 +424,6 @@
     ];
     var TIME_RE = /^\d\d:\d\d$/;
     var TYPE_AS = { http: 'HTTP(s)', tcp: 'TCP port', ping: 'Ping', dns: 'DNS' };
-    // The fields of an Uptime Kuma monitor the import reads; the rest (heartbeats, notifications, ...) stays in the browser.
-    var KUMA_FIELDS = ['id', 'name', 'type', 'url', 'method', 'hostname', 'port', 'maxretries', 'active', 'interval', 'retryInterval', 'timeout', 'keyword',
-      'invertKeyword', 'maxredirects', 'expiryNotification', 'ignoreTls', 'upsideDown', 'accepted_statuscodes', 'dns_resolve_type', 'dns_resolve_server', 'parent', 'description', 'authMethod'];
     // ids sorted, so a change is a JSON difference
     var mtFrom = function (m) {
       m = m || {};
@@ -476,8 +433,8 @@
     var ntFrom = function (n) { n = n || {}; return { health: n.health !== false, public: n.public !== false }; };
     // webhookUrl: a new one to save; blank keeps the saved one (the page only gets it masked)
     var skFrom = function (k) { k = k || {}; return { enabled: !!k.enabled, webhookUrl: '', level: k.level === 'group' ? 'group' : 'monitor', notifySlow: !!k.notifySlow, showTargets: k.showTargets !== false }; };
-    var rstBlank = function () { return { file: '', text: '', plan: null, mode: 'add', loading: false, running: false, error: '', result: null, includeExisting: false, settings: false, confirm: false }; };
-    var kumaBlank = function () { return { file: '', backup: null, plan: null, loading: false, importing: false, error: '', result: null, includeExisting: false }; };
+    // dest: where an import goes: an organization's id, 'new' (newOrg: its name) or, restoring, 'backup' (the backup's own)
+    var rstBlank = function () { return { dest: 'backup', newOrg: '', backupOrgs: [], file: '', text: '', plan: null, mode: 'add', loading: false, running: false, error: '', result: null, includeExisting: false, settings: false, confirm: false }; };
     var pad = function (n) { return (n < 10 ? '0' : '') + n; };
     var arFrom = function (a) {
       a = a || {};
@@ -487,7 +444,7 @@
     Page.setup({
       data: function () {
         var mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
-        return { TYPE_AS: TYPE_AS, kuma: kumaBlank(), rst: rstBlank(), THEMES: THEMES, choice: 'light', current: { theme: 'light', autoReset: {}, slack: {}, mute: {} }, ar: arFrom(), nt: ntFrom(), mt: mtFrom(), mtQuery: '', mtOpen: [], sk: skFrom(), skTest: { running: false, ok: false, error: '' }, lastSlack: {}, saving: false, error: '', notice: '', sysDark: !!(mq && mq.matches), now: Date.now() };
+        return { TYPE_AS: TYPE_AS, rst: rstBlank(), THEMES: THEMES, choice: 'light', current: { theme: 'light', autoReset: {}, slack: {}, mute: {} }, ar: arFrom(), nt: ntFrom(), mt: mtFrom(), mtQuery: '', mtOpen: [], sk: skFrom(), skTest: { running: false, ok: false, error: '' }, lastSlack: {}, saving: false, error: '', notice: '', sysDark: !!(mq && mq.matches), now: Date.now() };
       },
       // The saved settings come with the page (Page.data.saved), read once it exists.
       created: function () { this.load(this.saved); },
@@ -534,18 +491,12 @@
           var base = new Date(fresh ? this.now : (c.lastRunAt || c.since || this.now)), t = a.at.split(':');
           return new Date(base.getFullYear(), base.getMonth(), base.getDate() + a.everyDays, +t[0], +t[1]).toISOString();
         },
-        kumaCount: function () {
-          var c = { import: 0, exists: 0, skip: 0 };
-          (this.kuma.plan ? this.kuma.plan.rows : []).forEach(function (r) { c[r.action]++; });
-          return c;
-        },
         rstCount: function () {
           var c = { import: 0, exists: 0, skip: 0 };
           (this.rst.plan ? this.rst.plan.rows : []).forEach(function (r) { c[r.action]++; });
           return c;
         },
         rstToRestore: function () { return this.rstCount.import + (this.rst.mode === 'add' && this.rst.includeExisting ? this.rstCount.exists : 0); },
-        kumaToImport: function () { return this.kumaCount.import + (this.kuma.includeExisting ? this.kumaCount.exists : 0); },
         untilText: function () {
           var ms = new Date(this.nextReset).getTime() - this.now;
           if (ms <= 0) return 'due now';
@@ -608,39 +559,12 @@
             return r.json().then(function (d) { if (!r.ok || d.error) throw new Error(d.error || ('HTTP ' + r.status)); return d; });
           });
         },
-        // Read the chosen backup in the browser, keep only the monitors' fields the import reads, and ask for a preview.
-        pickKuma: function (e) {
-          var vm = this, file = e.target.files && e.target.files[0];
-          if (!file) return;
-          vm.kuma = Object.assign(kumaBlank(), { file: file.name, loading: true });
-          var reader = new FileReader();
-          reader.onload = function () {
-            var data;
-            try { data = JSON.parse(reader.result); } catch (err) { vm.kuma = Object.assign(kumaBlank(), { file: file.name, error: 'This file is not JSON. Choose the .json file exported in Uptime Kuma under Settings › Backup.' }); return; }
-            var list = data && Array.isArray(data.monitorList) ? data.monitorList : null;
-            if (!list) { vm.kuma = Object.assign(kumaBlank(), { file: file.name, error: 'This is not an Uptime Kuma backup: it has no "monitorList". Export it in Uptime Kuma under Settings › Backup.' }); return; }
-            var backup = { monitorList: list.map(function (m) {
-              var o = {};
-              KUMA_FIELDS.forEach(function (k) { if (m && m[k] !== undefined) o[k] = m[k]; });
-              if (m && (m.body || m.headers)) o.body = true;            // only whether there was one, for the notes
-              return o;
-            }) };
-            vm.post('/service-monitor/settings/import-kuma/preview', { backup: backup })
-              .then(function (plan) { vm.kuma = Object.assign(kumaBlank(), { file: file.name, backup: backup, plan: plan }); })
-              .catch(function (err) { vm.kuma = Object.assign(kumaBlank(), { file: file.name, error: err.message }); });
-          };
-          reader.onerror = function () { vm.kuma = Object.assign(kumaBlank(), { file: file.name, error: 'The file could not be read.' }); };
-          reader.readAsText(file);
-        },
-        importKuma: function () {
-          var vm = this;
-          vm.kuma.importing = true; vm.kuma.error = '';
-          vm.post('/service-monitor/settings/import-kuma', { backup: vm.kuma.backup, includeExisting: vm.kuma.includeExisting })
-            .then(function (d) { vm.kuma.result = d; })
-            .catch(function (err) { vm.kuma.error = err.message; })
-            .then(function () { vm.kuma.importing = false; });
-        },
         // ---- Backup & restore ----
+        // The organization a restore goes into, as the server reads it (a new one not named yet: previewed by a stand-in name).
+        importTarget: function (x) {
+          if (x.dest === 'new') return { newOrg: x.newOrg || 'New organization' };
+          return { orgId: x.dest };
+        },
         // The file goes to the server as text (it can be larger than the app's JSON body limit); options in the query.
         postText: function (url, text) {
           return fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'text/plain; charset=utf-8', Accept: 'application/json' }, body: text })
@@ -658,28 +582,31 @@
         previewRestore: function () {
           var vm = this, r = vm.rst;
           r.loading = true; r.error = ''; r.confirm = false;
-          vm.postText('/service-monitor/settings/restore/preview?mode=' + r.mode, r.text)
-            .then(function (plan) { r.plan = plan; })
+          vm.postText('/service-monitor/settings/restore/preview?mode=' + r.mode + vm.restoreQuery(r), r.text)
+            .then(function (plan) {
+              r.plan = plan;
+              if (plan.asBackup) r.backupOrgs = plan.orgs.map(function (o) { return o.name + (o.exists ? '' : ' (new)'); });
+            })
             .catch(function (err) { r.plan = null; r.error = err.message; })
             .then(function () { r.loading = false; });
         },
         runRestore: function () {
           var vm = this, r = vm.rst;
-          if (r.mode === 'replace' && !r.confirm) return;
+          if ((r.mode === 'replace' && !r.confirm) || (r.dest === 'new' && !r.newOrg)) return;
           r.running = true; r.error = '';
-          var q = '?mode=' + r.mode + '&includeExisting=' + (r.includeExisting ? 1 : 0) + '&settings=' + (r.settings ? 1 : 0) + (r.mode === 'replace' ? '&confirm=replace' : '');
+          var q = '?mode=' + r.mode + vm.restoreQuery(r) + '&includeExisting=' + (r.includeExisting ? 1 : 0) + '&settings=' + (r.settings ? 1 : 0) + (r.mode === 'replace' ? '&confirm=replace' : '');
           vm.postText('/service-monitor/settings/restore' + q, r.text)
             .then(function (d) { r.result = d; })
             .catch(function (err) { r.error = err.message; })
             .then(function () { r.running = false; });
         },
+        restoreQuery: function (r) {
+          var t = r.dest === 'backup' ? { orgId: 'backup' } : this.importTarget(r);
+          return t.newOrg ? '&newOrg=' + encodeURIComponent(t.newOrg) : '&orgId=' + encodeURIComponent(t.orgId);
+        },
         clearRestore: function () {
           this.rst = rstBlank();
           if (this.$refs.restoreFile) this.$refs.restoreFile.value = '';
-        },
-        clearKuma: function () {
-          this.kuma = kumaBlank();
-          if (this.$refs.kumaFile) this.$refs.kumaFile.value = '';
         },
         num: function (v) { return Number(v || 0).toLocaleString('en-US'); },
         when: function (iso) { var d = new Date(iso); return pad(d.getDate()) + '-' + pad(d.getMonth() + 1) + '-' + d.getFullYear() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); },

@@ -1,5 +1,6 @@
-// Service Monitor > Service Health: the dashboard of services by group, and their create / edit /
-// delete, pause, check now and certificate details. Everything is in SQLite (no Mongo connection).
+// Service Monitor > Service Health: the overview of the organizations (/service-monitor), each organization's
+// dashboard of services by group (/service-monitor/org/<id>), and their create / edit / delete, pause, check
+// now and certificate details. Everything is in SQLite (no Mongo connection).
 const view = require('../../../app/core/view').addon('servicemonitor');
 const { actionsFor } = require('../../../app/core/permissions');
 const model = require('../models/services.model');
@@ -19,23 +20,39 @@ function fail(res, err, what) {
   return res.status(500).json({ error: `The ${what} failed. The details are in the server log.` });
 }
 
+// /service-monitor: every organization (org null); /service-monitor/org/<id>: that organization's monitors.
 exports.index = async function (req, res) {
+  const org = req.params.orgId ? await model.getOrg(parseInt(req.params.orgId, 10)) : null;
+  if (req.params.orgId && !org) return res.redirect(LINK);
+  const s = await settings.get();
   return res.renderPage(view('servicemonitor'), {
-    theme: (await settings.get()).theme,
-    notifyAllowed: (await settings.get()).notify.health !== false,
+    theme: s.theme,
+    notifyAllowed: s.notify.health !== false,
     isAdmin: !!req.user && req.user.role === require('../../../app/core/permissions').ADMIN_ROLE,
-    title: 'Service Health',
+    title: org ? `${org.name} · Service Health` : 'Service Health',
+    org,
     can: actionsFor(req.user, LINK),
     dnsTypes: model.DNS_TYPES,
     checkDays: model.CHECK_DAYS
   });
 };
 
+// ?org=<id>: only that organization's groups, monitors and incidents (allGroups: every group, for moving
+// a monitor to another organization). Without it, everything (the overview).
 exports.data = async function (req, res) {
   try {
+    const orgId = parseInt(req.query.org, 10) || 0;
     const [d, s] = await Promise.all([model.dashboard(), settings.get()]);
-    // the monitors in Settings > Don't notify: the bell skips them
-    res.json(Object.assign({}, d, { muted: d.services.filter((m) => settings.isMuted(s.mute, m)).map((m) => m.id) }));
+    const mine = (x) => !orgId || x.orgId === orgId;
+    const services = d.services.filter(mine);
+    res.json(Object.assign({}, d, {
+      groups: d.groups.filter(mine),
+      services,
+      events: d.events.filter(mine).slice(0, 30),
+      allGroups: d.groups.map((g) => ({ id: g.id, orgId: g.orgId, name: g.name })),
+      // the monitors in Settings > Don't notify: the bell skips them
+      muted: services.filter((m) => settings.isMuted(s.mute, m)).map((m) => m.id)
+    }));
   } catch (err) { fail(res, err, 'reading of the services'); }
 };
 
@@ -74,6 +91,30 @@ exports.toggle = async function (req, res) {
   } catch (err) { fail(res, err, 'change of the service'); }
 };
 
+// Pause / resume all monitors of an organization.
+exports.toggleOrg = async function (req, res) {
+  try {
+    const org = await model.getOrg(id(req));
+    if (!org) return res.status(404).json({ error: 'Organization not found.' });
+    const enabled = !!(req.body && req.body.enabled);
+    const changed = await model.setOrgEnabled(org.id, enabled, username(req));
+    console.log(`Service Monitor: ${changed} monitors of "${org.name}" ${enabled ? 'resumed' : 'paused'} by ${username(req)}.`);
+    res.json({ changed, enabled });
+  } catch (err) { fail(res, err, 'change of the monitors'); }
+};
+
+// Pause / resume several monitors at once (a group's): body { ids, enabled }.
+exports.toggleMany = async function (req, res) {
+  try {
+    const b = req.body || {};
+    if (!Array.isArray(b.ids) || b.ids.length > 5000) return res.status(400).json({ error: 'No monitors given.' });
+    const enabled = !!b.enabled;
+    const changed = await model.setManyEnabled(b.ids, enabled, username(req));
+    console.log(`Service Monitor: ${changed} monitors ${enabled ? 'resumed' : 'paused'} by ${username(req)}.`);
+    res.json({ changed, enabled });
+  } catch (err) { fail(res, err, 'change of the monitors'); }
+};
+
 exports.remove = async function (req, res) {
   try {
     if (!(await model.remove(id(req)))) return res.status(404).json({ error: 'Service not found.' });
@@ -89,11 +130,14 @@ exports.check = async function (req, res) {
   } catch (err) { fail(res, err, 'check'); }
 };
 
-// Every enabled service (of one group with ?group=), at most 8 at a time.
+// Every enabled service (of one organization with orgId, of one group with groupId), at most 8 at a time.
 exports.checkAll = async function (req, res) {
   try {
-    const group = req.body && req.body.groupId != null ? String(req.body.groupId) : null;
-    const rows = (await model.enabled()).filter((s) => group == null || String(s.group_id || '') === (group === '0' ? '' : group));
+    const b = req.body || {};
+    const group = b.groupId != null ? String(b.groupId) : null;
+    const orgId = parseInt(b.orgId, 10) || 0;
+    const rows = (await model.enabled()).filter((s) => (!orgId || s.org_id === orgId) &&
+      (group == null || String(s.group_id || '') === (group === '0' ? '' : group)));
     for (let i = 0; i < rows.length; i += 8) {
       await Promise.all(rows.slice(i, i + 8).map((s) => checker.checkNow(s, { forceCert: true }).catch(() => null)));
     }
@@ -121,6 +165,30 @@ exports.saveGroup = async function (req, res) {
   } catch (err) { fail(res, err, 'saving of the group'); }
 };
 
+// ---- organizations ----
+
+exports.saveOrg = async function (req, res) {
+  try {
+    const org = await model.saveOrg(req.params.id ? id(req) : null, req.body || {});
+    console.log(`Service Monitor: organization "${org.name}" ${req.params.id ? 'saved' : 'created'} by ${username(req)}.`);
+    res.json({ org });
+  } catch (err) { fail(res, err, 'saving of the organization'); }
+};
+
+exports.orgContents = async function (req, res) {
+  try { res.json(await model.orgContents(id(req))); } catch (err) { fail(res, err, 'reading of the organization'); }
+};
+
+exports.removeOrg = async function (req, res) {
+  try {
+    const n = await model.orgContents(id(req));
+    if (!(await model.removeOrg(id(req)))) return res.status(404).json({ error: 'Organization not found.' });
+    await settings.removeShare(id(req));
+    console.log(`Service Monitor: organization ${id(req)} deleted by ${username(req)}, with ${n.monitors} monitors and ${n.groups} groups.`);
+    res.json({ ok: true });
+  } catch (err) { fail(res, err, 'deletion of the organization'); }
+};
+
 exports.removeGroup = async function (req, res) {
   try {
     if (!(await model.removeGroup(id(req)))) return res.status(404).json({ error: 'Group not found.' });
@@ -135,15 +203,17 @@ const RESET_AGES = [0, 1, 7, 30];       // days: 0 = everything
 // The reset form -> { ids, before, checks, events, label }; throws a 400 on bad input.
 async function resetRequest(body) {
   const b = body || {};
-  const scope = ['all', 'group', 'service'].includes(b.scope) ? b.scope : 'all';
-  const ids = await model.resetIds({ scope, groupId: parseInt(b.groupId, 10) || 0, serviceId: parseInt(b.serviceId, 10) || 0 });
+  const scope = ['all', 'org', 'group', 'service'].includes(b.scope) ? b.scope : 'all';
+  const orgId = parseInt(b.orgId, 10) || 0;
+  if (scope === 'org' && !(await model.getOrg(orgId))) throw Object.assign(new Error('Organization not found.'), { status: 404, expose: true });
+  const ids = await model.resetIds({ scope, orgId, groupId: parseInt(b.groupId, 10) || 0, serviceId: parseInt(b.serviceId, 10) || 0 });
   const age = RESET_AGES.includes(parseInt(b.olderThanDays, 10)) ? parseInt(b.olderThanDays, 10) : 0;
   const checks = b.checks !== false, events = b.events !== false;
   if (!checks && !events) throw Object.assign(new Error('Choose what to clear: check history, incidents or both.'), { status: 400, expose: true });
   return {
     ids, checks, events,
     before: age ? new Date(Date.now() - age * 86400000).toISOString() : null,
-    label: `${scope}${scope === 'group' ? ' ' + (parseInt(b.groupId, 10) || 0) : scope === 'service' ? ' ' + parseInt(b.serviceId, 10) : ''}${age ? `, older than ${age} d` : ''}`
+    label: `${scope}${scope === 'org' ? ' ' + orgId : scope === 'group' ? ' ' + (parseInt(b.groupId, 10) || 0) : scope === 'service' ? ' ' + parseInt(b.serviceId, 10) : ''}${age ? `, older than ${age} d` : ''}`
   };
 }
 
@@ -180,10 +250,12 @@ const settingsView = (s) => {
 const slack = require('../models/slack.service');
 
 exports.settingsIndex = async function (req, res) {
-  const [s, d] = await Promise.all([settings.get(), model.dashboard()]);
-  // what Don't notify can pick from
-  const targets = { groups: d.groups.map((g) => ({ id: g.id, name: g.name, color: g.color })), monitors: d.services.map((m) => ({ id: m.id, name: m.name, groupId: m.groupId || 0, enabled: m.enabled })) };
-  return res.renderPage(view('settings'), { title: 'Service Monitor Settings', theme: s.theme, saved: settingsView(s), targets, checkDays: model.CHECK_DAYS });
+  const [s, d, labels] = await Promise.all([settings.get(), model.dashboard(), model.groupLabels()]);
+  // what Don't notify can pick from (group names with their organization's while there are several)
+  const targets = { groups: d.groups.map((g) => ({ id: g.id, name: labels.get(g.id) || g.name, color: g.color })), monitors: d.services.map((m) => ({ id: m.id, name: m.name, groupId: m.groupId || 0, enabled: m.enabled })) };
+  // where an import or a restore can go
+  const orgs = d.orgs.map((o) => ({ id: o.id, name: o.name, color: o.color }));
+  return res.renderPage(view('settings'), { title: 'Service Monitor Settings', theme: s.theme, saved: settingsView(s), targets, orgs, checkDays: model.CHECK_DAYS });
 };
 
 exports.settingsSave = async function (req, res) {
@@ -201,21 +273,31 @@ exports.slackTest = async function (req, res) {
   } catch (err) { fail(res, err, 'Slack test'); }
 };
 
-// ---- Settings > Import from Uptime Kuma (administrators only) ----
+// ---- Organization > Import from Uptime Kuma ----
 
 const kuma = require('../models/kuma.import');
 
+// The organization an import or a restore goes into: { orgId } (an existing one), { newOrg } (made on import),
+// or for a restore { orgId: 'backup' } (the backup's own organizations).
+const importTarget = (b) => {
+  const newOrg = String((b && b.newOrg) || '').trim().slice(0, 80);
+  if (newOrg) return { newOrg };
+  if (b && b.orgId === 'backup') return { asBackup: true };
+  return { orgId: parseInt(b && b.orgId, 10) || 0 };
+};
+
+// The import goes into the organization of the URL (/service-monitor/orgs/<id>/import-kuma).
 exports.kumaPreview = async function (req, res) {
   try {
-    const p = await kuma.plan(req.body && req.body.backup);
-    res.json({ groups: p.groups, rows: p.rows.map((r) => { const o = Object.assign({}, r); delete o.fields; return o; }) });
+    const p = await kuma.plan(req.body && req.body.backup, { orgId: id(req) });
+    res.json({ org: p.org, groups: p.groups, rows: p.rows.map((r) => { const o = Object.assign({}, r); delete o.fields; return o; }) });
   } catch (err) { fail(res, err, 'reading of the backup'); }
 };
 
 exports.kumaImport = async function (req, res) {
   try {
-    const result = await kuma.run(req.body && req.body.backup, { includeExisting: !!(req.body && req.body.includeExisting) }, username(req));
-    console.log(`Service Monitor: Uptime Kuma import by ${username(req)}: ${result.imported} monitors, ${result.createdGroups} new groups (${result.skipped} skipped, ${result.existing} already monitored).`);
+    const result = await kuma.run(req.body && req.body.backup, { orgId: id(req), includeExisting: !!(req.body && req.body.includeExisting) }, username(req));
+    console.log(`Service Monitor: Uptime Kuma import by ${username(req)} into "${result.org.name}": ${result.imported} monitors, ${result.createdGroups} new groups (${result.skipped} skipped, ${result.existing} already monitored).`);
     res.json(result);
   } catch (err) { fail(res, err, 'import'); }
 };
@@ -238,7 +320,7 @@ exports.backupDownload = async function (req, res) {
 // the options come in the query string.
 exports.restorePreview = async function (req, res) {
   try {
-    res.json(await backup.plan(backup.parse(req.body), { mode: req.query.mode }));
+    res.json(await backup.plan(backup.parse(req.body), Object.assign(importTarget(req.query), { mode: req.query.mode })));
   } catch (err) { fail(res, err, 'reading of the backup'); }
 };
 
@@ -246,16 +328,16 @@ exports.restore = async function (req, res) {
   try {
     const q = req.query;
     if (q.mode === 'replace' && q.confirm !== 'replace') {
-      return res.status(400).json({ error: 'Replacing every monitor needs the confirmation ticked.' });
+      return res.status(400).json({ error: 'Replacing the monitors needs the confirmation ticked.' });
     }
-    const result = await backup.run(backup.parse(req.body), { mode: q.mode, includeExisting: q.includeExisting === '1', restoreSettings: q.settings === '1' }, username(req));
-    console.log(`Service Monitor: restore (${result.mode}) by ${username(req)}: ${result.imported} monitors, ${result.createdGroups} groups` +
+    const result = await backup.run(backup.parse(req.body), Object.assign(importTarget(q), { mode: q.mode, includeExisting: q.includeExisting === '1', restoreSettings: q.settings === '1' }), username(req));
+    console.log(`Service Monitor: restore (${result.mode}, into ${result.into}) by ${username(req)}: ${result.imported} monitors, ${result.createdGroups} groups` +
       (result.mode === 'replace' ? `, after deleting ${result.removed.monitors} monitors and ${result.removed.groups} groups` : '') + (result.settings ? ', settings restored' : '') + '.');
     res.json(result);
   } catch (err) { fail(res, err, 'restore'); }
 };
 
-// ---- Share: the public, view-only status page (/status/<token>) ----
+// ---- Share: an organization's public, view-only status page (/status/<token>) ----
 
 const path = require('path');
 
@@ -265,13 +347,18 @@ const shareView = (s, req) => ({
 });
 
 exports.shareGet = async function (req, res) {
-  try { res.json(shareView((await settings.get()).share, req)); } catch (err) { fail(res, err, 'reading of the share settings'); }
+  try {
+    if (!(await model.getOrg(id(req)))) return res.status(404).json({ error: 'Organization not found.' });
+    res.json(shareView(await settings.shareOf(id(req)), req));
+  } catch (err) { fail(res, err, 'reading of the share settings'); }
 };
 
 exports.shareSave = async function (req, res) {
   try {
-    const s = (await settings.saveShare(req.body, username(req))).share;
-    console.log(`Service Monitor: public status page ${s.enabled ? 'on' : 'off'}${req.body && req.body.regenerate ? ', new link' : ''} (by ${username(req)}).`);
+    const org = await model.getOrg(id(req));
+    if (!org) return res.status(404).json({ error: 'Organization not found.' });
+    const s = await settings.saveShare(org.id, req.body, username(req));
+    console.log(`Service Monitor: public status page of "${org.name}" ${s.enabled ? 'on' : 'off'}${req.body && req.body.regenerate ? ', new link' : ''} (by ${username(req)}).`);
     res.json(shareView(s, req));
   } catch (err) { fail(res, err, 'saving of the share settings'); }
 };
@@ -288,6 +375,12 @@ exports.publicPage = async function (req, res) {
 // and error texts, which tell internal addresses, only with "show targets". No ids, settings or certificates.
 // A monitor's reference on the public page: derived from the share token, so it tells nothing of the monitor's
 // id and changes with a new link.
+// The dashboard narrowed to the shared organization's groups, monitors and incidents.
+const orgDashboard = async (orgId) => {
+  const d = await model.dashboard();
+  const mine = (x) => x.orgId === orgId;
+  return Object.assign({}, d, { groups: d.groups.filter(mine), services: d.services.filter(mine), events: d.events.filter(mine) });
+};
 const publicRef = (token, id) => require('crypto').createHmac('sha256', token).update('monitor:' + id).digest('base64url').slice(0, 12);
 
 // One monitor, view only: its public fields, checks of the last `hours` and status changes. Codes, error texts
@@ -296,7 +389,7 @@ exports.publicDetail = async function (req, res) {
   try {
     const share = await settings.shareFor(req.params.token);
     if (!share) return res.status(404).json({ error: 'This status page is not available.' });
-    const d = await model.dashboard();
+    const d = await orgDashboard(share.orgId);
     const m = d.services.find((x) => publicRef(share.token, x.id) === req.params.ref);
     if (!m) return res.status(404).json({ error: 'This service is not on the status page.' });
     const hours = HOURS.includes(parseInt(req.query.hours, 10)) ? parseInt(req.query.hours, 10) : 24;
@@ -321,7 +414,7 @@ exports.publicData = async function (req, res) {
   try {
     const share = await settings.shareFor(req.params.token);
     if (!share) return res.status(404).json({ error: 'This status page is not available.' });
-    const [d, s] = await Promise.all([model.dashboard(), settings.get()]);
+    const [d, s] = await Promise.all([orgDashboard(share.orgId), settings.get()]);
     const known = new Set(d.groups.map((g) => g.id));
     const ref = new Map(d.services.map((m) => [m.id, publicRef(share.token, m.id)]));
     const kind = (m) => (m.type === 'http' ? (/^https:/i.test(m.target) ? 'HTTPS' : 'HTTP') : m.type === 'dns' ? 'DNS' : m.type === 'tcp' ? 'TCP' : 'PING');

@@ -1,5 +1,5 @@
-// No sign-in: the public, view-only status page of Service Monitor (Service Health > Share). It answers only
-// while sharing is on and the token in the link is the current one (Settings model, shareFor()).
+// No sign-in: an organization's public, view-only status page (its Share). It answers only while that
+// organization's sharing is on and the token in the link is its current one (Settings model, shareFor()).
 const express = require('express');
 const asyncHandler = require('../../app/core/http/async.handler');
 const controller = require('./controllers/servicemonitor.controller');
